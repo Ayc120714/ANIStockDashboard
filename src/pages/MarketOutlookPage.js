@@ -14,6 +14,8 @@ import {
   BarChart,
   CashCardContainer,
   SmallCardContainer,
+  SmallFull,
+  SmallHalf,
   TableSection,
   TableTitle,
   TableWrapper,
@@ -124,31 +126,71 @@ function MarketOutlookPage() {
           </BarChart>
         </CashCard>
 
-        {/* Smallcap Cards Column - Right Side */}
+        {/* Smallcap column (right): top = full smallcap; bottom row = microcap + India VIX */}
         <SmallCardContainer>
-          {smallcapCards.map((card, idx) => (
-            <Card key={idx}>
-              <CardHeader>
-                <div>
-                  <h3>{card.title}</h3>
-                  <span className="trend-badge">{card.trend}</span>
-                </div>
-              </CardHeader>
-              <CardValue>{card.value}</CardValue>
-              <CardChange>{card.change}</CardChange>
-              <CardStats>
-                <span>{card.percentile} Percentile</span>
-                <span>|</span>
-                <span>{card.pe}</span>
-              </CardStats>
-              <CardChart>
-                <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                  <polyline points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22" fill="none" stroke="#4CAF50" strokeWidth="1.5" />
-                  <polygon points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22 100,40 0,40" fill="rgba(76, 175, 80, 0.1)" />
-                </svg>
-              </CardChart>
-            </Card>
-          ))}
+          <SmallFull>
+            <CardHeader>
+              <div>
+                <h3>{smallcapCards[0].title}</h3>
+                <span className="trend-badge">{smallcapCards[0].trend}</span>
+              </div>
+            </CardHeader>
+            <CardValue>{smallcapCards[0].value}</CardValue>
+            <CardChange>{smallcapCards[0].change}</CardChange>
+            <CardStats>
+              <span>{smallcapCards[0].percentile} Percentile</span>
+              <span>|</span>
+              <span>{smallcapCards[0].pe}</span>
+            </CardStats>
+            <CardChart>
+              <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
+                <polyline points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22" fill="none" stroke="#4CAF50" strokeWidth="1.5" />
+                <polygon points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22 100,40 0,40" fill="rgba(76, 175, 80, 0.1)" />
+              </svg>
+            </CardChart>
+          </SmallFull>
+
+          <SmallHalf>
+            <CardHeader>
+              <div>
+                <h3>{smallcapCards[1].title}</h3>
+                <span className="trend-badge">{smallcapCards[1].trend}</span>
+              </div>
+            </CardHeader>
+            <CardValue>{smallcapCards[1].value}</CardValue>
+            <CardChange>{smallcapCards[1].change}</CardChange>
+            <CardStats>
+              <span>{smallcapCards[1].percentile} Percentile</span>
+              <span>|</span>
+              <span>{smallcapCards[1].pe}</span>
+            </CardStats>
+            <CardChart>
+              <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
+                <polyline points="0,18 10,16 20,15 30,16 40,14 50,15 60,15 70,16 80,15 90,17 100,16" fill="none" stroke="#4CAF50" strokeWidth="1" />
+              </svg>
+            </CardChart>
+          </SmallHalf>
+
+          <SmallHalf>
+            <CardHeader>
+              <div>
+                <h3>{smallcapCards[2].title}</h3>
+                <span className="trend-badge">{smallcapCards[2].trend}</span>
+              </div>
+            </CardHeader>
+            <CardValue>{smallcapCards[2].value}</CardValue>
+            <CardChange>{smallcapCards[2].change}</CardChange>
+            <CardStats>
+              <span>{smallcapCards[2].percentile} Percentile</span>
+              <span>|</span>
+              <span>{smallcapCards[2].pe}</span>
+            </CardStats>
+            <CardChart>
+              <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
+                <polyline points="0,18 10,16 20,15 30,16 40,14 50,15 60,15 70,16 80,15 90,17 100,16" fill="none" stroke="#4CAF50" strokeWidth="1" />
+              </svg>
+            </CardChart>
+          </SmallHalf>
         </SmallCardContainer>
       </CashCardContainer>
 

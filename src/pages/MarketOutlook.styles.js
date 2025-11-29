@@ -23,11 +23,15 @@ export const Card = styled.div`
 
 export const CashCardContainer = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr;
+  /* use the same 3 equal columns as the first row for consistent spacing */
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 24px;
+  /* left two columns are for FII/DII, right column holds the stacked smallcap area */
   grid-template-areas:
-    "fii dii smallcap";
+    "fii dii small"
+    "fii dii small";
+  grid-auto-rows: auto;
 `;
 
 export const CashCard = styled(Card)`
@@ -46,22 +50,24 @@ export const CashCard = styled(Card)`
 `;
 
 export const SmallCardContainer = styled.div`
+  /* small column sits in the 'small' area and is itself a 2-row grid:
+     row1: full-width smallcap; row2: two half-width items (microcap + vix) */
+  grid-area: small;
   display: grid;
+  grid-template-rows: auto auto;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  grid-area: smallcap;
+  align-items: start;
+`;
 
-  ${Card}:nth-child(1) {
-    grid-column: 1 / -1;
-  }
+/* utility cards to place correctly inside SmallCardContainer */
+export const SmallFull = styled(Card)`
+  grid-row: 1 / 2;
+  grid-column: 1 / 3;
+`;
 
-  ${Card}:nth-child(2) {
-    grid-column: 1;
-  }
-
-  ${Card}:nth-child(3) {
-    grid-column: 2;
-  }
+export const SmallHalf = styled(Card)`
+  grid-row: 2 / 3;
 `;
 
 export const CardHeader = styled.div`
