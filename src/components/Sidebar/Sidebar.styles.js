@@ -2,6 +2,8 @@
 import styled from 'styled-components';
 import { Link } from 'react-router-dom';
 
+const mobileBreakpoint = '768px';
+
 export const SidebarContainer = styled.div`
   width: ${(p) => (p.collapsed ? '72px' : '280px')};
   background-color: #0b3d91; /* dark blue */
@@ -11,6 +13,14 @@ export const SidebarContainer = styled.div`
   overflow-y: auto;
   box-sizing: border-box;
   transition: width 200ms ease, padding 200ms ease;
+  position: sticky;
+  top: 0;
+
+  /* Mobile: always collapsed */
+  @media (max-width: ${mobileBreakpoint}) {
+    width: 72px;
+    padding: 16px 8px;
+  }
 
   h2 {
     margin: 0 0 28px 0;
@@ -20,6 +30,10 @@ export const SidebarContainer = styled.div`
     letter-spacing: 0.4px;
     line-height: 1.1;
     display: ${(p) => (p.collapsed ? 'none' : 'block')};
+
+    @media (max-width: ${mobileBreakpoint}) {
+      display: none;
+    }
   }
 `;
 
@@ -34,12 +48,20 @@ export const ToggleButton = styled.button`
   align-items: center;
   gap: 8px;
   font-size: 18px;
+  @media (max-width: ${mobileBreakpoint}) {
+    justify-content: center;
+    width: 100%;
+  }
 `;
 
 export const Section = styled.div`
   margin-top: ${(p) => (p.collapsed ? '18px' : '34px')};
   padding-top: ${(p) => (p.collapsed ? '18px' : '34px')};
   border-top: 1px solid rgba(255, 255, 255, 0.2);
+   @media (max-width: ${mobileBreakpoint}) {
+    margin-top: 18px;
+    padding-top: 18px;
+  }
 `;
 
 export const SectionTitle = styled.h3`
@@ -50,6 +72,9 @@ export const SectionTitle = styled.h3`
   color: rgba(255,255,255,0.95);
   letter-spacing: 0.8px;
   display: ${(p) => (p.collapsed ? 'none' : 'block')};
+  @media (max-width: ${mobileBreakpoint}) {
+    display: none;
+  }
 `;
 
 export const NavLink = styled(Link)`
@@ -68,16 +93,27 @@ export const NavLink = styled(Link)`
   width: 100%;
   box-sizing: border-box;
   line-height: 1.2;
+  @media (max-width: ${mobileBreakpoint}) {
+    justify-content: center;
+    padding: 12px;
+    font-size: 0; /* hide label */
+  }
 
   svg {
     font-size: ${(p) => (p.collapsed ? '24px' : '28px')};
     color: inherit;
     flex-shrink: 0;
+    @media (max-width: ${mobileBreakpoint}) {
+      font-size: 24px;
+    }
   }
 
   .label {
     display: ${(p) => (p.collapsed ? 'none' : 'inline')};
     white-space: nowrap;
+    @media (max-width: ${mobileBreakpoint}) {
+      display: none;
+    }
   }
 
   &:hover {

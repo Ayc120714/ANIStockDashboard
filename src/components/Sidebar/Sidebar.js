@@ -16,7 +16,7 @@ function Sidebar() {
       <h2>Stock Dashboard</h2>
 
       <nav>
-        <NavLink to="/" collapsed={collapsed} title="Dashboard">
+        <NavLink to="/" collapsed={collapsed} title={collapsed ? 'Dashboard' : undefined}>
           <MdDashboard />
           <span className="label">Dashboard</span>
         </NavLink>
@@ -24,22 +24,22 @@ function Sidebar() {
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Stocks</SectionTitle>
 
-          <NavLink to="/outlook" collapsed={collapsed} title="Outlook">
+          <NavLink to="/outlook" collapsed={collapsed} title={collapsed ? 'Outlook' : undefined}>
             <MdOutlineShowChart />
             <span className="label">Outlook</span>
           </NavLink>
 
-          <NavLink to="/long-term" collapsed={collapsed} title="Long Term">
+          <NavLink to="/long-term" collapsed={collapsed} title={collapsed ? 'Long Term' : undefined}>
             <MdTrendingUp />
             <span className="label">Long Term</span>
           </NavLink>
 
-          <NavLink to="/screens" collapsed={collapsed} title="Screens">
+          <NavLink to="/screens" collapsed={collapsed} title={collapsed ? 'Screens' : undefined}>
             <MdGridView />
             <span className="label">Screens</span>
           </NavLink>
 
-          <NavLink to="/alerts" collapsed={collapsed} title="Alerts">
+          <NavLink to="/alerts" collapsed={collapsed} title={collapsed ? 'Alerts' : undefined}>
             <MdNotifications />
             <span className="label">Alerts</span>
           </NavLink>
@@ -48,12 +48,12 @@ function Sidebar() {
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Resources</SectionTitle>
 
-          <NavLink to="/profile" collapsed={collapsed} title="Profile">
+          <NavLink to="/profile" collapsed={collapsed} title={collapsed ? 'Profile' : undefined}>
             <MdPerson />
             <span className="label">Profile</span>
           </NavLink>
 
-          <NavLink to="/events" collapsed={collapsed} title="Events">
+          <NavLink to="/events" collapsed={collapsed} title={collapsed ? 'Events' : undefined}>
             <MdEventNote />
             <span className="label">Events</span>
           </NavLink>
