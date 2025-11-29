@@ -39,7 +39,7 @@ export const Tab = styled.button`
 
   &:hover {
     background-color: ${(p) => (p.active ? '#0b3d91' : '#f0f6ff')};
-    color: #0b3d91;
+    color: ${(p) => (p.active ? '#f0f6ff' : '#0b3d91')};
   }
 
   &:active {
