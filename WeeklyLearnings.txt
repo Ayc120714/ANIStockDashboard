@@ -9,3 +9,10 @@ Week2:29-11-2025
 1.useMemo to handle filters and sorted data so that data can be reused.
 2.Sortings on table onclcik how to handle data efficiently.
 3.Need to think how to extract numeric from a column and then apply sortings on that field.
+
+Week3: 13-12-2025
+1.How to use Legend Bars to get color codings.
+2.How to use Chips for division of data.
+3.Active tab is set using useState implementation
+4.Nifty sector and subsector just visited
+5.Need to do Chip based Filtering next week.
