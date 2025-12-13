@@ -1,0 +1,11 @@
+Week1:22-11-2025
+1. How to prepare sidebar to a dashboard and how to handle hovers,oncollapse, 
+2.How to use useState to maintain active tabs.
+3.Cards rendering on page with reuired widths.
+4.Sending properties to css file using styled in material ui
+5.Tab Divisions on same page using TabContainer
+
+Week2:29-11-2025
+1.useMemo to handle filters and sorted data so that data can be reused.
+2.Sortings on table onclcik how to handle data efficiently.
+3.Need to think how to extract numeric from a column and then apply sortings on that field.

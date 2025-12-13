@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CardContainer,
   Card,
@@ -40,12 +40,75 @@ function MarketOutlookPage() {
     { title: 'India VIX', trend: 'SIDEWAYS', value: '12', change: '+0.43%', percentile: '—', pe: '—' }
   ];
 
-  const tableData = [
+  // 4. Table Data (for market indices table)
+  const tableData = React.useMemo(() => [
     { id: '01', name: 'MICROCAP250', trend: '↘', value: '₹23,455.35', percentile: '58%', day1d: '↘ -1.69%', week1w: '↘ -1.73%', month1m: '↗ 0.05%', month3m: '↘ -0.97%', month6m: '↗ 11.99%', year1y: '↘ -3.61%', year3y: '↗ 29.07%' },
     { id: '02', name: 'SMALLCAP100', trend: '↘', value: '₹18,105.00', percentile: '69%', day1d: '↘ -1.39%', week1w: '↘ -1.97%', month1m: '↗ 0.99%', month3m: '↗ 1.18%', month6m: '↗ 10.28%', year1y: '↘ -1.55%', year3y: '↗ 23.31%' },
     { id: '03', name: 'NEXT50', trend: '↗', value: '₹69,299.55', percentile: '75%', day1d: '↘ -1.24%', week1w: '↘ -1.12%', month1m: '↗ 1.03%', month3m: '↗ 3.56%', month6m: '↗ 8.05%', year1y: '↘ -1.38%', year3y: '↗ 18.23%' },
     { id: '04', name: 'MIDCAP100', trend: '↗', value: '₹59,468.60', percentile: '93%', day1d: '↘ -0.95%', week1w: '↘ -1.04%', month1m: '↗ 2.51%', month3m: '↗ 3.55%', month6m: '↗ 9.54%', year1y: '↗ 5.55%', year3y: '↗ 24.27%' }
+  ], []);
+
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  const sortedTableData = React.useMemo(() => {
+    const sortableItems = [...tableData];
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+
+        // Attempt numeric sort, otherwise string sort
+        // Remove symbols for numbers and parse
+        const numericKeys = [
+          'value', 'percentile', 'day1d', 'week1w', 'month1m', 'month3m', 'month6m', 'year1y', 'year3y'
+        ];
+        if (numericKeys.includes(sortConfig.key)) {
+          aValue = parseFloat((aValue || '').replace(/[^\d.-]/g, ''));
+          bValue = parseFloat((bValue || '').replace(/[^\d.-]/g, ''));
+          aValue = isNaN(aValue) ? -Infinity : aValue;
+          bValue = isNaN(bValue) ? -Infinity : bValue;
+        }
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [tableData, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Column configuration for header rendering
+  const columnConfig = [
+    { key: 'id', label: '#' },
+    { key: 'name', label: 'Index' },
+    { key: 'trend', label: 'Trend' },
+    { key: 'value', label: 'CMP' },
+    { key: 'percentile', label: 'Percentile' },
+    { key: 'day1d', label: '1D' },
+    { key: 'week1w', label: '1W' },
+    { key: 'month1m', label: '1M' },
+    { key: 'month3m', label: '3M' },
+    { key: 'month6m', label: '6M' },
+    { key: 'year1y', label: '1Y' },
+    { key: 'year3y', label: '3Y' }
   ];
+
+  // Sort arrow helper similar to SectorOutlookPage.js
+  const getSortArrow = (columnKey) => {
+    if (sortConfig.key !== columnKey) return ' ⬍';
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
+  };
 
   return (
     <>
@@ -201,22 +264,15 @@ function MarketOutlookPage() {
           <Table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Index</th>
-                <th>Trend</th>
-                <th>CMP</th>
-                <th>Percentile</th>
-                <th>1D</th>
-                <th>1W</th>
-                <th>1M</th>
-                <th>3M</th>
-                <th>6M</th>
-                <th>1Y</th>
-                <th>3Y</th>
+                {columnConfig.map((col) => (
+                  <th key={col.key} onClick={() => requestSort(col.key)} style={{cursor:'pointer'}}>
+                    {col.label}{getSortArrow(col.key)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {tableData.map((row) => (
+              {sortedTableData.map((row) => (
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>

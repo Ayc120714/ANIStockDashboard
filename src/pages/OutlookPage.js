@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './OutlookPage.style';
 import MarketOutlookPage from './MarketOutlookPage';
 import SectorOutlookPage from './SectorOutlookPage';
+import SubSectorOutlookPage from './SubSectorOutlookPage';
 
 function OutlookPage() {
    const [activeTab, setActiveTab] = useState('market');
@@ -27,8 +28,7 @@ function OutlookPage() {
       </TabContent>
 
       <TabContent active={activeTab === 'subsector'}>
-        <h2>Sub Sector Outlook</h2>
-        <p>Sub sector outlook content goes here...</p>
+        <SubSectorOutlookPage />
       </TabContent>
     </PageContainer>
   );
