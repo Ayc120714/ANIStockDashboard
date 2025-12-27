@@ -29,6 +29,8 @@ import {
   LegendLabelCol,
   LegendRow,
   LegendLabelGroup,
+  HeaderRow,
+  HeaderCell,
 } from './SubSectorOutlook.styles'; 
 
 const SECTOR_DATA = [
@@ -57,6 +59,32 @@ function getHighlight(val) {
   return undefined;
 } 
 
+function matchesChip(chip, value) {
+  if (chip === 'All') return true;
+  if (typeof value !== 'number') return false;
+
+  if (chip === 'Weak') return value >= 0 && value <= 20;
+  if (chip === 'Moderate') return value > 20 && value <= 50;
+  if (chip === 'Strong') return value > 50;
+  return true;
+}
+
+function getWeekValues(sub) {
+  return Object.entries(sub)
+    .filter(([key]) => key.toLowerCase().startsWith('w'))
+    .map(([, value]) => value);
+}
+
+
+function matchesChipAnyWeek(chip, sub) {
+  if (chip === 'All') return true;
+
+  const weeks = getWeekValues(sub);
+
+  return weeks.some((v) => matchesChip(chip, v));
+}
+
+
 function SubSectorOutlookPage() {
   const [chip, setChip] = useState('All');
   const [search, setSearch] = useState('');
@@ -65,9 +93,15 @@ function SubSectorOutlookPage() {
 
   const filtered = SECTOR_DATA.map(sector => ({
     ...sector,
-    subsectors: sector.subsectors.filter(sub =>
-      sub.name.toLowerCase().includes(search.toLowerCase())
-    ),
+    subsectors: sector.subsectors.filter(sub =>{
+      const matchesSearch = sub.name
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+      const matchesBand = matchesChipAnyWeek(chip, sub);
+
+    return matchesSearch && matchesBand;
+  }),
   })).filter(sector => sector.subsectors.length); 
 
   return (
@@ -120,15 +154,17 @@ function SubSectorOutlookPage() {
 
         <Table>
           <thead>
-            <TableRow>
-              <TableCell>Sub Sector</TableCell>
-              <TableCell>ALL</TableCell>
-              <TableCell>Trend</TableCell>
-              <TableCell>W45</TableCell>
-              <TableCell>W44</TableCell>
-              <TableCell>W43</TableCell>
-              <TableCell>W42</TableCell>
-            </TableRow>
+          <HeaderRow>
+            
+              <HeaderCell>Sub Sector</HeaderCell>
+              <HeaderCell>ALL</HeaderCell>
+              <HeaderCell>Trend</HeaderCell>
+              <HeaderCell>W45</HeaderCell>
+              <HeaderCell>W44</HeaderCell>
+              <HeaderCell>W43</HeaderCell>
+              <HeaderCell>W42</HeaderCell>
+          
+            </HeaderRow>
           </thead>
           <tbody>
             {filtered.map(sector => (

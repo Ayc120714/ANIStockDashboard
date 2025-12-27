@@ -128,21 +128,19 @@ export const UpdatedOnDate = styled.span`
 export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  background: #ffffff;
-  border-radius: 8px;
+ 
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 
   thead {
-    background: #8a5a21;
-    color: #ffffff;
+     background-color: #8b6f47;
+    color: white;
 
     th {
-      padding: 12px 10px;
-      font-size: 13px;
-      font-weight: 600;
-      border: none;
+      padding: 14px 16px;
       text-align: center;
+      font-size: 17px;
+      font-weight: 700;
+      border: none;
     }
   }
 
@@ -162,8 +160,7 @@ export const TableRow = styled.tr`
 
 export const TableCell = styled.td`
   text-align: center;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
   padding: 10px 6px;
   background: ${({ highlight }) =>
     highlight === 'red'
@@ -177,6 +174,21 @@ export const TableCell = styled.td`
   border-radius: ${({ highlight }) => (highlight ? '6px' : '0')};
 `; 
 
+export const HeaderRow = styled.tr`
+  background: #8b6f47;    /* header color */
+  color: white;
+  border-bottom: none;
+`;
+
+export const HeaderCell = styled.th`
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 6px;
+  background: #8b6f47;
+  color: #ffffff;
+  border: none;
+`;
 export const SectorHeader = styled.tr`
   background: #ffefd6;
 
