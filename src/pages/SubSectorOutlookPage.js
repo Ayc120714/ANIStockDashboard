@@ -38,7 +38,7 @@ const SECTOR_DATA = [
       { name: 'Auto Components', all: 70, trend: 21, w45: 30, w44: 33, w43: 31, w42: 21 },
       { name: 'Automobiles', all: 25, trend: 10, w45: 40, w44: 40, w43: 32, w42: 44 },
       { name: 'Automotive - OEM', all: 15, trend: 5, w45: 33, w44: 33, w43: 27, w42: 13 },
-      { name: 'Tyres', all: 12, trend: 5, w45: 42, w44: 42, w43: 50, w42: 50 },
+      { name: 'Tyres', all: 12, trend: 5, w45: 59, w44: 42, w43: 50, w42: 50 },
     ],
   },
   {
@@ -105,8 +105,8 @@ function SubSectorOutlookPage() {
   <LegendRow>
     <LegendLabelGroup>
     <LegendLabelCol flex={3}>Weak(0-20)</LegendLabelCol>
-<LegendLabelCol flex={3}>Moderate(21-49)</LegendLabelCol>
-<LegendLabelCol flex={3}>Strong(50-100)</LegendLabelCol>
+<LegendLabelCol flex={3}>Moderate(21-50)</LegendLabelCol>
+<LegendLabelCol flex={3}>Strong(51-100)</LegendLabelCol>
     </LegendLabelGroup>
    
     {/* <UpdatedOn>
