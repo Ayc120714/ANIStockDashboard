@@ -51,9 +51,9 @@ const SECTOR_DATA = [
 
 function getHighlight(val) {
   if (typeof val !== 'number') return undefined;
-  if (val >= 50) return 'green';
-  if(val>=21 && val<=49) return 'yellow';
-  if (val <21) return 'red';
+  if (val > 50) return 'green';
+  if(val>20 && val<=50) return 'yellow';
+  if (val <=20) return 'red';
   return undefined;
 } 
 
