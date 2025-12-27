@@ -174,11 +174,11 @@ function SubSectorOutlookPage() {
     <div>
       <BestLabelRow>
         <BestLabel>Best Performing SubSectors</BestLabel>
-        <BestChip>1 Leaders</BestChip>
+        <BestChip> Leaders</BestChip>
       </BestLabelRow>
 
       <TopPerformerCard>
-        <span>1 PSU Banks</span>
+        <span>XYZ_UP Sector</span>
         <TopPerformerValue>58%</TopPerformerValue>
       </TopPerformerCard>
     </div>
@@ -188,11 +188,11 @@ function SubSectorOutlookPage() {
     <div>
       <BestLabelRow>
         <BestLabel under>Under Performing SubSectors</BestLabel>
-        <BestChip under>1 Leaders</BestChip>
+        <BestChip under> Laggards</BestChip>
       </BestLabelRow>
 
       <TopPerformerCard>
-        <span>1 XYZ Sector</span>
+        <span> XYZ_DN Sector</span>
         <TopPerformerValue>35%</TopPerformerValue>
       </TopPerformerCard>
     </div>
