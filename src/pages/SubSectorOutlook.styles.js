@@ -43,6 +43,7 @@ export const Chip = styled.div`
   cursor: pointer;
   min-width: 72px;
   text-align: center;
+  caret-color: transparent;
 `; 
 
 export const SearchBar = styled.input`
@@ -68,6 +69,7 @@ export const LegendRow = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  caret-color: transparent;
 `;
 
 export const LegendBar = styled.div`
@@ -130,6 +132,7 @@ export const Table = styled.table`
   border-collapse: collapse;
  
   overflow: hidden;
+  caret-color: transparent;
 
   thead {
      background-color: #8b6f47;
@@ -141,6 +144,7 @@ export const Table = styled.table`
       font-size: 17px;
       font-weight: 700;
       border: none;
+      caret-color: transparent;
     }
   }
 
@@ -172,12 +176,14 @@ export const TableCell = styled.td`
       : 'inherit'};
   color: ${({ highlight }) => (highlight ? '#222222' : '#222222')};
   border-radius: ${({ highlight }) => (highlight ? '6px' : '0')};
+  caret-color: transparent;
 `; 
 
 export const HeaderRow = styled.tr`
   background: #8b6f47;    /* header color */
   color: white;
   border-bottom: none;
+  caret-color: transparent;
 `;
 
 export const HeaderCell = styled.th`
@@ -188,6 +194,7 @@ export const HeaderCell = styled.th`
   background: #8b6f47;
   color: #ffffff;
   border: none;
+  caret-color: transparent;
 `;
 export const SectorHeader = styled.tr`
   background: #ffefd6;

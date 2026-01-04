@@ -20,3 +20,6 @@ Week3: 13-12-2025
 Week4: 27-12-2025
 1.How to apply double filters
 2.override priority styling 
+
+week5: 03-01-2026
+1.caret-color: transparent;->Which makes disable cursor blinking
