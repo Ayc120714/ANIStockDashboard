@@ -23,3 +23,8 @@ Week4: 27-12-2025
 
 week5: 03-01-2026
 1.caret-color: transparent;->Which makes disable cursor blinking
+
+week6: 10-01-2026
+1.Reusability of styles
+2.LocalisationProviderCOmponent for datepickers
+3.mui date pickers usage

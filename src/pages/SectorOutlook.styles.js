@@ -9,6 +9,7 @@ export const TableTitle = styled.h3`
   font-weight: 700;
   color: #0b3d91;
   margin: 0 0 16px 0;
+  caret-color: transparent; /* Disable caret for table title */
 `;
 
 export const TableWrapper = styled.div`
@@ -32,6 +33,7 @@ export const Table = styled.table`
       font-size: 14px;
       font-weight: 700;
       border: none;
+      caret-color: transparent; /* Disable caret for table headings */
     }
   }
 
@@ -48,21 +50,25 @@ export const Table = styled.table`
         padding: 14px 16px;
         font-size: 13px;
         color: #333;
+        caret-color: transparent; /* Disable caret for table names */
       }
 
       .index {
         font-weight: 700;
         color: #0b3d91;
+        caret-color: transparent; /* Disable caret for index column */
       }
 
       .trend-up {
         color: #28a745;
         font-weight: 700;
+        caret-color: transparent; /* Disable caret for trend-up column */
       }
 
       .trend-down {
         color: #dc3545;
         font-weight: 700;
+        caret-color: transparent; /* Disable caret for trend-down column */
       }
 
       .percentage {
@@ -70,6 +76,7 @@ export const Table = styled.table`
         padding: 4px 8px;
         border-radius: 4px;
         font-weight: 600;
+        caret-color: transparent; /* Disable caret for percentage column */
       }
     }
   }
