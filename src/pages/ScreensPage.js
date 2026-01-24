@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
 import TrendingPage from './TrendingPage';
+import PriceShockersPage from './PriceShockersPage';
+import VolumeShockersPage from './VolumeShockersPage';
+import RelativePerformancePage from './RelativePerformancePage';
+import IPOsPage from './IPOsPage';
 
 function ScreensPage() {
   const [activeTab, setActiveTab] = useState('Trending');
@@ -31,19 +35,19 @@ function ScreensPage() {
       </TabContent>
 
       <TabContent active={activeTab === 'Price Shockers'}>
-        <div>Price Shockers Content</div>
+        <PriceShockersPage />
       </TabContent>
 
       <TabContent active={activeTab === 'Volume Shockers'}>
-        <div>Volume Shockers Content</div>
+        <VolumeShockersPage />
       </TabContent>
 
       <TabContent active={activeTab === 'Relative Performance'}>
-        <div>Relative Performance Content</div>
+        <RelativePerformancePage />
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>
-        <div>IPOs Content</div>
+        <IPOsPage />
       </TabContent>
     </PageContainer>
   );

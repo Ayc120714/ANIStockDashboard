@@ -28,3 +28,7 @@ week6: 10-01-2026
 1.Reusability of styles
 2.LocalisationProviderCOmponent for datepickers
 3.mui date pickers usage
+
+Week7: 24-01-2026
+1.Conjunction of filters. Example with date with day/week/month
+2. Architecture of Backend database generation with python API calls and save the data into a SQL database for display on to the frontend.
