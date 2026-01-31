@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { fetchMarketIndices } from '../api/marketIndices';
 import {
   CardContainer,
   Card,
@@ -23,7 +24,7 @@ import {
 } from './MarketOutlook.styles';
 
 function MarketOutlookPage() {
-  const indexCards = [
+  const defaultIndexCards = [
     { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
     { title: 'Next 50', trend: 'UP TREND', value: '69,852', change: '+0.00%', percentile: '79%', pe: '20 PE' },
     { title: 'Midcap 100', trend: 'UP TREND', value: '60,692', change: '-0.35%', percentile: '98%', pe: '34 PE' }
@@ -34,11 +35,47 @@ function MarketOutlookPage() {
     { title: 'DII Cash', subtitle: 'Domestic Institutional Investors', value: '₹3,091.87 Cr', change: '-39.7%', isPositive: false }
   ];
 
-  const smallcapCards = [
+  const defaultSmallcapCards = [
     { title: 'Smallcap 100', trend: 'UP TREND', value: '18,184', change: '-0.37%', percentile: '71%', pe: '31 PE' },
     { title: 'Microcap 250', trend: 'SIDEWAYS', value: '23,595', change: '-0.09%', percentile: '60%', pe: '29 PE' },
     { title: 'India VIX', trend: 'SIDEWAYS', value: '12', change: '+0.43%', percentile: '—', pe: '—' }
   ];
+
+  const [indexCards, setIndexCards] = useState(defaultIndexCards);
+  const [smallcapCards, setSmallcapCards] = useState(defaultSmallcapCards);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMarketIndices = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const normalized = await fetchMarketIndices();
+        if (!isMounted) return;
+        if (normalized.indexCards.length) {
+          setIndexCards(normalized.indexCards);
+        }
+        if (normalized.smallcapCards.length) {
+          setSmallcapCards(normalized.smallcapCards);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError(error?.message || 'Failed to load market indices.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadMarketIndices();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // 4. Table Data (for market indices table)
   const tableData = React.useMemo(() => [
@@ -112,6 +149,16 @@ function MarketOutlookPage() {
 
   return (
     <>
+      {loadError && (
+        <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>
+          {loadError}
+        </div>
+      )}
+      {isLoading && !loadError && (
+        <div style={{ marginBottom: '12px', color: '#666', fontWeight: 600 }}>
+          Loading market indices...
+        </div>
+      )}
       {/* Index Cards Row 1 */}
       <CardContainer>
         {indexCards.map((card, idx) => (
