@@ -24,18 +24,28 @@ function IPOsPage() {
   ];
 
   // Filter data based on search term and selected date
-  const filteredData = tableData.filter((row) => {
-    const matchesSearch = row.symbol.toLowerCase().includes(searchTerm.toLowerCase());
-    let dateMatch = true;
-    if (selectedDate) {
-      // Parse listDate to Date object
-      const [day, monthStr, year] = row.listDate.split(' ');
-      const monthMap = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
-      const rowDate = new Date(parseInt(year) + 2000, monthMap[monthStr], parseInt(day));
-      dateMatch = rowDate >= new Date(selectedDate.toISOString().split('T')[0]) && rowDate <= new Date();
-    }
-    return matchesSearch && dateMatch;
-  });
+  const filteredData = useMemo(() => {
+    const filtered = tableData.filter((row) => {
+      const matchesSearch = row.symbol.toLowerCase().includes(searchTerm.toLowerCase());
+      let dateMatch = true;
+      if (selectedDate) {
+        // Parse listDate to Date object
+        const [day, monthStr, year] = row.listDate.split(' ');
+        const monthMap = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+        const rowDate = new Date(parseInt(year) + 2000, monthMap[monthStr], parseInt(day));
+        dateMatch = rowDate >= new Date(selectedDate.toISOString().split('T')[0]) && rowDate <= new Date();
+      }
+      return matchesSearch && dateMatch;
+    });
+    
+    // Remove duplicates - keep only first occurrence of each symbol
+    const seen = new Set();
+    return filtered.filter((row) => {
+      if (seen.has(row.symbol)) return false;
+      seen.add(row.symbol);
+      return true;
+    });
+  }, [tableData, searchTerm, selectedDate]);
 
   // Numeric extraction for sorting
   const extractNumeric = (value, key) => {

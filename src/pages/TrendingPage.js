@@ -1,58 +1,108 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Box, TextField, Typography } from '@mui/material';
+import Pagination from '@mui/material/Pagination';
+import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { fetchTrending } from '../api/stocks';
 
 function TrendingPage() {
+  const [page, setPage] = useState(1);
+  const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
+  const [tableData, setTableData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
 
-  const tableData = [
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    setLoadError(null);
+    let cacheSet = false;
+    const cached = sessionStorage.getItem('trendingStocksData');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      setTableData(Array.isArray(parsed) ? parsed : []);
+      setIsLoading(false);
+      cacheSet = true;
+    }
+    fetchTrending().then((fresh) => {
+      sessionStorage.setItem('trendingStocksData', JSON.stringify(fresh));
+      if (isMounted) {
+        setTableData(Array.isArray(fresh) ? fresh : []);
+        setIsLoading(false);
+      }
+    }).catch((err) => {
+      if (isMounted && !cacheSet) {
+        setLoadError(err?.message || 'Failed to load trending stocks.');
+        setIsLoading(false);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const defaultTableData = [
     { id: '01', symbol: 'NAVINFLUOR', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Small Cap', ema21: '₹4,994.48', ema50: '₹4,891.23', cmp: '₹5,687.40', chg: '14.28%', date: '2025-10-31' },
     { id: '02', symbol: 'TDPOWERSYS', sector: 'Energy', subSector: 'Heavy Electrical Equipment', mc: 'Small Cap', ema21: '₹643.94', ema50: '₹597.84', cmp: '₹774.90', chg: '13.32%', date: '2025-10-31' },
     { id: '03', symbol: 'INTELLECT', sector: 'IT', subSector: 'IT Software', mc: 'Small Cap', ema21: '₹1,012.06', ema50: '₹1,006.89', cmp: '₹1,133.50', chg: '8.29%', date: '2025-10-30' },
     { id: '04', symbol: 'TATVA', sector: 'Chemicals', subSector: 'Specialty Chemicals', mc: 'Small Cap', ema21: '₹1,266.03', ema50: '₹1,164.88', cmp: '₹1,422.30', chg: '4.60%', date: '2025-10-29' },
   ];
 
-   // Filter data based on search term and selected date
-  const filteredData = tableData.filter((row) => {
-    const matchesSearch = row.symbol.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDate =
-      selectedDate
-        ? new Date(row.date) >= new Date(selectedDate.toISOString().split('T')[0]) &&
-          new Date(row.date) <= new Date()
-        : true;
-    return matchesSearch && matchesDate;
-  });
+  const dataToFilter = tableData.length ? tableData : defaultTableData;
 
-  const extractNumeric = (value) => {
+  const filteredData = useMemo(() => {
+    const filtered = dataToFilter.filter((row) => {
+      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+      if (!selectedDate) return true;
+      const rowDate = new Date(row.date);
+      if (isNaN(rowDate.getTime())) return false;
+      const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      const endDate = new Date();
+      return rowDate >= startDate && rowDate <= endDate;
+    });
+    
+    // Remove duplicates - keep only first occurrence of each symbol
+    const seen = new Set();
+    return filtered.filter((row) => {
+      if (seen.has(row.symbol)) return false;
+      seen.add(row.symbol);
+      return true;
+    });
+  }, [dataToFilter, searchTerm, selectedDate]);
+
+  const extractNumeric = (value, key) => {
     if (typeof value === 'number') return value;
-    const match = value.toString().match(/-?[\d.]+/);
-    return match ? parseFloat(match[0]) : 0;
+    if (value === null || value === undefined) return 0;
+    let str = value.toString().replace(/,/g, '');
+    if (['ema21', 'ema50', 'cmp', 'chg'].includes(key)) str = str.replace(/[^\d.-]/g, '');
+    return parseFloat(str) || 0;
   };
 
-  // Sort after filtering
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
-
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-
-      // Numeric sort for numbers / currency / percentages
-      aValue = extractNumeric(aValue);
-      bValue = extractNumeric(bValue);
-
+      if (['ema21', 'ema50', 'cmp', 'chg'].includes(sortConfig.key)) {
+        aValue = extractNumeric(aValue, sortConfig.key);
+        bValue = extractNumeric(bValue, sortConfig.key);
+      }
       if (aValue < bValue) return sortConfig.ascending ? -1 : 1;
       if (aValue > bValue) return sortConfig.ascending ? 1 : -1;
       return 0;
     });
-
     return sorted;
   }, [filteredData, sortConfig]);
+
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return sortedData.slice(start, start + rowsPerPage);
+  }, [sortedData, page, rowsPerPage]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -80,6 +130,14 @@ function TrendingPage() {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
+      {loadError && (
+        <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>{loadError}</div>
+      )}
+      {isLoading && !loadError && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+          <CircularProgress />
+        </Box>
+      )}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Box display="flex" alignItems="center" gap={2}>
           <Typography variant="h6">Select Date:</Typography>
@@ -97,7 +155,6 @@ function TrendingPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </Box>
-      {/* Table Section */}
       <TableSection>
         <TableTitle>Trending Stocks</TableTitle>
         <TableWrapper>
@@ -113,7 +170,7 @@ function TrendingPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedData.map((row) => (
+              {paginatedData.map((row) => (
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
                   <td>{row.symbol}</td>
@@ -123,11 +180,19 @@ function TrendingPage() {
                   <td>{row.ema21}</td>
                   <td>{row.ema50}</td>
                   <td>{row.cmp}</td>
-                  <td className="trend-up">{row.chg}</td>
+                  <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
                 </tr>
               ))}
             </tbody>
           </Table>
+          <Box display="flex" justifyContent="center" mt={2}>
+            <Pagination
+              count={Math.ceil(sortedData.length / rowsPerPage)}
+              page={page}
+              onChange={(_, value) => setPage(value)}
+              color="primary"
+            />
+          </Box>
         </TableWrapper>
       </TableSection>
     </LocalizationProvider>

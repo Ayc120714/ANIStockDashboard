@@ -1,19 +1,54 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField,  ButtonGroup, Button } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button } from '@mui/material';
+import Pagination from '@mui/material/Pagination';
+import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { fetchPriceShockers } from '../api/stocks';
 
 function PriceShockersPage() {
+  const [page, setPage] = useState(1);
+  const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
+  const [tableData, setTableData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
   const [timeFrame, setTimeFrame] = useState('Day');
+  const [priceType, setPriceType] = useState('gainers');
 
-  // Add a date property to each row for demo purposes
-  // Dates are spread across Jan 2026 for demo; adjust as needed
-  const tableData = [
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    setLoadError(null);
+    let cacheSet = false;
+    const cacheKey = `priceShockersData_${priceType}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      setTableData(Array.isArray(parsed) ? parsed : []);
+      setIsLoading(false);
+      cacheSet = true;
+    }
+    fetchPriceShockers(priceType).then((fresh) => {
+      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
+      if (isMounted) {
+        setTableData(Array.isArray(fresh) ? fresh : []);
+        setIsLoading(false);
+      }
+    }).catch((err) => {
+      if (isMounted && !cacheSet) {
+        setLoadError(err?.message || 'Failed to load price shockers.');
+        setIsLoading(false);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [priceType]);
+
+  const defaultTableData = [
     { id: '01', symbol: 'MUFIN', sector: 'Financial Services', subSector: 'Finance - Investment', mc: 'Small Cap', cmp: '₹117.73', chg: '19.43%', date: new Date('2026-01-24') },
     { id: '02', symbol: 'NAVINFLUOR', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Small Cap', cmp: '₹5,687.40', chg: '14.28%', date: new Date('2026-01-24') },
     { id: '03', symbol: 'TDPOWERSYS', sector: 'Energy', subSector: 'Heavy Electrical Equipment', mc: 'Small Cap', cmp: '₹774.90', chg: '13.32%', date: new Date('2026-01-23') },
@@ -25,14 +60,21 @@ function PriceShockersPage() {
     { id: '09', symbol: 'INTELLECT', sector: 'IT', subSector: 'IT Software', mc: 'Small Cap', cmp: '₹1,133.50', chg: '8.29%', date: new Date('2026-01-15') },
   ];
 
+  const dataToFilter = tableData.length ? tableData : defaultTableData;
 
-  // Helper functions for date filtering
+  const normalizeDate = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   const isSameDay = (d1, d2) => d1 && d2 && d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
   const isSameWeek = (d1, d2) => {
     if (!d1 || !d2) return false;
     const startOfWeek = (date) => {
       const d = new Date(date);
-      d.setDate(d.getDate() - d.getDay()); // Sunday as first day
+      d.setDate(d.getDate() - d.getDay());
       d.setHours(0, 0, 0, 0);
       return d;
     };
@@ -40,42 +82,53 @@ function PriceShockersPage() {
   };
   const isSameMonth = (d1, d2) => d1 && d2 && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
-  // Filter data based on search term, selected date, and time frame
-  const filteredData = tableData.filter((row) => {
-    const matchesSearch = row.symbol.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchesSearch) return false;
-    if (!selectedDate) return true;
-    if (timeFrame === 'Day') return isSameDay(row.date, selectedDate);
-    if (timeFrame === 'Week') return isSameWeek(row.date, selectedDate);
-    if (timeFrame === 'Month') return isSameMonth(row.date, selectedDate);
-    return true;
-  });
+  const filteredData = useMemo(() => {
+    const filtered = dataToFilter.filter((row) => {
+      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+      if (!selectedDate) return true;
+      const rowDate = normalizeDate(row.date);
+      if (!rowDate) return false;
+      if (timeFrame === 'Day') return isSameDay(rowDate, selectedDate);
+      if (timeFrame === 'Week') return isSameWeek(rowDate, selectedDate);
+      if (timeFrame === 'Month') return isSameMonth(rowDate, selectedDate);
+      return true;
+    });
+    
+    // Remove duplicates - keep only first occurrence of each symbol
+    const seen = new Set();
+    return filtered.filter((row) => {
+      if (seen.has(row.symbol)) return false;
+      seen.add(row.symbol);
+      return true;
+    });
+  }, [dataToFilter, searchTerm, selectedDate, timeFrame]);
 
   const extractNumeric = (value) => {
     if (typeof value === 'number') return value;
+    if (value === null || value === undefined) return 0;
     const match = value.toString().match(/-?[\d.]+/);
     return match ? parseFloat(match[0]) : 0;
   };
 
-  // Sort after filtering
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
-
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-
-      // Numeric sort for numbers / currency / percentages
       aValue = extractNumeric(aValue);
       bValue = extractNumeric(bValue);
-
       if (aValue < bValue) return sortConfig.ascending ? -1 : 1;
       if (aValue > bValue) return sortConfig.ascending ? 1 : -1;
       return 0;
     });
-
     return sorted;
   }, [filteredData, sortConfig]);
+
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return sortedData.slice(start, start + rowsPerPage);
+  }, [sortedData, page, rowsPerPage]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -101,9 +154,16 @@ function PriceShockersPage() {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
+      {loadError && (
+        <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>{loadError}</div>
+      )}
+      {isLoading && !loadError && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+          <CircularProgress />
+        </Box>
+      )}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Box display="flex" alignItems="center" gap={2}>
-          {/* Date Picker and Time Frame Buttons */}
           <DatePicker
             label="Select Date"
             value={selectedDate}
@@ -114,6 +174,18 @@ function PriceShockersPage() {
             )}
           />
           <ButtonGroup size="small" variant="outlined" sx={{ ml: 2 }}>
+            <Button
+              variant={priceType === 'gainers' ? 'contained' : 'outlined'}
+              onClick={() => setPriceType('gainers')}
+            >
+              Gainers
+            </Button>
+            <Button
+              variant={priceType === 'losers' ? 'contained' : 'outlined'}
+              onClick={() => setPriceType('losers')}
+            >
+              Losers
+            </Button>
             <Button
               variant={timeFrame === 'Day' ? 'contained' : 'outlined'}
               onClick={() => setTimeFrame('Day')}
@@ -142,7 +214,6 @@ function PriceShockersPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </Box>
-      {/* Table Section */}
       <TableSection>
         <TableTitle>Price Shockers</TableTitle>
         <TableWrapper>
@@ -158,7 +229,7 @@ function PriceShockersPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedData.map((row) => (
+              {paginatedData.map((row) => (
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
                   <td>{row.symbol}</td>
@@ -171,6 +242,14 @@ function PriceShockersPage() {
               ))}
             </tbody>
           </Table>
+          <Box display="flex" justifyContent="center" mt={2}>
+            <Pagination
+              count={Math.ceil(sortedData.length / rowsPerPage)}
+              page={page}
+              onChange={(_, value) => setPage(value)}
+              color="primary"
+            />
+          </Box>
         </TableWrapper>
       </TableSection>
     </LocalizationProvider>

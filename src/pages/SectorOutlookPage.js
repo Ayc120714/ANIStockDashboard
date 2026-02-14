@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   TableSection,
   TableTitle,
@@ -6,20 +6,46 @@ import {
   Table
 } from './SectorOutlook.styles';
 import { Box, TextField } from '@mui/material';
-
-
+import { CircularProgress } from '@mui/material';
+import Pagination from '@mui/material/Pagination';
+import { fetchSectorOutlook } from '../api/sectorOutlook';
 
 function SectorOutlookPage() {
-     const [searchTerm, setSearchTerm] = useState('');
-     const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
+    const [page, setPage] = useState(1);
+    const rowsPerPage = 10;
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
+  const [tableData, setTableData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
-
-  const tableData = [
-    { id: '01', name: 'MICROCAP250', trend: '↘', value: '₹23,455.35', percentile: '58%', day1d: '↘ -1.69%', week1w: '↘ -1.73%', month1m: '↗ 0.05%', month3m: '↘ -0.97%', month6m: '↗ 11.99%', year1y: '↘ -3.61%', year3y: '↗ 29.07%' },
-    { id: '02', name: 'SMALLCAP100', trend: '↘', value: '₹18,105.00', percentile: '69%', day1d: '↘ -1.39%', week1w: '↘ -1.97%', month1m: '↗ 0.99%', month3m: '↗ 1.18%', month6m: '↗ 10.28%', year1y: '↘ -1.55%', year3y: '↗ 23.31%' },
-    { id: '03', name: 'NEXT50', trend: '↗', value: '₹69,299.55', percentile: '75%', day1d: '↘ -1.24%', week1w: '↘ -1.12%', month1m: '↗ 1.03%', month3m: '↗ 3.56%', month6m: '↗ 8.05%', year1y: '↘ -1.38%', year3y: '↗ 18.23%' },
-    { id: '04', name: 'MIDCAP100', trend: '↗', value: '₹59,468.60', percentile: '93%', day1d: '↘ -0.95%', week1w: '↘ -1.04%', month1m: '↗ 2.51%', month3m: '↗ 3.55%', month6m: '↗ 9.54%', year1y: '↗ 5.55%', year3y: '↗ 24.27%' }
-  ];
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    setLoadError(null);
+    // Try cache and fetch in parallel
+    let cacheSet = false;
+    const cached = sessionStorage.getItem('sectorOutlookData');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      setTableData(Array.isArray(parsed) ? parsed : []);
+      setIsLoading(false);
+      cacheSet = true;
+    }
+    fetchSectorOutlook().then((fresh) => {
+      sessionStorage.setItem('sectorOutlookData', JSON.stringify(fresh));
+      if (isMounted) {
+        setTableData(Array.isArray(fresh) ? fresh : []);
+        setIsLoading(false);
+      }
+    }).catch((err) => {
+      if (isMounted && !cacheSet) {
+        setLoadError(err?.message || 'Failed to load sector outlook.');
+        setIsLoading(false);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   // Filter data based on search term
   const filteredData = tableData.filter((row) =>
@@ -35,22 +61,23 @@ const extractNumeric = (value) => {
   // sort after filtering
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
-
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-
-      // numeric sort for numbers / currency / percentages
       aValue = extractNumeric(aValue);
       bValue = extractNumeric(bValue);
-
       if (aValue < bValue) return sortConfig.ascending ? -1 : 1;
       if (aValue > bValue) return sortConfig.ascending ? 1 : -1;
       return 0;
     });
-
     return sorted;
   }, [filteredData, sortConfig]);
+
+  // Pagination logic
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return sortedData.slice(start, start + rowsPerPage);
+  }, [sortedData, page]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -82,6 +109,14 @@ const extractNumeric = (value) => {
 
   return (
     <>
+    {loadError && (
+      <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>{loadError}</div>
+    )}
+    {isLoading && !loadError && (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+        <CircularProgress />
+      </Box>
+    )}
     <Box display="flex" justifyContent="flex-end" mb={2}> <TextField size="small" variant="outlined" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /> </Box> 
     {/* Table Section */}
       <TableSection>
@@ -99,7 +134,7 @@ const extractNumeric = (value) => {
   </tr>
             </thead>
             <tbody>
-              {sortedData.map((row) => ( 
+              {paginatedData.map((row) => ( 
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
@@ -111,12 +146,20 @@ const extractNumeric = (value) => {
                   <td className="trend-up">{row.month1m}</td>
                   <td className="trend-up">{row.month3m}</td>
                   <td className="trend-up">{row.month6m}</td>
-                  <td className={row.year1y.includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
+                  <td className={(row.year1y || '').includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
                   <td className="trend-up">{row.year3y}</td>
                 </tr>
               ))}
             </tbody>
           </Table>
+          <Box display="flex" justifyContent="center" mt={2}>
+            <Pagination
+              count={Math.ceil(sortedData.length / rowsPerPage)}
+              page={page}
+              onChange={(_, value) => setPage(value)}
+              color="primary"
+            />
+          </Box>
         </TableWrapper>
       </TableSection>
     </>

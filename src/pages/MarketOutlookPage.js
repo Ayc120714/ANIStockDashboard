@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchMarketIndices } from '../api/marketIndices';
+import { fetchSectorOutlook } from '../api/sectorOutlook';
 import {
   CardContainer,
   Card,
@@ -43,47 +44,38 @@ function MarketOutlookPage() {
 
   const [indexCards, setIndexCards] = useState(defaultIndexCards);
   const [smallcapCards, setSmallcapCards] = useState(defaultSmallcapCards);
+  const [tableData, setTableData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
-    const loadMarketIndices = async () => {
+
+    const load = async () => {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const normalized = await fetchMarketIndices();
+        const [normalized, sectorData] = await Promise.all([fetchMarketIndices(), fetchSectorOutlook()]);
         if (!isMounted) return;
-        if (normalized.indexCards.length) {
-          setIndexCards(normalized.indexCards);
+        if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
+        if (normalized.smallcapCards?.length) {
+          const cards = normalized.smallcapCards;
+          const pad = () => ({ title: '—', trend: 'SIDEWAYS', value: '—', change: '—', percentile: '—', pe: '—' });
+          const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
+          setSmallcapCards(padded.slice(0, 3));
         }
-        if (normalized.smallcapCards.length) {
-          setSmallcapCards(normalized.smallcapCards);
-        }
+        setTableData(Array.isArray(sectorData) ? sectorData : []);
       } catch (error) {
-        if (isMounted) {
-          setLoadError(error?.message || 'Failed to load market indices.');
-        }
+        if (isMounted) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
-    loadMarketIndices();
+    load();
     return () => {
       isMounted = false;
     };
   }, []);
-
-  // 4. Table Data (for market indices table)
-  const tableData = React.useMemo(() => [
-    { id: '01', name: 'MICROCAP250', trend: '↘', value: '₹23,455.35', percentile: '58%', day1d: '↘ -1.69%', week1w: '↘ -1.73%', month1m: '↗ 0.05%', month3m: '↘ -0.97%', month6m: '↗ 11.99%', year1y: '↘ -3.61%', year3y: '↗ 29.07%' },
-    { id: '02', name: 'SMALLCAP100', trend: '↘', value: '₹18,105.00', percentile: '69%', day1d: '↘ -1.39%', week1w: '↘ -1.97%', month1m: '↗ 0.99%', month3m: '↗ 1.18%', month6m: '↗ 10.28%', year1y: '↘ -1.55%', year3y: '↗ 23.31%' },
-    { id: '03', name: 'NEXT50', trend: '↗', value: '₹69,299.55', percentile: '75%', day1d: '↘ -1.24%', week1w: '↘ -1.12%', month1m: '↗ 1.03%', month3m: '↗ 3.56%', month6m: '↗ 8.05%', year1y: '↘ -1.38%', year3y: '↗ 18.23%' },
-    { id: '04', name: 'MIDCAP100', trend: '↗', value: '₹59,468.60', percentile: '93%', day1d: '↘ -0.95%', week1w: '↘ -1.04%', month1m: '↗ 2.51%', month3m: '↗ 3.55%', month6m: '↗ 9.54%', year1y: '↗ 5.55%', year3y: '↗ 24.27%' }
-  ], []);
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
@@ -331,7 +323,7 @@ function MarketOutlookPage() {
                   <td className="trend-up">{row.month1m}</td>
                   <td className="trend-up">{row.month3m}</td>
                   <td className="trend-up">{row.month6m}</td>
-                  <td className={row.year1y.includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
+                  <td className={(row.year1y || '').includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
                   <td className="trend-up">{row.year3y}</td>
                 </tr>
               ))}

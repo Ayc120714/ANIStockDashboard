@@ -32,3 +32,12 @@ week6: 10-01-2026
 Week7: 24-01-2026
 1.Conjunction of filters. Example with date with day/week/month
 2. Architecture of Backend database generation with python API calls and save the data into a SQL database for display on to the frontend.
+
+Week8: 31/01/2026
+1. Marketout look back end integration enabled.
+2. Segreation of API done.
+
+Week9: 14/02/2026
+1. Integrated Backend to frontend for all pages and screens.
+2. Issue identified are Rendering,performance,Color coding, Data validation, DB verification, API Handling, Data cleaning, API calls clean up.
+3. Review and check point 2 for next week.
