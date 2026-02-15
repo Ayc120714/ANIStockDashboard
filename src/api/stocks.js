@@ -27,6 +27,19 @@ const rsFieldByPeriod = {
 const mapStockToTable = (s, idx, opts = {}) => {
   const rsField = rsFieldByPeriod[opts.period] || 'week1w';
   const rsVal = s[rsField] ?? s.week1w ?? s.month1m ?? s.day1d;
+  
+  // Debug logging for first stock
+  if (idx === 0) {
+    console.log('Raw stock data structure:', {
+      hasSubsector: 'subsector' in s,
+      hasSector: 'sector' in s,
+      subsectorValue: s.subsector,
+      sectorValue: s.sector,
+      symbol: s.symbol,
+      allKeys: Object.keys(s).slice(0, 15)
+    });
+  }
+  
   return {
     id: String(idx + 1).padStart(2, '0'),
     symbol: s.symbol,
@@ -66,4 +79,46 @@ export const fetchTrending = async (limit = 50) => {
   const data = await apiGet(`/stocks/trending?limit=${limit}`);
   const list = data?.data ?? [];
   return list.map((s, i) => mapStockToTable(s, i, {}));
+};
+
+export const fetchStocksBySubsector = async (subsector, limit = 200) => {
+  try {
+    // Try the dedicated endpoint first
+    console.log('Trying /stocks/by-subsector endpoint...');
+    const data = await apiGet(`/stocks/by-subsector?subsector=${encodeURIComponent(subsector)}&limit=${limit}`);
+    const list = data?.data ?? [];
+    console.log('Success: got', list.length, 'stocks from /stocks/by-subsector');
+    return list.map((s, i) => mapStockToTable(s, i, {}));
+  } catch (err) {
+    console.warn(`/stocks/by-subsector failed:`, err?.message);
+  }
+  
+  try {
+    // Try generic stocks endpoint with subsector parameter
+    console.log('Trying /stocks endpoint with subsector param...');
+    const data = await apiGet(`/stocks?subsector=${encodeURIComponent(subsector)}&limit=${limit}`);
+    const list = data?.data ?? [];
+    console.log('Success: got', list.length, 'stocks from /stocks');
+    return list.map((s, i) => mapStockToTable(s, i, {}));
+  } catch (err) {
+    console.warn(`/stocks with subsector failed:`, err?.message);
+  }
+
+  try {
+    // Try fetching all stocks and filtering client-side
+    console.log('Trying to fetch all stocks from /stocks/all...');
+    const data = await apiGet(`/stocks/all?limit=${limit}`);
+    const list = data?.data ?? [];
+    console.log('Got', list.length, 'total stocks, filtering by subsector...');
+    const filtered = list.filter(s => 
+      s.subsector && s.subsector.toLowerCase().trim() === subsector.toLowerCase().trim()
+    );
+    console.log('Filtered to', filtered.length, 'stocks');
+    return filtered.map((s, i) => mapStockToTable(s, i, {}));
+  } catch (err) {
+    console.warn(`/stocks/all failed:`, err?.message);
+  }
+
+  console.warn(`All subsector endpoints failed for "${subsector}"`);
+  return [];
 };

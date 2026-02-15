@@ -141,13 +141,13 @@ const extractNumeric = (value) => {
                   <td className={row.trend === '↗' ? 'trend-up' : 'trend-down'}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
-                  <td className="trend-down">{row.day1d}</td>
-                  <td className="trend-down">{row.week1w}</td>
-                  <td className="trend-up">{row.month1m}</td>
-                  <td className="trend-up">{row.month3m}</td>
-                  <td className="trend-up">{row.month6m}</td>
-                  <td className={(row.year1y || '').includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
-                  <td className="trend-up">{row.year3y}</td>
+                  <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>
+                  <td className={(row.week1w || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.week1w}</td>
+                  <td className={(row.month1m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month1m}</td>
+                  <td className={(row.month3m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month3m}</td>
+                  <td className={(row.month6m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month6m}</td>
+                  <td className={(row.year1y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year1y}</td>
+                  <td className={(row.year3y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year3y}</td>
                 </tr>
               ))}
             </tbody>

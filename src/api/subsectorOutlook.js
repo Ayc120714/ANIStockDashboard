@@ -13,3 +13,19 @@ export const fetchSubsectorOutlook = async () => {
   }
   return { weekLabels: [], data: [] };
 };
+
+/**
+ * Fetch stocks for a specific subsector
+ */
+export const fetchStocksForSubsector = async (subsectorName) => {
+  try {
+    console.log('Fetching stocks for subsector:', subsectorName);
+    const resp = await apiGet(`/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}`);
+    const list = resp?.data ?? [];
+    console.log('Subsector stocks endpoint returned:', list.length);
+    return list;
+  } catch (err) {
+    console.warn('Subsector stocks endpoint failed:', err?.message);
+    return [];
+  }
+};

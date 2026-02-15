@@ -237,7 +237,7 @@ function PriceShockersPage() {
                   <td>{row.subSector}</td>
                   <td>{row.mc}</td>
                   <td>{row.cmp}</td>
-                  <td className="trend-up">{row.chg}</td>
+                  <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
                 </tr>
               ))}
             </tbody>

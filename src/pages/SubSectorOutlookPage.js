@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CircularProgress } from '@mui/material';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import {
   Container,
   LeftContent,
@@ -13,8 +13,6 @@ import {
   LegendBlockWeak,
   LegendBlockModerate,
   LegendBlockStrong,
-  UpdatedOn,
-  UpdatedOnDate,
   Table,
   TableRow,
   TableCell,
@@ -33,7 +31,8 @@ import {
   HeaderRow,
   HeaderCell,
 } from './SubSectorOutlook.styles';
-import { fetchSubsectorOutlook } from '../api/subsectorOutlook'; 
+import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
+import { fetchTrending, fetchStocksBySubsector } from '../api/stocks'; 
 
 function getHighlight(val) {
   if (typeof val !== 'number') return undefined;
@@ -79,6 +78,12 @@ function SubSectorOutlookPage() {
   const [sectorData, setSectorData] = useState({ weekLabels: [], data: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [selectedSubsector, setSelectedSubsector] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalStocks, setModalStocks] = useState([]);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'symbol', direction: 'asc' });
+  const [allStocks, setAllStocks] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -106,6 +111,130 @@ function SubSectorOutlookPage() {
     });
     return () => { isMounted = false; };
   }, []);
+
+  // Preload all stocks for faster modal opening and stock counting
+  useEffect(() => {
+    let isMounted = true;
+    fetchTrending(500).then(stocks => {
+      if (isMounted) {
+        console.log('Preloaded stocks count:', stocks.length);
+        if (stocks.length > 0) {
+          console.log('First stock data:', stocks[0]);
+          console.log('All unique subsectors:', [...new Set(stocks.map(s => s.subSector).filter(Boolean))]);
+        }
+        setAllStocks(stocks);
+      }
+    }).catch(err => {
+      console.error('Failed to preload stocks:', err);
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleSubsectorClick = async (subsectorName, sectorName) => {
+    setSelectedSubsector({ name: subsectorName, sector: sectorName });
+    setModalOpen(true);
+    setModalLoading(true);
+    try {
+      console.log('=== Fetching stocks ===');
+      console.log('Subsector:', subsectorName);
+      console.log('Sector:', sectorName);
+      
+      let stocks = [];
+      
+      // Try the dedicated subsector stocks endpoint first
+      console.log('Trying /subsector-stocks endpoint...');
+      stocks = await fetchStocksForSubsector(subsectorName);
+      
+      if (stocks.length === 0) {
+        console.log('Subsector endpoint returned 0, trying /stocks/by-subsector...');
+        stocks = await fetchStocksBySubsector(subsectorName, 500);
+      }
+      
+      if (stocks.length === 0) {
+        console.log('Still 0, trying cache filter...');
+        if (allStocks && allStocks.length > 0) {
+          const normalizedSearchName = subsectorName.trim().toLowerCase();
+          const uniqueSubsectors = [...new Set(
+            allStocks
+              .map(s => s.subSector)
+              .filter(s => s && s !== '—')
+          )];
+          console.log('Available subsectors:', uniqueSubsectors);
+          console.log('Looking for (normalized):', normalizedSearchName);
+          
+          stocks = allStocks.filter(stock => {
+            if (!stock.subSector || stock.subSector === '—') return false;
+            const normalized = stock.subSector.trim().toLowerCase();
+            const match = normalized === normalizedSearchName;
+            if (match && stocks.length < 3) {
+              console.log('Match found:', stock.symbol, stock.subSector);
+            }
+            return match;
+          });
+        }
+      }
+      
+      console.log('Total stocks found:', stocks.length);
+      if (stocks.length > 0) {
+        console.log('First stock:', stocks[0]);
+      }
+      
+      // Remove duplicates
+      const seen = new Set();
+      const deduplicated = stocks.filter(stock => {
+        if (seen.has(stock.symbol)) return false;
+        seen.add(stock.symbol);
+        return true;
+      });
+      
+      console.log('Final deduped count:', deduplicated.length);
+      
+      setModalStocks(deduplicated);
+      setSortConfig({ key: 'symbol', direction: 'asc' });
+    } catch (err) {
+      console.error('Error fetching stocks:', err);
+      setModalStocks([]);
+    }
+    setModalLoading(false);
+  };
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setSelectedSubsector(null);
+    setModalStocks([]);
+  };
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedModalStocks = useMemo(() => {
+    const sorted = [...modalStocks];
+    if (!sortConfig.key) return sorted;
+
+    sorted.sort((a, b) => {
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
+
+      if (sortConfig.key === 'cmp' || sortConfig.key === 'ema21' || sortConfig.key === 'mc') {
+        aVal = parseFloat(aVal?.replace(/[₹,]/g, '') || 0);
+        bVal = parseFloat(bVal?.replace(/[₹,]/g, '') || 0);
+      } else if (sortConfig.key === 'chg') {
+        aVal = parseFloat(aVal?.replace(/[%+]/g, '') || 0);
+        bVal = parseFloat(bVal?.replace(/[%+]/g, '') || 0);
+      }
+
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [modalStocks, sortConfig]);
 
   const weekLabels = sectorData.weekLabels || [];
   const dataList = sectorData.data || [];
@@ -140,7 +269,33 @@ function SubSectorOutlookPage() {
   });
 
   const topPerformers = sortedSubsectors.slice(0, 5);
-  const underPerformers = sortedSubsectors.slice(-5).reverse(); 
+  const underPerformers = sortedSubsectors.slice(-5).reverse();
+
+  // Calculate stock count per subsector
+  const subsectorStockCount = useMemo(() => {
+    const countMap = {};
+    if (allStocks && allStocks.length > 0) {
+      // Count unique symbols per subsector (avoid duplicates)
+      const subsectorSymbols = {};
+      allStocks.forEach(stock => {
+        if (stock.symbol && stock.subSector && stock.subSector !== '—') {
+          const normalized = stock.subSector.trim().toLowerCase();
+          if (!subsectorSymbols[normalized]) {
+            subsectorSymbols[normalized] = new Set();
+          }
+          subsectorSymbols[normalized].add(stock.symbol);
+        }
+      });
+      
+      // Convert to counts
+      Object.keys(subsectorSymbols).forEach(key => {
+        countMap[key] = subsectorSymbols[key].size;
+      });
+      
+      console.log('Stock count map:', countMap);
+    }
+    return countMap;
+  }, [allStocks]); 
 
   return (
     <Container>
@@ -225,7 +380,17 @@ function SubSectorOutlookPage() {
                 </SectorHeader>
                 {sector.subsectors.map(sub => (
                   <TableRow key={sub.name}>
-                    <TableCell>{sub.name}</TableCell>
+                    <TableCell 
+                      style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                      onClick={() => handleSubsectorClick(sub.name, sector.sector)}
+                    >
+                      {sub.name} 
+                      {subsectorStockCount[sub.name.trim().toLowerCase()] > 0 && (
+                        <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>
+                          ({subsectorStockCount[sub.name.trim().toLowerCase()]})
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>{sub.all}</TableCell>
                     <TableCell>{sub.trend}</TableCell>
                     {weekLabels.length ? weekLabels.map((lbl) => {
@@ -313,6 +478,69 @@ function SubSectorOutlookPage() {
     </div>
   )}
 </RightSidebar>
+
+      <Dialog open={modalOpen} onClose={handleModalClose} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Stocks in {selectedSubsector?.name} ({selectedSubsector?.sector})
+        </DialogTitle>
+        <DialogContent>
+          {modalLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+              <CircularProgress />
+            </div>
+          ) : (
+            <Table style={{ marginTop: '16px' }}>
+              <thead>
+                <HeaderRow>
+                  <HeaderCell style={{ cursor: 'pointer' }}>Sl.No</HeaderCell>
+                  <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleSort('symbol')}>
+                    Symbol {sortConfig.key === 'symbol' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                  </HeaderCell>
+                  <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleSort('mc')}>
+                    MC {sortConfig.key === 'mc' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                  </HeaderCell>
+                  <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleSort('ema21')}>
+                    EMA 21 {sortConfig.key === 'ema21' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                  </HeaderCell>
+                  <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleSort('cmp')}>
+                    CMP {sortConfig.key === 'cmp' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                  </HeaderCell>
+                  <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleSort('chg')}>
+                    CHG% {sortConfig.key === 'chg' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                  </HeaderCell>
+                </HeaderRow>
+              </thead>
+              <tbody>
+                {sortedModalStocks.length > 0 ? (
+                  sortedModalStocks.map((stock, idx) => (
+                    <TableRow key={stock.symbol}>
+                      <TableCell>{idx + 1}</TableCell>
+                      <TableCell>{stock.symbol}</TableCell>
+                      <TableCell>{stock.mc}</TableCell>
+                      <TableCell>{stock.ema21}</TableCell>
+                      <TableCell>{stock.cmp}</TableCell>
+                      <TableCell className={stock.chg && stock.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>
+                        {stock.chg}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>
+                      No stocks found in this subsector
+                    </TableCell>
+                  </TableRow>
+                )}
+              </tbody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleModalClose} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Container>
   );

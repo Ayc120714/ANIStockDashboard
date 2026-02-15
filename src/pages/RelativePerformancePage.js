@@ -213,8 +213,8 @@ function RelativePerformancePage() {
                   <td>{row.subSector}</td>
                   <td>{row.mc}</td>
                   <td>{row.cmp}</td>
-                  <td style={{ color: (row.chg || '').toString().startsWith('-') ? '#1976d2' : '#388e3c' }}>{row.chg}</td>
-                  <td style={{ color: '#388e3c' }}>{row.rs}</td>
+                  <td className={(row.chg || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.rs}</td>
                 </tr>
               ))}
             </tbody>
