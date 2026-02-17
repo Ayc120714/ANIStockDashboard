@@ -5,6 +5,10 @@ export const CardContainer = styled.div`
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 24px;
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 `;
 
 export const Card = styled.div`
@@ -23,15 +27,18 @@ export const Card = styled.div`
 
 export const CashCardContainer = styled.div`
   display: grid;
-  /* use the same 3 equal columns as the first row for consistent spacing */
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 24px;
-  /* left two columns are for FII/DII, right column holds the stacked smallcap area */
   grid-template-areas:
     "fii dii small"
     "fii dii small";
   grid-auto-rows: auto;
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr;
+    grid-template-areas: "fii" "dii" "small";
+    gap: 12px;
+  }
 `;
 
 export const CashCard = styled(Card)`
@@ -50,14 +57,16 @@ export const CashCard = styled(Card)`
 `;
 
 export const SmallCardContainer = styled.div`
-  /* small column sits in the 'small' area and is itself a 2-row grid:
-     row1: full-width smallcap; row2: two half-width items (microcap + vix) */
   grid-area: small;
   display: grid;
   grid-template-rows: auto auto;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   align-items: start;
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 `;
 
 /* utility cards to place correctly inside SmallCardContainer */
@@ -180,16 +189,19 @@ export const TableWrapper = styled.div`
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  @media (max-width: 900px) {
+    border-radius: 0;
+    box-shadow: none;
+    padding: 4px;
+  }
 `;
 
 export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-
   thead {
     background-color: #8b6f47;
     color: white;
-
     th {
       padding: 14px 16px;
       text-align: left;
@@ -198,43 +210,58 @@ export const Table = styled.table`
       border: none;
     }
   }
-
   tbody {
     tr {
       border-bottom: 1px solid #f0f0f0;
       transition: background-color 0.2s;
-
       &:hover {
         background-color: #f9f9f9;
       }
-
       td {
         padding: 14px 16px;
         font-size: 13px;
         color: #333;
       }
-
       .index {
         font-weight: 700;
         color: #0b3d91;
       }
-
       .trend-up {
         color: #28a745;
         font-weight: 700;
       }
-
       .trend-down {
         color: #dc3545;
         font-weight: 700;
       }
-
       .percentage {
         background-color: #fff3cd;
         padding: 4px 8px;
         border-radius: 4px;
         font-weight: 600;
       }
+    }
+  }
+  @media (max-width: 900px) {
+    font-size: 12px;
+    thead th, tbody td {
+      padding: 8px 4px;
+      font-size: 12px;
+    }
+  }
+  @media (max-width: 600px) {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    thead, tbody, tr, th, td {
+      display: block;
+    }
+    thead {
+      display: none;
+    }
+    tbody td {
+      border: none;
+      padding: 8px 2px;
     }
   }
 `;

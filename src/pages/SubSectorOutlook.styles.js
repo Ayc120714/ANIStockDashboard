@@ -6,12 +6,19 @@ export const Container = styled.div`
   min-height: 100vh;
   background: #fafbfc;
   padding: 24px;
-`; 
+  @media (max-width: 1200px) {
+    flex-direction: column;
+    padding: 12px;
+  }
+`;
 
 export const LeftContent = styled.div`
   flex: 1;
   margin-right: 32px;
-`; 
+  @media (max-width: 1200px) {
+    margin-right: 0;
+  }
+`;
 
 export const HeaderBar = styled.div`
   display: flex;
@@ -130,14 +137,11 @@ export const UpdatedOnDate = styled.span`
 export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
- 
   overflow: hidden;
   caret-color: transparent;
-
   thead {
-     background-color: #8b6f47;
+    background-color: #8b6f47;
     color: white;
-
     th {
       padding: 14px 16px;
       text-align: center;
@@ -147,15 +151,35 @@ export const Table = styled.table`
       caret-color: transparent;
     }
   }
-
   tbody tr {
     border-bottom: 1px solid #f0f0f0;
-
     &:hover {
       background-color: #f9f9f9;
     }
   }
-`; 
+  @media (max-width: 900px) {
+    font-size: 12px;
+    thead th, tbody td {
+      padding: 8px 4px;
+      font-size: 12px;
+    }
+  }
+  @media (max-width: 600px) {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    thead, tbody, tr, th, td {
+      display: block;
+    }
+    thead {
+      display: none;
+    }
+    tbody td {
+      border: none;
+      padding: 8px 2px;
+    }
+  }
+`;
 
 export const TableRow = styled.tr`
   border-bottom: 1px solid #eaeaea;
@@ -219,7 +243,14 @@ export const RightSidebar = styled.div`
   display: flex;
   flex-direction: column;
   align-self: flex-start;
-`; 
+  @media (max-width: 1200px) {
+    width: 100%;
+    min-width: 0;
+    margin-top: 24px;
+    padding: 12px 8px;
+    box-shadow: none;
+  }
+`;
 
 export const TopPerformerTabs = styled.div`
   display: flex;

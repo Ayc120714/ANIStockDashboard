@@ -60,18 +60,29 @@ const normalizeMarketIndicesResponse = (payload) => {
   let indexCards = source?.indexCards ?? source?.index_cards;
   let smallcapCards = source?.smallcapCards ?? source?.smallcap_cards;
 
-  // If payload is a direct array from API, filter by name patterns
+  // If payload is a direct array from API, filter by name patterns (matches Samco/DB index names)
   if (Array.isArray(source)) {
-    const indexNames = ['nifty 50', 'nifty next 50', 'nifty midcap 50'];
-    const smallcapNames = ['nifty 100', 'nifty 200', 'nifty 500', 'india vix', 'nifty smallcap', 'nifty microcap'];
+    const indexPatterns = ['nifty 50', 'nifty next 50', 'nifty midcap 50', 'nifty bank'];
+    const smallcapPatterns = ['nifty 100', 'nifty 200', 'nifty 500', 'india vix', 'nifty smallcap', 'nifty microcap', 'sensex'];
 
-    indexCards = source.filter((item) =>
-      indexNames.includes((item?.name || '').toLowerCase())
-    );
+    indexCards = source.filter((item) => {
+      const n = (item?.name || '').toLowerCase();
+      return indexPatterns.some((p) => n === p || n.includes(p));
+    });
+    // Prefer Nifty 50, Next 50, Midcap 50 for index cards; take top 3
+    const priority = ['nifty 50', 'nifty next 50', 'nifty midcap 50', 'nifty bank'];
+    indexCards.sort((a, b) => {
+      const ia = priority.findIndex((p) => (a?.name || '').toLowerCase().includes(p));
+      const ib = priority.findIndex((p) => (b?.name || '').toLowerCase().includes(p));
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    indexCards = indexCards.slice(0, 3);
 
-    smallcapCards = source.filter((item) =>
-      smallcapNames.some((pattern) => (item?.name || '').toLowerCase().includes(pattern))
-    );
+    smallcapCards = source.filter((item) => {
+      const n = (item?.name || '').toLowerCase();
+      return smallcapPatterns.some((p) => n.includes(p));
+    });
+    smallcapCards = smallcapCards.slice(0, 6);
   }
 
   return {

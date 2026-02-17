@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchMarketIndices } from '../api/marketIndices';
+import { fetchSectorOutlook } from '../api/sectorOutlook';
 import {
   CardContainer,
   Card,
@@ -43,47 +44,38 @@ function MarketOutlookPage() {
 
   const [indexCards, setIndexCards] = useState(defaultIndexCards);
   const [smallcapCards, setSmallcapCards] = useState(defaultSmallcapCards);
+  const [tableData, setTableData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
-    const loadMarketIndices = async () => {
+
+    const load = async () => {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const normalized = await fetchMarketIndices();
+        const [normalized, sectorData] = await Promise.all([fetchMarketIndices(), fetchSectorOutlook()]);
         if (!isMounted) return;
-        if (normalized.indexCards.length) {
-          setIndexCards(normalized.indexCards);
+        if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
+        if (normalized.smallcapCards?.length) {
+          const cards = normalized.smallcapCards;
+          const pad = () => ({ title: '—', trend: 'SIDEWAYS', value: '—', change: '—', percentile: '—', pe: '—' });
+          const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
+          setSmallcapCards(padded.slice(0, 3));
         }
-        if (normalized.smallcapCards.length) {
-          setSmallcapCards(normalized.smallcapCards);
-        }
+        setTableData(Array.isArray(sectorData) ? sectorData : []);
       } catch (error) {
-        if (isMounted) {
-          setLoadError(error?.message || 'Failed to load market indices.');
-        }
+        if (isMounted) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
-    loadMarketIndices();
+    load();
     return () => {
       isMounted = false;
     };
   }, []);
-
-  // 4. Table Data (for market indices table)
-  const tableData = React.useMemo(() => [
-    { id: '01', name: 'MICROCAP250', trend: '↘', value: '₹23,455.35', percentile: '58%', day1d: '↘ -1.69%', week1w: '↘ -1.73%', month1m: '↗ 0.05%', month3m: '↘ -0.97%', month6m: '↗ 11.99%', year1y: '↘ -3.61%', year3y: '↗ 29.07%' },
-    { id: '02', name: 'SMALLCAP100', trend: '↘', value: '₹18,105.00', percentile: '69%', day1d: '↘ -1.39%', week1w: '↘ -1.97%', month1m: '↗ 0.99%', month3m: '↗ 1.18%', month6m: '↗ 10.28%', year1y: '↘ -1.55%', year3y: '↗ 23.31%' },
-    { id: '03', name: 'NEXT50', trend: '↗', value: '₹69,299.55', percentile: '75%', day1d: '↘ -1.24%', week1w: '↘ -1.12%', month1m: '↗ 1.03%', month3m: '↗ 3.56%', month6m: '↗ 8.05%', year1y: '↘ -1.38%', year3y: '↗ 18.23%' },
-    { id: '04', name: 'MIDCAP100', trend: '↗', value: '₹59,468.60', percentile: '93%', day1d: '↘ -0.95%', week1w: '↘ -1.04%', month1m: '↗ 2.51%', month3m: '↗ 3.55%', month6m: '↗ 9.54%', year1y: '↗ 5.55%', year3y: '↗ 24.27%' }
-  ], []);
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
@@ -170,7 +162,7 @@ function MarketOutlookPage() {
               </div>
             </CardHeader>
             <CardValue>{card.value}</CardValue>
-            <CardChange>{card.change}</CardChange>
+            <CardChange className={(card.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{card.change}</CardChange>
             <CardStats>
               <span>{card.percentile} Percentile</span>
               <span>|</span>
@@ -193,7 +185,7 @@ function MarketOutlookPage() {
           <CashTitle>{cashCards[0].title}</CashTitle>
           <CashSubtitle>{cashCards[0].subtitle}</CashSubtitle>
           <CashValue>{cashCards[0].value}</CashValue>
-          <div style={{ marginTop: '16px', fontSize: '14px', color: '#28a745', fontWeight: '600' }}>
+          <div style={{ marginTop: '16px', fontSize: '14px', color: (cashCards[0].change || '').toString().startsWith('-') ? '#dc3545' : '#28a745', fontWeight: '600' }}>
             {cashCards[0].change}
           </div>
           <BarChart>
@@ -217,7 +209,7 @@ function MarketOutlookPage() {
           <CashTitle>{cashCards[1].title}</CashTitle>
           <CashSubtitle>{cashCards[1].subtitle}</CashSubtitle>
           <CashValue>{cashCards[1].value}</CashValue>
-          <div style={{ marginTop: '16px', fontSize: '14px', color: '#dc3545', fontWeight: '600' }}>
+          <div style={{ marginTop: '16px', fontSize: '14px', color: (cashCards[1].change || '').toString().startsWith('-') ? '#dc3545' : '#28a745', fontWeight: '600' }}>
             {cashCards[1].change}
           </div>
           <BarChart>
@@ -246,7 +238,7 @@ function MarketOutlookPage() {
               </div>
             </CardHeader>
             <CardValue>{smallcapCards[0].value}</CardValue>
-            <CardChange>{smallcapCards[0].change}</CardChange>
+            <CardChange className={(smallcapCards[0].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[0].change}</CardChange>
             <CardStats>
               <span>{smallcapCards[0].percentile} Percentile</span>
               <span>|</span>
@@ -268,7 +260,7 @@ function MarketOutlookPage() {
               </div>
             </CardHeader>
             <CardValue>{smallcapCards[1].value}</CardValue>
-            <CardChange>{smallcapCards[1].change}</CardChange>
+            <CardChange className={(smallcapCards[1].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[1].change}</CardChange>
             <CardStats>
               <span>{smallcapCards[1].percentile} Percentile</span>
               <span>|</span>
@@ -289,7 +281,7 @@ function MarketOutlookPage() {
               </div>
             </CardHeader>
             <CardValue>{smallcapCards[2].value}</CardValue>
-            <CardChange>{smallcapCards[2].change}</CardChange>
+            <CardChange className={(smallcapCards[2].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[2].change}</CardChange>
             <CardStats>
               <span>{smallcapCards[2].percentile} Percentile</span>
               <span>|</span>
@@ -326,13 +318,13 @@ function MarketOutlookPage() {
                   <td className={row.trend === '↗' ? 'trend-up' : 'trend-down'}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
-                  <td className="trend-down">{row.day1d}</td>
-                  <td className="trend-down">{row.week1w}</td>
-                  <td className="trend-up">{row.month1m}</td>
-                  <td className="trend-up">{row.month3m}</td>
-                  <td className="trend-up">{row.month6m}</td>
-                  <td className={row.year1y.includes('↗') ? 'trend-up' : 'trend-down'}>{row.year1y}</td>
-                  <td className="trend-up">{row.year3y}</td>
+                  <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>
+                  <td className={(row.week1w || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.week1w}</td>
+                  <td className={(row.month1m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month1m}</td>
+                  <td className={(row.month3m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month3m}</td>
+                  <td className={(row.month6m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month6m}</td>
+                  <td className={(row.year1y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year1y}</td>
+                  <td className={(row.year3y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year3y}</td>
                 </tr>
               ))}
             </tbody>
