@@ -1,0 +1,44 @@
+Week1:22-11-2025
+1. How to prepare sidebar to a dashboard and how to handle hovers,oncollapse, 
+2.How to use useState to maintain active tabs.
+3.Cards rendering on page with reuired widths.
+4.Sending properties to css file using styled in material ui
+5.Tab Divisions on same page using TabContainer
+
+Week2:29-11-2025
+1.useMemo to handle filters and sorted data so that data can be reused.
+2.Sortings on table onclcik how to handle data efficiently.
+3.Need to think how to extract numeric from a column and then apply sortings on that field.
+
+Week3: 13-12-2025
+1.How to use Legend Bars to get color codings.
+2.How to use Chips for division of data.
+3.Active tab is set using useState implementation
+4.Nifty sector and subsector just visited
+5.Need to do Chip based Filtering next week.
+
+Week4: 27-12-2025
+1.How to apply double filters
+2.override priority styling 
+
+week5: 03-01-2026
+1.caret-color: transparent;->Which makes disable cursor blinking
+
+week6: 10-01-2026
+1.Reusability of styles
+2.LocalisationProviderCOmponent for datepickers
+3.mui date pickers usage
+
+Week7: 24-01-2026
+1.Conjunction of filters. Example with date with day/week/month
+2. Architecture of Backend database generation with python API calls and save the data into a SQL database for display on to the frontend.
+
+Week8: 31/01/2026
+1. Marketout look back end integration enabled.
+2. Segreation of API done.
+
+Week9: 14/02/2026
+1. Integrated Backend to frontend for all pages and screens.
+2. Issue identified are Rendering,performance,Color coding, Data validation, DB verification, API Handling, Data cleaning, API calls clean up.
+3. Review and check point 2 for next week.
+
