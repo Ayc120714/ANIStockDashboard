@@ -10,7 +10,7 @@ import { CircularProgress } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 
-function SectorOutlookPage() {
+function SectorOutlookPage({ onSectorClick }) {
     const [page, setPage] = useState(1);
     const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState('');
@@ -137,7 +137,10 @@ const extractNumeric = (value) => {
               {paginatedData.map((row) => ( 
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
-                  <td>{row.name}</td>
+                  <td
+                    style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                    onClick={() => onSectorClick && onSectorClick(row.name)}
+                  >{row.name}</td>
                   <td className={row.trend === '↗' ? 'trend-up' : 'trend-down'}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>

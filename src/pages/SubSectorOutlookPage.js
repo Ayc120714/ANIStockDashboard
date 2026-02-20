@@ -35,20 +35,36 @@ import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsector
 import { fetchTrending, fetchStocksBySubsector } from '../api/stocks'; 
 
 function getHighlight(val) {
-  if (typeof val !== 'number') return undefined;
-  if (val > 50) return 'green';
-  if (val > 20 && val <= 50) return 'yellow';
-  if (val <= 20) return 'red';
-  return undefined;
+  if (typeof val !== 'number') return null;
+  if (val >= -2 && val <= 2) return 'hsl(48, 100%, 50%)';
+
+  const absVal = Math.abs(val);
+  const hue = val > 0 ? 138 : 5;
+  const lightness = val > 0 ? 50 : 47.6;
+
+  let alpha;
+  if (absVal >= 15) {
+    alpha = Math.min(0.95 + (absVal - 15) / 35 * 0.05, 1.0);
+  } else if (absVal >= 10) {
+    alpha = 0.86 + (absVal - 10) / 5 * 0.08;
+  } else if (absVal >= 5) {
+    alpha = 0.75 + (absVal - 5) / 5 * 0.10;
+  } else {
+    alpha = 0.55 + (absVal - 2) / 3 * 0.19;
+  }
+
+  return `hsla(${hue}, 100%, ${lightness}%, ${alpha})`;
 } 
 
-function matchesChip(chip, value) {
+function matchesChip(chip, sub, weekLabels) {
   if (chip === 'All') return true;
-  if (typeof value !== 'number') return false;
+  const latestLabel = weekLabels && weekLabels.length ? weekLabels[0] : null;
+  const val = latestLabel ? sub[latestLabel] : null;
+  if (typeof val !== 'number') return true;
 
-  if (chip === 'Weak') return value >= 0 && value <= 20;
-  if (chip === 'Moderate') return value > 20 && value <= 50;
-  if (chip === 'Strong') return value > 50;
+  if (chip === 'Weak') return val < -2;
+  if (chip === 'Moderate') return val >= -2 && val <= 2;
+  if (chip === 'Strong') return val > 2;
   return true;
 }
 
@@ -62,16 +78,7 @@ function getWeekValues(sub, weekLabels) {
 }
 
 
-function matchesChipAnyWeek(chip, sub, weekLabels) {
-  if (chip === 'All') return true;
-
-  const weeks = getWeekValues(sub, weekLabels);
-
-  return weeks.some((v) => matchesChip(chip, v));
-}
-
-
-function SubSectorOutlookPage() {
+function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const [chip, setChip] = useState('All');
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('top');
@@ -83,6 +90,7 @@ function SubSectorOutlookPage() {
   const [modalStocks, setModalStocks] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'symbol', direction: 'asc' });
+  const [tableSort, setTableSort] = useState({ key: null, direction: 'asc' });
   const [allStocks, setAllStocks] = useState([]);
 
   useEffect(() => {
@@ -216,16 +224,22 @@ function SubSectorOutlookPage() {
     const sorted = [...modalStocks];
     if (!sortConfig.key) return sorted;
 
+    const toNum = (val) => {
+      if (val == null) return 0;
+      if (typeof val === 'number') return val;
+      return parseFloat(String(val).replace(/[₹,%+\s]/g, '')) || 0;
+    };
+
     sorted.sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
 
-      if (sortConfig.key === 'cmp' || sortConfig.key === 'ema21' || sortConfig.key === 'mc') {
-        aVal = parseFloat(aVal?.replace(/[₹,]/g, '') || 0);
-        bVal = parseFloat(bVal?.replace(/[₹,]/g, '') || 0);
-      } else if (sortConfig.key === 'chg') {
-        aVal = parseFloat(aVal?.replace(/[%+]/g, '') || 0);
-        bVal = parseFloat(bVal?.replace(/[%+]/g, '') || 0);
+      if (['cmp', 'ema21', 'mc', 'chg'].includes(sortConfig.key)) {
+        aVal = toNum(aVal);
+        bVal = toNum(bVal);
+      } else {
+        aVal = aVal ?? '';
+        bVal = bVal ?? '';
       }
 
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -238,17 +252,57 @@ function SubSectorOutlookPage() {
 
   const weekLabels = sectorData.weekLabels || [];
   const dataList = sectorData.data || [];
+  const handleTableSort = (key) => {
+    setTableSort(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const getTableSortArrow = (key) => {
+    if (tableSort.key !== key) return ' ⬍';
+    return tableSort.direction === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  const sortSubsectors = (subsectors) => {
+    if (!tableSort.key) return subsectors;
+    const sorted = [...subsectors];
+    sorted.sort((a, b) => {
+      let aVal, bVal;
+      if (tableSort.key === 'name') {
+        aVal = (a.name || '').toLowerCase();
+        bVal = (b.name || '').toLowerCase();
+      } else if (tableSort.key === 'all' || tableSort.key === 'trend') {
+        aVal = typeof a[tableSort.key] === 'number' ? a[tableSort.key] : parseFloat(a[tableSort.key]) || 0;
+        bVal = typeof b[tableSort.key] === 'number' ? b[tableSort.key] : parseFloat(b[tableSort.key]) || 0;
+      } else {
+        aVal = typeof a[tableSort.key] === 'number' ? a[tableSort.key] : parseFloat(a[tableSort.key]) || 0;
+        bVal = typeof b[tableSort.key] === 'number' ? b[tableSort.key] : parseFloat(b[tableSort.key]) || 0;
+      }
+      if (aVal < bVal) return tableSort.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return tableSort.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  };
+
+  const mappedSet = mappedGroups && mappedGroups.length
+    ? new Set(mappedGroups.map(n => n.toLowerCase()))
+    : null;
+
   const filtered = dataList.map(sector => ({
     ...sector,
-    subsectors: sector.subsectors.filter(sub =>{
+    subsectors: sortSubsectors(sector.subsectors.filter(sub =>{
+      if (mappedSet && !mappedSet.has(sub.name.toLowerCase())) return false;
+
       const matchesSearch = sub.name
       .toLowerCase()
       .includes(search.toLowerCase());
 
-      const matchesBand = matchesChipAnyWeek(chip, sub, weekLabels);
+      const matchesBand = matchesChip(chip, sub, weekLabels);
 
     return matchesSearch && matchesBand;
-  }),
+  })),
   })).filter(sector => sector.subsectors.length);
 
   // Calculate top and under performers from all subsectors
@@ -308,6 +362,25 @@ function SubSectorOutlookPage() {
             <CircularProgress />
           </div>
         )}
+        {selectedSector && mappedGroups && (
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, color: '#555' }}>
+              Subsectors for <strong style={{ color: '#0b3d91' }}>{selectedSector}</strong>
+              <span style={{ marginLeft: 6, fontSize: 12, color: '#888' }}>
+                ({mappedGroups.length} mapped)
+              </span>
+            </span>
+            <button
+              onClick={onClearSector}
+              style={{
+                background: '#f0f0f0', border: '1px solid #ccc', borderRadius: 14,
+                padding: '4px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#555',
+              }}
+            >
+              Show All Sectors
+            </button>
+          </div>
+        )}
         <HeaderBar>
           <SearchBar
             placeholder="Search"
@@ -339,9 +412,9 @@ function SubSectorOutlookPage() {
 
   <LegendRow>
     <LegendLabelGroup>
-    <LegendLabelCol flex={3}>Weak(0-20)</LegendLabelCol>
-<LegendLabelCol flex={3}>Moderate(21-50)</LegendLabelCol>
-<LegendLabelCol flex={3}>Strong(51-100)</LegendLabelCol>
+    <LegendLabelCol flex={3}>Weak(&lt; -2%)</LegendLabelCol>
+<LegendLabelCol flex={3}>Moderate(-2% to +2%)</LegendLabelCol>
+<LegendLabelCol flex={3}>Strong(&gt; +2%)</LegendLabelCol>
     </LegendLabelGroup>
    
     {/* <UpdatedOn>
@@ -356,11 +429,23 @@ function SubSectorOutlookPage() {
         <Table>
           <thead>
             <HeaderRow>
-              <HeaderCell>Sub Sector</HeaderCell>
-              <HeaderCell>ALL</HeaderCell>
-              <HeaderCell>Trend</HeaderCell>
+              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('name')}>
+                Sub Sector{getTableSortArrow('name')}
+              </HeaderCell>
+              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('all')}>
+                ALL{getTableSortArrow('all')}
+              </HeaderCell>
+              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('trend')}>
+                Trend{getTableSortArrow('trend')}
+              </HeaderCell>
               {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => (
-                <HeaderCell key={lbl || idx}>{typeof lbl === 'string' ? lbl : 'W—'}</HeaderCell>
+                <HeaderCell
+                  key={lbl || idx}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => typeof lbl === 'string' && handleTableSort(lbl)}
+                >
+                  {typeof lbl === 'string' ? lbl : 'W—'}{typeof lbl === 'string' ? getTableSortArrow(lbl) : ''}
+                </HeaderCell>
               ))}
             </HeaderRow>
           </thead>
@@ -506,7 +591,32 @@ function SubSectorOutlookPage() {
                 {sortedModalStocks.length > 0 ? (
                   sortedModalStocks.map((stock, idx) => (
                     <TableRow key={stock.symbol}>
-                      <TableCell>{idx + 1}</TableCell>
+                      <TableCell>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {idx + 1}
+                          <a
+                            href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(stock.symbol)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`View ${stock.symbol} on TradingView`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              background: '#131722',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 36 28" fill="none">
+                              <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF"/>
+                              <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF"/>
+                            </svg>
+                          </a>
+                        </span>
+                      </TableCell>
                       <TableCell>{stock.symbol}</TableCell>
                       <TableCell>{stock.mc}</TableCell>
                       <TableCell>{stock.ema21}</TableCell>

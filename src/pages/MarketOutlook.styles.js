@@ -96,14 +96,24 @@ export const CardHeader = styled.div`
   }
 
   .trend-badge {
-    background-color: #d4edda;
-    color: #155724;
     padding: 3px 8px;
     border-radius: 4px;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+  .trend-badge.up {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  .trend-badge.down {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+  .trend-badge.sideways {
+    background-color: #e2e3e5;
+    color: #495057;
   }
 `;
 

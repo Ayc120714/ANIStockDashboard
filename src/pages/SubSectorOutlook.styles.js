@@ -3,21 +3,16 @@ import styled from 'styled-components';
 export const Container = styled.div`
   display: flex;
   flex-direction: row;
-  min-height: 100vh;
-  background: #fafbfc;
-  padding: 24px;
+  gap: 24px;
   @media (max-width: 1200px) {
     flex-direction: column;
-    padding: 12px;
   }
 `;
 
 export const LeftContent = styled.div`
   flex: 1;
-  margin-right: 32px;
-  @media (max-width: 1200px) {
-    margin-right: 0;
-  }
+  min-width: 0;
+  overflow-x: auto;
 `;
 
 export const HeaderBar = styled.div`
@@ -71,7 +66,8 @@ export const LegendWrapper = styled.div`
 `;
 
 export const LegendRow = styled.div`
-  width: 580px;
+  width: 100%;
+  max-width: 580px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -190,15 +186,8 @@ export const TableCell = styled.td`
   text-align: center;
   font-size: 15px;
   padding: 10px 6px;
-  background: ${({ highlight }) =>
-    highlight === 'red'
-      ? 'hsl(5, 100%, 47.6%)'
-      :highlight === 'yellow'
-      ? 'hsl(48, 100.00%, 50.00%)'
-      : highlight === 'green'
-      ? 'hsl(138, 100%, 50%)'
-      : 'inherit'};
-  color: ${({ highlight }) => (highlight ? '#222222' : '#222222')};
+  background: ${({ highlight }) => highlight || 'inherit'};
+  color: #222222;
   border-radius: ${({ highlight }) => (highlight ? '6px' : '0')};
   caret-color: transparent;
 `; 

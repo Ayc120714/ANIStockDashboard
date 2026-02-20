@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchMarketIndices } from '../api/marketIndices';
-import { fetchSectorOutlook } from '../api/sectorOutlook';
+import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
 import {
   CardContainer,
   Card,
@@ -55,7 +54,7 @@ function MarketOutlookPage() {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const [normalized, sectorData] = await Promise.all([fetchMarketIndices(), fetchSectorOutlook()]);
+        const [normalized, tableRows] = await Promise.all([fetchMarketIndices(), fetchMarketIndicesTable()]);
         if (!isMounted) return;
         if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
         if (normalized.smallcapCards?.length) {
@@ -64,7 +63,7 @@ function MarketOutlookPage() {
           const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
           setSmallcapCards(padded.slice(0, 3));
         }
-        setTableData(Array.isArray(sectorData) ? sectorData : []);
+        setTableData(Array.isArray(tableRows) ? tableRows : []);
       } catch (error) {
         if (isMounted) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
@@ -133,6 +132,29 @@ function MarketOutlookPage() {
     { key: 'year3y', label: '3Y' }
   ];
 
+  const getTrendClass = (trend) => {
+    if (/bullish|up|↗/i.test(trend)) return 'up';
+    if (/bearish|down|↘/i.test(trend)) return 'down';
+    return 'sideways';
+  };
+
+  const buildSparkline = (data, width = 100, height = 40, padding = 4) => {
+    if (!data || data.length < 2) return null;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const points = data.map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = padding + ((max - v) / range) * (height - padding * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const linePoints = points.join(' ');
+    const fillPoints = `${points.join(' ')} ${width},${height} 0,${height}`;
+    const isUp = data[data.length - 1] >= data[0];
+    const color = isUp ? '#28a745' : '#dc3545';
+    return { linePoints, fillPoints, color };
+  };
+
   // Sort arrow helper similar to SectorOutlookPage.js
   const getSortArrow = (columnKey) => {
     if (sortConfig.key !== columnKey) return ' ⬍';
@@ -153,29 +175,38 @@ function MarketOutlookPage() {
       )}
       {/* Index Cards Row 1 */}
       <CardContainer>
-        {indexCards.map((card, idx) => (
-          <Card key={idx}>
-            <CardHeader>
-              <div>
-                <h3>{card.title}</h3>
-                <span className="trend-badge">{card.trend}</span>
-              </div>
-            </CardHeader>
-            <CardValue>{card.value}</CardValue>
-            <CardChange className={(card.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{card.change}</CardChange>
-            <CardStats>
-              <span>{card.percentile} Percentile</span>
-              <span>|</span>
-              <span>{card.pe}</span>
-            </CardStats>
-            <CardChart>
-              <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                <polyline points="0,30 10,25 20,20 30,18 40,22 50,15 60,18 70,20 80,25 90,22 100,20" fill="none" stroke="#4CAF50" strokeWidth="1.5" />
-                <polygon points="0,30 10,25 20,20 30,18 40,22 50,15 60,18 70,20 80,25 90,22 100,20 100,40 0,40" fill="rgba(76, 175, 80, 0.1)" />
-              </svg>
-            </CardChart>
-          </Card>
-        ))}
+        {indexCards.map((card, idx) => {
+          const spark = buildSparkline(card.perfData);
+          return (
+            <Card key={idx}>
+              <CardHeader>
+                <div>
+                  <h3>{card.title}</h3>
+                  <span className={`trend-badge ${card.trendDirection || getTrendClass(card.trend)}`}>{card.trend}</span>
+                </div>
+              </CardHeader>
+              <CardValue>{card.value}</CardValue>
+              <CardChange className={(card.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{card.change}</CardChange>
+              <CardStats>
+                <span>{card.percentile} Percentile</span>
+                <span>|</span>
+                <span>{card.pe}</span>
+              </CardStats>
+              <CardChart>
+                {spark ? (
+                  <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
+                    <polyline points={spark.linePoints} fill="none" stroke={spark.color} strokeWidth="1.5" />
+                    <polygon points={spark.fillPoints} fill={spark.color} fillOpacity="0.1" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
+                    <line x1="0" y1="20" x2="100" y2="20" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
+                  </svg>
+                )}
+              </CardChart>
+            </Card>
+          );
+        })}
       </CardContainer>
 
       {/* Cash Cards + Smallcap Cards Row 2 */}
@@ -230,69 +261,68 @@ function MarketOutlookPage() {
 
         {/* Smallcap column (right): top = full smallcap; bottom row = microcap + India VIX */}
         <SmallCardContainer>
-          <SmallFull>
-            <CardHeader>
-              <div>
-                <h3>{smallcapCards[0].title}</h3>
-                <span className="trend-badge">{smallcapCards[0].trend}</span>
-              </div>
-            </CardHeader>
-            <CardValue>{smallcapCards[0].value}</CardValue>
-            <CardChange className={(smallcapCards[0].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[0].change}</CardChange>
-            <CardStats>
-              <span>{smallcapCards[0].percentile} Percentile</span>
-              <span>|</span>
-              <span>{smallcapCards[0].pe}</span>
-            </CardStats>
-            <CardChart>
-              <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                <polyline points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22" fill="none" stroke="#4CAF50" strokeWidth="1.5" />
-                <polygon points="0,25 10,22 20,20 30,24 40,18 50,22 60,20 70,23 80,21 90,24 100,22 100,40 0,40" fill="rgba(76, 175, 80, 0.1)" />
-              </svg>
-            </CardChart>
-          </SmallFull>
+          {(() => {
+            const spark0 = buildSparkline(smallcapCards[0].perfData);
+            return (
+              <SmallFull>
+                <CardHeader>
+                  <div>
+                    <h3>{smallcapCards[0].title}</h3>
+                    <span className={`trend-badge ${smallcapCards[0].trendDirection || getTrendClass(smallcapCards[0].trend)}`}>{smallcapCards[0].trend}</span>
+                  </div>
+                </CardHeader>
+                <CardValue>{smallcapCards[0].value}</CardValue>
+                <CardChange className={(smallcapCards[0].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[0].change}</CardChange>
+                <CardStats>
+                  <span>{smallcapCards[0].percentile} Percentile</span>
+                  <span>|</span>
+                  <span>{smallcapCards[0].pe}</span>
+                </CardStats>
+                <CardChart>
+                  {spark0 ? (
+                    <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
+                      <polyline points={spark0.linePoints} fill="none" stroke={spark0.color} strokeWidth="1.5" />
+                      <polygon points={spark0.fillPoints} fill={spark0.color} fillOpacity="0.1" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 100 40"><line x1="0" y1="20" x2="100" y2="20" stroke="#ccc" strokeWidth="1" strokeDasharray="4" /></svg>
+                  )}
+                </CardChart>
+              </SmallFull>
+            );
+          })()}
 
-          <SmallHalf>
-            <CardHeader>
-              <div>
-                <h3>{smallcapCards[1].title}</h3>
-                <span className="trend-badge">{smallcapCards[1].trend}</span>
-              </div>
-            </CardHeader>
-            <CardValue>{smallcapCards[1].value}</CardValue>
-            <CardChange className={(smallcapCards[1].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[1].change}</CardChange>
-            <CardStats>
-              <span>{smallcapCards[1].percentile} Percentile</span>
-              <span>|</span>
-              <span>{smallcapCards[1].pe}</span>
-            </CardStats>
-            <CardChart>
-              <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
-                <polyline points="0,18 10,16 20,15 30,16 40,14 50,15 60,15 70,16 80,15 90,17 100,16" fill="none" stroke="#4CAF50" strokeWidth="1" />
-              </svg>
-            </CardChart>
-          </SmallHalf>
-
-          <SmallHalf>
-            <CardHeader>
-              <div>
-                <h3>{smallcapCards[2].title}</h3>
-                <span className="trend-badge">{smallcapCards[2].trend}</span>
-              </div>
-            </CardHeader>
-            <CardValue>{smallcapCards[2].value}</CardValue>
-            <CardChange className={(smallcapCards[2].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[2].change}</CardChange>
-            <CardStats>
-              <span>{smallcapCards[2].percentile} Percentile</span>
-              <span>|</span>
-              <span>{smallcapCards[2].pe}</span>
-            </CardStats>
-            <CardChart>
-              <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
-                <polyline points="0,18 10,16 20,15 30,16 40,14 50,15 60,15 70,16 80,15 90,17 100,16" fill="none" stroke="#4CAF50" strokeWidth="1" />
-              </svg>
-            </CardChart>
-          </SmallHalf>
+          {[1, 2].map((i) => {
+            const sc = smallcapCards[i];
+            const sparkSm = buildSparkline(sc.perfData, 100, 30);
+            return (
+              <SmallHalf key={i}>
+                <CardHeader>
+                  <div>
+                    <h3>{sc.title}</h3>
+                    <span className={`trend-badge ${sc.trendDirection || getTrendClass(sc.trend)}`}>{sc.trend}</span>
+                  </div>
+                </CardHeader>
+                <CardValue>{sc.value}</CardValue>
+                <CardChange className={(sc.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{sc.change}</CardChange>
+                <CardStats>
+                  <span>{sc.percentile} Percentile</span>
+                  <span>|</span>
+                  <span>{sc.pe}</span>
+                </CardStats>
+                <CardChart>
+                  {sparkSm ? (
+                    <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
+                      <polyline points={sparkSm.linePoints} fill="none" stroke={sparkSm.color} strokeWidth="1" />
+                      <polygon points={sparkSm.fillPoints} fill={sparkSm.color} fillOpacity="0.1" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 100 30"><line x1="0" y1="15" x2="100" y2="15" stroke="#ccc" strokeWidth="1" strokeDasharray="4" /></svg>
+                  )}
+                </CardChart>
+              </SmallHalf>
+            );
+          })}
         </SmallCardContainer>
       </CashCardContainer>
 
@@ -315,7 +345,7 @@ function MarketOutlookPage() {
                 <tr key={row.id}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
-                  <td className={row.trend === '↗' ? 'trend-up' : 'trend-down'}>{row.trend}</td>
+                  <td className={row.trendDirection === 'up' ? 'trend-up' : row.trendDirection === 'down' ? 'trend-down' : ''}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
                   <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>
