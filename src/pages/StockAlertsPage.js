@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Box, TextField, Button, CircularProgress, Select, MenuItem, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { fetchAlerts, markAlertRead } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 
@@ -12,6 +13,16 @@ const fmt = (v) => {
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 
+const SORTABLE_COLS = [
+  { key: 'timestamp', label: 'Time' },
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'entry_price', label: 'Entry', numeric: true },
+  { key: 'stop_loss', label: 'SL', numeric: true },
+  { key: 'target_1', label: 'T1', numeric: true },
+  { key: 'target_2', label: 'T2', numeric: true },
+  { key: 'signal_score', label: 'Score', numeric: true },
+];
+
 function StockAlertsPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +30,8 @@ function StockAlertsPage() {
   const [symbolFilter, setSymbolFilter] = useState('');
   const [page, setPage] = useState(1);
   const [added, setAdded] = useState({});
+  const [sortCol, setSortCol] = useState('');
+  const [sortDir, setSortDir] = useState('desc');
   const rowsPerPage = 25;
 
   const load = () => {
@@ -31,8 +44,40 @@ function StockAlertsPage() {
 
   useEffect(load, [sourceFilter, symbolFilter]);
 
-  const totalPages = Math.ceil(data.length / rowsPerPage);
-  const paged = data.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const handleSort = (col) => {
+    if (sortCol === col) {
+      if (sortDir === 'desc') setSortDir('asc');
+      else { setSortCol(''); setSortDir('desc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+    setPage(1);
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortCol) return data;
+    const colDef = SORTABLE_COLS.find(c => c.key === sortCol);
+    const isNum = colDef?.numeric;
+    return [...data].sort((a, b) => {
+      let va = a[sortCol], vb = b[sortCol];
+      if (va == null) va = isNum ? -Infinity : '';
+      if (vb == null) vb = isNum ? -Infinity : '';
+      if (isNum) {
+        va = Number(va) || -Infinity;
+        vb = Number(vb) || -Infinity;
+      } else {
+        va = String(va).toLowerCase();
+        vb = String(vb).toLowerCase();
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [data, sortCol, sortDir]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+  const paged = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   const handleMarkRead = async (id) => {
     await markAlertRead(id);
@@ -54,6 +99,13 @@ function StockAlertsPage() {
       await addToWatchlist(symbol.toUpperCase(), listType, '');
       setAdded(prev => ({ ...prev, [key]: true }));
     } catch (_) { /* ignore */ }
+  };
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <FaSort style={{ opacity: 0.3, marginLeft: 2, fontSize: 10 }} />;
+    return sortDir === 'asc'
+      ? <FaSortUp style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />
+      : <FaSortDown style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />;
   };
 
   return (
@@ -83,13 +135,13 @@ function StockAlertsPage() {
           <Table style={{ fontSize: 12 }}>
             <thead>
               <tr>
-                <th style={compact}>Time</th>
-                <th style={compact}>Symbol</th>
-                <th style={compact}>Entry</th>
-                <th style={compact}>SL</th>
-                <th style={compact}>T1</th>
-                <th style={compact}>T2</th>
-                <th style={compact}>Score</th>
+                {SORTABLE_COLS.map(col => (
+                  <th key={col.key}
+                    style={{ ...compact, cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => handleSort(col.key)}>
+                    {col.label}<SortIcon col={col.key} />
+                  </th>
+                ))}
                 <th style={compact}>+</th>
                 <th style={compact}></th>
               </tr>

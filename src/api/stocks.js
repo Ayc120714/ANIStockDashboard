@@ -58,12 +58,22 @@ export const fetchRelativePerformance = async (period = '1d', limit = 50, dateSt
   return list.map((s, i) => mapStockToTable(s, i, { period }));
 };
 
-export const fetchVolumeShockers = async (limit = 50, dateStr = null) => {
-  let url = `/stocks/volume-shockers?limit=${limit}`;
+export const fetchVolumeShockers = async (limit = 50, period = 'day', dateStr = null) => {
+  let url = `/stocks/volume-shockers?limit=${limit}&period=${period}`;
   if (dateStr) url += `&date=${dateStr}`;
   const data = await apiGet(url);
   const list = data?.data ?? [];
-  return list.map((s, i) => mapStockToTable(s, i, {}));
+  const volChgFieldMap = { day: 'percent_change_volume_1d', week: 'percent_change_volume_1w', month: 'percent_change_volume_1m' };
+  const priceChgFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
+  const volChgField = volChgFieldMap[period] || 'percent_change_volume_1d';
+  const priceChgField = priceChgFieldMap[period] || 'day1d';
+  return list.map((s, i) => ({
+    ...mapStockToTable(s, i, {}),
+    volChgPct: s[volChgField] != null ? `${s[volChgField] >= 0 ? '+' : ''}${Number(s[volChgField]).toFixed(1)}%` : '—',
+    volChgRaw: s[volChgField],
+    chg: formatPercent(s[priceChgField]),
+    chgRaw: s[priceChgField],
+  }));
 };
 
 export const fetchPriceShockers = async (type = 'gainers', limit = 50, period = 'day', dateStr = null) => {
@@ -147,4 +157,8 @@ export const fetchWeeklyPicks = async () => {
 
 export const triggerWeeklyPicks = async () => {
   return apiPost('/stocks/weekly-picks/run');
+};
+
+export const generateWeeklyPicks = async () => {
+  return apiPost('/stocks/weekly-picks/generate');
 };

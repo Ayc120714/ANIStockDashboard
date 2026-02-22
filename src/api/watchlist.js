@@ -12,11 +12,15 @@ export const addToWatchlist = async (symbol, listType = 'long_term', notes = '')
 };
 
 export const removeFromWatchlist = async (symbol, listType = 'long_term') => {
-  return apiRequest(`/watchlist/${encodeURIComponent(symbol)}?list_type=${encodeURIComponent(listType)}`, { method: 'DELETE' });
+  return apiRequest(`/watchlist/symbol/${encodeURIComponent(symbol)}?list_type=${encodeURIComponent(listType)}`, { method: 'DELETE' });
+};
+
+export const bulkDeleteFromWatchlist = async (symbols, listType) => {
+  return apiPost('/watchlist/bulk-delete', { symbols, list_type: listType });
 };
 
 export const updateWatchlistEntry = async (symbol, data) => {
-  return apiRequest(`/watchlist/${encodeURIComponent(symbol)}`, {
+  return apiRequest(`/watchlist/symbol/${encodeURIComponent(symbol)}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });

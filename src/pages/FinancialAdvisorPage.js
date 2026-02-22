@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, IconButton, Tooltip } from '@mui/material';
+import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, IconButton, Tooltip, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
-import { fetchRatings, fetchLatestSignals, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { MdPlaylistAdd, MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
+import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
+import { fetchLatestSignals, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
@@ -69,116 +70,44 @@ function FinancialAdvisorPage() {
       </Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tab label="Ratings" />
         <Tab label="Signals & Alerts" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
       </Tabs>
-      {tab === 0 && <RatingsTab />}
-      {tab === 1 && <SignalsAlertsTab />}
-      {tab === 2 && <AnalysisTab />}
-      {tab === 3 && <PortfolioTab />}
+      {tab === 0 && <SignalsAlertsTab />}
+      {tab === 1 && <AnalysisTab />}
+      {tab === 2 && <PortfolioTab />}
     </TableSection>
   );
 }
 
-function RatingsTab() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('');
-  const [selectedSymbol, setSelectedSymbol] = useState(null);
-  const [page, setPage] = useState(1);
-  const rowsPerPage = 20;
-  const allSymbols = useSymbolList();
+const SIG_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'conviction_score', label: 'Conv', numeric: true },
+  { key: 'buy_sell_tier', label: 'Tier' },
+  { key: 'trend', label: 'Trend' },
+  { key: 'weekly_trend', label: 'Wk Trend' },
+  { key: 'cmp', label: 'CMP', numeric: true },
+  { key: 'entry_price', label: 'Entry', numeric: true },
+  { key: 'stop_loss', label: 'SL', numeric: true },
+  { key: 'sl_pct', label: 'SL%', numeric: true },
+  { key: 'target_1', label: 'T1', numeric: true },
+  { key: 'target_2', label: 'T2', numeric: true },
+  { key: 'sector', label: 'Sector' },
+  { key: '_actions', label: '+' },
+];
 
-  useEffect(() => {
-    setLoading(true);
-    fetchRatings(filter ? { recommendation: filter } : {}).then(setData).finally(() => setLoading(false));
-  }, [filter]);
-
-  const filtered = useMemo(() => {
-    if (!selectedSymbol) return data;
-    const sym = (typeof selectedSymbol === 'string' ? selectedSymbol : selectedSymbol.symbol).toLowerCase();
-    return data.filter(r => r.symbol.toLowerCase().includes(sym));
-  }, [data, selectedSymbol]);
-
-  const totalPages = Math.ceil(filtered.length / rowsPerPage);
-  const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
-
-  return loading ? <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box> : (
-    <>
-      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Select size="small" value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }} displayEmpty sx={{ width: 140 }}>
-          <MenuItem value="">All Ratings</MenuItem>
-          <MenuItem value="strong_buy">Strong Buy</MenuItem>
-          <MenuItem value="buy">Buy</MenuItem>
-          <MenuItem value="hold">Hold</MenuItem>
-          <MenuItem value="sell">Sell</MenuItem>
-          <MenuItem value="strong_sell">Strong Sell</MenuItem>
-        </Select>
-        <Autocomplete
-          size="small"
-          options={allSymbols}
-          getOptionLabel={opt => typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || ''}`}
-          isOptionEqualToValue={(opt, val) => (opt.symbol || opt) === (val.symbol || val)}
-          filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.toLowerCase();
-            return opts.filter(o =>
-              o.symbol.toLowerCase().includes(q) ||
-              (o.sector || '').toLowerCase().includes(q)
-            ).slice(0, 40);
-          }}
-          value={selectedSymbol}
-          onChange={(_, val) => { setSelectedSymbol(val); setPage(1); }}
-          renderInput={(params) => <TextField {...params} placeholder="Filter symbol…" />}
-          sx={{ width: 220 }}
-          autoHighlight
-        />
-      </Box>
-      <TableWrapper>
-        <Table style={{ fontSize: 13 }}>
-          <thead>
-            <tr>
-              <th style={compact}>Symbol</th>
-              <th style={compact}>Score</th>
-              <th style={compact}>Trend</th>
-              <th style={compact}>Entry</th>
-              <th style={compact}>SL</th>
-              <th style={compact}>Target ST</th>
-              <th style={compact}>Target LT</th>
-              <th style={compact}>R:R</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map(r => {
-              const isSell = ['sell', 'strong_sell'].includes(r.recommendation);
-              const tColor = trendColors[r.trend] || '#666';
-              const tgtColor = isSell ? '#c62828' : '#1b5e20';
-              const slColor = isSell ? '#1b5e20' : '#c62828';
-              return (
-              <tr key={r.symbol}>
-                <td style={{ ...compact, fontWeight: 600 }}>{r.symbol}</td>
-                <td style={{ ...compact, fontWeight: 700 }}>{r.composite_score?.toFixed(0)}</td>
-                <td style={{ ...compact, color: tColor, fontWeight: 600 }}>
-                  {trendLabel(r.trend, r.recommendation)}
-                </td>
-                <td style={compact}>{r.entry_price ? fmt(r.entry_price) : '—'}</td>
-                <td style={{ ...compact, color: slColor }}>{r.stop_loss ? fmt(r.stop_loss) : '—'}</td>
-                <td style={{ ...compact, color: tgtColor }}>{r.target_short_term ? fmt(r.target_short_term) : '—'}</td>
-                <td style={{ ...compact, color: tgtColor }}>{r.target_long_term ? fmt(r.target_long_term) : '—'}</td>
-                <td style={compact}>{r.risk_reward_ratio ? `${r.risk_reward_ratio}:1` : '—'}</td>
-              </tr>
-              );
-            })}
-            {paged.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No ratings available. Run advisor refresh first.</td></tr>}
-          </tbody>
-        </Table>
-      </TableWrapper>
-      {totalPages > 1 && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}><Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" /></Box>}
-    </>
-  );
-}
-
+const ALERT_COLS = [
+  { key: 'timestamp', label: 'Time' },
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'entry_price', label: 'Entry', numeric: true },
+  { key: 'stop_loss', label: 'SL', numeric: true },
+  { key: 'target_1', label: 'T1', numeric: true },
+  { key: 'target_2', label: 'T2', numeric: true },
+  { key: 'signal_score', label: 'Score', numeric: true },
+  { key: '_actions', label: '+' },
+  { key: '_read', label: '' },
+];
 
 function SignalsAlertsTab() {
   const [view, setView] = useState('signals');
@@ -189,7 +118,33 @@ function SignalsAlertsTab() {
   const [symbolFilter, setSymbolFilter] = useState('');
   const [page, setPage] = useState(1);
   const [added, setAdded] = useState({});
-  const rowsPerPage = 25;
+  const [sortCol, setSortCol] = useState('conviction_score');
+  const [sortDir, setSortDir] = useState('desc');
+  const [convFilter, setConvFilter] = useState('all');
+  const [copied, setCopied] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const rowsPerPage = showAll ? 9999 : 25;
+
+  const handleSort = (col) => {
+    if (col === '_actions' || col === '_read') return;
+    if (sortCol === col) {
+      if (sortDir === 'desc') setSortDir('asc');
+      else { setSortCol(''); setSortDir('desc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+    setPage(1);
+  };
+
+  const SortIcon = ({ col }) => {
+    if (col === '_actions' || col === '_read') return null;
+    if (sortCol !== col) return <FaSort style={{ opacity: 0.3, marginLeft: 3, fontSize: 10 }} />;
+    return sortDir === 'asc'
+      ? <FaSortUp style={{ color: '#fff', marginLeft: 3, fontSize: 10 }} />
+      : <FaSortDown style={{ color: '#fff', marginLeft: 3, fontSize: 10 }} />;
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -199,21 +154,50 @@ function SignalsAlertsTab() {
   }, [sourceFilter, symbolFilter]);
 
   const filteredSignals = useMemo(() => {
-    let rows = signalData.filter(s => {
-      if (!s.entry_price || !s.ema5) return true;
-      const gap = Math.abs(s.ema5 - s.entry_price) / s.ema5;
-      return gap <= 0.10;
-    });
+    let rows = signalData.filter(s => s.cmp && s.entry_price && !s.hit_target);
     if (symbolFilter) {
       const q = symbolFilter.toUpperCase();
       rows = rows.filter(s => s.symbol?.includes(q));
     }
+    if (convFilter === 'high') {
+      rows = rows.filter(s => s.high_conviction);
+    } else if (convFilter === 'weekly') {
+      rows = rows.filter(s => s.weekly_aligned);
+    } else if (convFilter === 'actionable') {
+      rows = rows.filter(s => s.actionable);
+    }
     return rows;
-  }, [signalData, symbolFilter]);
+  }, [signalData, symbolFilter, convFilter]);
 
-  const activeData = view === 'signals' ? filteredSignals : alertData;
-  const totalPages = Math.ceil(activeData.length / rowsPerPage);
-  const paged = activeData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const highConvCount = signalData.filter(s => s.high_conviction && !s.hit_target).length;
+  const weeklyAlignedCount = signalData.filter(s => s.weekly_aligned && !s.hit_target).length;
+  const actionableCount = signalData.filter(s => s.actionable && !s.hit_target).length;
+
+  const sortedData = useMemo(() => {
+    const src = view === 'signals' ? filteredSignals : alertData;
+    if (!sortCol) return src;
+    const cols = view === 'signals' ? SIG_COLS : ALERT_COLS;
+    const colDef = cols.find(c => c.key === sortCol);
+    const isNum = colDef?.numeric;
+    return [...src].sort((a, b) => {
+      let va = a[sortCol], vb = b[sortCol];
+      if (va == null) va = isNum ? -Infinity : '';
+      if (vb == null) vb = isNum ? -Infinity : '';
+      if (isNum) {
+        va = Number(va) || -Infinity;
+        vb = Number(vb) || -Infinity;
+      } else {
+        va = String(va).toLowerCase();
+        vb = String(vb).toLowerCase();
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [view, filteredSignals, alertData, sortCol, sortDir]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+  const paged = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -245,6 +229,82 @@ function SignalsAlertsTab() {
             </Button>
           ))}
         </Box>
+        {view === 'signals' && (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
+              {[
+                { val: 'all', label: `All` },
+                { val: 'high', label: `High Conv (${highConvCount})`, color: '#1b5e20', bg: '#e8f5e9' },
+                { val: 'weekly', label: `Wk Aligned (${weeklyAlignedCount})` },
+                { val: 'actionable', label: `Actionable (${actionableCount})` },
+              ].map(opt => (
+                <Button key={opt.val} size="small"
+                  onClick={() => { setConvFilter(opt.val); setPage(1); }}
+                  sx={{ textTransform: 'none', px: 1.5, borderRadius: 0, fontSize: 11,
+                    fontWeight: convFilter === opt.val ? 700 : 400,
+                    bgcolor: convFilter === opt.val ? '#1a3c5e' : 'transparent',
+                    color: convFilter === opt.val ? '#fff' : '#333',
+                    '&:hover': { bgcolor: convFilter === opt.val ? '#1a3c5e' : '#f5f5f5' } }}>
+                  {opt.label}
+                </Button>
+              ))}
+            </Box>
+            <Button size="small" variant={showAll ? 'contained' : 'outlined'}
+              onClick={() => { setShowAll(p => !p); setPage(1); }}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                bgcolor: showAll ? '#1a3c5e' : 'transparent',
+                color: showAll ? '#fff' : '#1a3c5e', borderColor: '#1a3c5e',
+                '&:hover': { bgcolor: showAll ? '#0b3d91' : '#e3f2fd' } }}>
+              {showAll ? 'Paged' : `Show All (${filteredSignals.length})`}
+            </Button>
+            <Tooltip title="Select all visible symbols">
+              <Button size="small" variant="outlined" startIcon={<MdSelectAll />}
+                onClick={() => {
+                  const visibleSyms = paged.map(s => s.symbol);
+                  setCheckedSymbols(prev => {
+                    const allChecked = visibleSyms.every(s => prev.has(s));
+                    const next = new Set(prev);
+                    if (allChecked) visibleSyms.forEach(s => next.delete(s));
+                    else visibleSyms.forEach(s => next.add(s));
+                    return next;
+                  });
+                }}
+                sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: '#1a3c5e', color: '#1a3c5e',
+                  '&:hover': { bgcolor: '#e3f2fd' } }}>
+                {checkedSymbols.size > 0 ? `${checkedSymbols.size} selected` : 'Select All'}
+              </Button>
+            </Tooltip>
+            <Tooltip title={copied ? 'Copied!' : `Copy ${checkedSymbols.size > 0 ? 'selected' : 'all filtered'} as TradingView CSV`}>
+              <Button size="small" variant="outlined"
+                startIcon={copied ? <MdCheck /> : <MdContentCopy />}
+                onClick={() => {
+                  const syms = checkedSymbols.size > 0
+                    ? [...checkedSymbols]
+                    : filteredSignals.map(s => s.symbol);
+                  const csv = syms.map(s => `NSE:${s}`).join(',');
+                  navigator.clipboard.writeText(csv).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+                sx={{
+                  textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: copied ? '#2e7d32' : '#1a3c5e',
+                  color: copied ? '#2e7d32' : '#1a3c5e',
+                  '&:hover': { borderColor: '#0b3d91', bgcolor: '#e3f2fd' },
+                }}>
+                {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : filteredSignals.length})`}
+              </Button>
+            </Tooltip>
+            {checkedSymbols.size > 0 && (
+              <Button size="small" onClick={() => setCheckedSymbols(new Set())}
+                sx={{ textTransform: 'none', fontSize: 11, px: 1, color: '#888', minWidth: 0 }}>
+                Clear
+              </Button>
+            )}
+          </Box>
+        )}
         {view === 'alerts' && (
           <Select size="small" value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} displayEmpty sx={{ width: 120 }}>
             <MenuItem value="">All Sources</MenuItem>
@@ -265,37 +325,115 @@ function SignalsAlertsTab() {
           <Table style={{ fontSize: 12 }}>
             <thead>
               <tr>
-                <th style={compact}>Symbol</th><th style={compact}>Score</th><th style={compact}>Trend</th><th style={compact}>RSI</th><th style={compact}>ST</th>
-                <th style={compact}>CMP</th><th style={compact}>Entry</th><th style={compact}>SL</th><th style={compact}>T1</th><th style={compact}>T2</th><th style={compact}>+</th>
+                <th style={{ ...compact, width: 30, padding: '4px' }}>
+                  <Checkbox size="small" sx={{ p: 0, color: '#fff', '&.Mui-checked': { color: '#fff' } }}
+                    checked={paged.length > 0 && paged.every(r => checkedSymbols.has(r.symbol))}
+                    indeterminate={paged.some(r => checkedSymbols.has(r.symbol)) && !paged.every(r => checkedSymbols.has(r.symbol))}
+                    onChange={() => {
+                      const visibleSyms = paged.map(s => s.symbol);
+                      setCheckedSymbols(prev => {
+                        const allChecked = visibleSyms.every(s => prev.has(s));
+                        const next = new Set(prev);
+                        if (allChecked) visibleSyms.forEach(s => next.delete(s));
+                        else visibleSyms.forEach(s => next.add(s));
+                        return next;
+                      });
+                    }} />
+                </th>
+                {SIG_COLS.map(col => (
+                  <th key={col.key} style={{ ...compact, cursor: col.key !== '_actions' ? 'pointer' : 'default', userSelect: 'none' }}
+                    onClick={() => handleSort(col.key)}>
+                    {col.label}<SortIcon col={col.key} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {paged.map((s, i) => {
-                const cmp = s.ema5;
-                const entryGap = cmp && s.entry_price ? ((s.entry_price - cmp) / cmp * 100).toFixed(1) : null;
-                const gapColor = entryGap && Math.abs(entryGap) <= 3 ? '#2e7d32' : entryGap && Math.abs(entryGap) <= 7 ? '#f57f17' : '#888';
+                const cmp = s.cmp;
+                const pctEntry = s.pct_from_entry;
+                const pctColor = pctEntry != null
+                  ? (Math.abs(pctEntry) <= 2 ? '#1b5e20' : Math.abs(pctEntry) <= 5 ? '#f57f17' : '#c62828')
+                  : '#888';
                 const tColor = trendColors[s.trend] || '#666';
+                const isBull = s.trend === 'bullish';
+                const tgtColor = isBull ? '#1b5e20' : '#c62828';
+                const slColor = isBull ? '#c62828' : '#1b5e20';
+                const isChecked = checkedSymbols.has(s.symbol);
+                const rowBg = isChecked ? '#e3f2fd' : s.high_conviction ? '#e8f5e9' : s.weekly_aligned ? '#f0f8ff' : s.actionable ? '#fafffe' : undefined;
+                const tier = s.buy_sell_tier;
+                const tierColor = tier?.startsWith('B') ? '#1b5e20' : tier?.startsWith('S') ? '#c62828' : '#666';
+                const tierBg = tier?.startsWith('B') ? '#e8f5e9' : tier?.startsWith('S') ? '#ffebee' : '#f5f5f5';
+                const wkColor = s.weekly_trend === 'bullish' ? '#1b5e20' : s.weekly_trend === 'bearish' ? '#c62828' : '#888';
                 return (
-                <tr key={`sig-${s.symbol}-${i}`}>
-                  <td style={{ ...compact, fontWeight: 600 }}>{s.symbol}</td>
-                  <td style={{ ...compact, fontWeight: 700 }}>{s.signal_score?.toFixed(0)}</td>
-                  <td style={{ ...compact, color: tColor, fontWeight: 600 }}>{trendLabel(s.trend, s.signal_type)}</td>
-                  <td style={compact}>{s.rsi?.toFixed(1)}</td>
-                  <td style={{ ...compact, color: s.supertrend_direction === 'up' ? '#2e7d32' : s.supertrend_direction === 'down' ? '#c62828' : undefined, fontWeight: 600 }}>
-                    {s.supertrend_direction?.toUpperCase() || '—'}</td>
+                <tr key={`sig-${s.symbol}-${i}`} style={{ background: rowBg }}>
+                  <td style={{ padding: '4px', textAlign: 'center' }}>
+                    <Checkbox size="small" sx={{ p: 0 }}
+                      checked={isChecked}
+                      onChange={() => setCheckedSymbols(prev => {
+                        const next = new Set(prev);
+                        if (next.has(s.symbol)) next.delete(s.symbol); else next.add(s.symbol);
+                        return next;
+                      })} />
+                  </td>
+                  <td style={{ ...compact, fontWeight: 700 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {s.symbol}
+                      <a
+                        href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s.symbol)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`View ${s.symbol} on TradingView`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 18, height: 18, borderRadius: '50%', background: '#131722',
+                          textDecoration: 'none', flexShrink: 0,
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 36 28" fill="none">
+                          <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF"/>
+                          <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF"/>
+                        </svg>
+                      </a>
+                      {s.high_conviction && (
+                        <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2,
+                          background: '#1b5e20', color: '#fff', fontWeight: 700, verticalAlign: 'super' }}>HC</span>
+                      )}
+                    </span>
+                  </td>
+                  <td style={{ ...compact, fontWeight: 700, color: s.conviction_score >= 100 ? '#1b5e20' : s.conviction_score >= 80 ? '#2e7d32' : '#333' }}>
+                    {s.conviction_score?.toFixed(0)}
+                  </td>
                   <td style={compact}>
-                    {cmp ? `₹${cmp.toFixed(0)}` : '—'}
-                    {entryGap && <span style={{ fontSize: 10, color: gapColor, marginLeft: 2 }}>({entryGap > 0 ? '+' : ''}{entryGap}%)</span>}
+                    {tier ? (
+                      <Chip label={tier} size="small" sx={{ fontSize: 10, height: 18, fontWeight: 700,
+                        bgcolor: tierBg, color: tierColor, minWidth: 28 }} />
+                    ) : <span style={{ color: '#ccc', fontSize: 10 }}>—</span>}
+                  </td>
+                  <td style={{ ...compact, color: tColor, fontWeight: 600 }}>{trendLabel(s.trend, s.signal_type)}</td>
+                  <td style={{ ...compact, color: wkColor, fontWeight: 600 }}>
+                    {s.weekly_trend ? (s.weekly_trend.charAt(0).toUpperCase() + s.weekly_trend.slice(1)) : '—'}
+                    {s.weekly_aligned && <span style={{ fontSize: 8, marginLeft: 2, color: '#1b5e20' }}>✓</span>}
+                  </td>
+                  <td style={{ ...compact, fontWeight: 600 }}>
+                    {cmp ? fmt(cmp) : '—'}
+                    {pctEntry != null && (
+                      <span style={{ fontSize: 9, color: pctColor, marginLeft: 2 }}>
+                        ({pctEntry > 0 ? '+' : ''}{pctEntry}%)
+                      </span>
+                    )}
                   </td>
                   <td style={{ ...compact, fontWeight: 600, color: '#1565c0' }}>{fmt(s.entry_price)}</td>
-                  <td style={{ ...compact, fontWeight: 600, color: '#c62828' }}>{fmt(s.stop_loss)}</td>
-                  <td style={{ ...compact, fontWeight: 600, color: '#2e7d32' }}>{fmt(s.target_1)}</td>
+                  <td style={{ ...compact, color: slColor }}>{fmt(s.stop_loss)}</td>
+                  <td style={{ ...compact, color: slColor, fontSize: 10 }}>{s.sl_pct != null ? `${s.sl_pct}%` : '—'}</td>
+                  <td style={{ ...compact, fontWeight: 600, color: tgtColor }}>{fmt(s.target_1)}</td>
                   <td style={compact}>{fmt(s.target_2)}</td>
+                  <td style={{ ...compact, fontSize: 10, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sector || '—'}</td>
                   <td style={compact}><WatchlistButtons symbol={s.symbol} added={added} onAdd={handleAdd} /></td>
                 </tr>
                 );
               })}
-              {paged.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No actionable signals for today.</td></tr>}
+              {paged.length === 0 && <tr><td colSpan={SIG_COLS.length + 1} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No signals matching filters.</td></tr>}
             </tbody>
           </Table>
         </TableWrapper>
@@ -304,8 +442,12 @@ function SignalsAlertsTab() {
           <Table style={{ fontSize: 12 }}>
             <thead>
               <tr>
-                <th style={compact}>Time</th><th style={compact}>Symbol</th><th style={compact}>Entry</th><th style={compact}>SL</th>
-                <th style={compact}>T1</th><th style={compact}>T2</th><th style={compact}>Score</th><th style={compact}>+</th><th style={compact}></th>
+                {ALERT_COLS.map(col => (
+                  <th key={col.key} style={{ ...compact, cursor: col.key !== '_actions' && col.key !== '_read' ? 'pointer' : 'default', userSelect: 'none' }}
+                    onClick={() => handleSort(col.key)}>
+                    {col.label}<SortIcon col={col.key} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Typography, IconButton, Tooltip } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
@@ -19,6 +19,7 @@ function VolumeShockersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [timeFrame, setTimeFrame] = useState('Day');
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
 
@@ -48,8 +49,9 @@ function VolumeShockersPage() {
     setIsLoading(true);
     setLoadError(null);
     setPage(1);
+    const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const cacheKey = `volumeShockersData${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `volumeShockersData_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -58,7 +60,7 @@ function VolumeShockersPage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchVolumeShockers(50, dateStr).then((fresh) => {
+    fetchVolumeShockers(50, period, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
@@ -71,7 +73,7 @@ function VolumeShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [selectedDate]);
+  }, [timeFrame, selectedDate]);
 
   const defaultTableData = [
     { id: '01', symbol: 'TATACHEM', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Mid Cap', volume: '2,100,000', avgVolume: '1,200,000', cmp: '₹1,050.00', chg: '8.50%', date: '2026-01-24' },
@@ -107,7 +109,10 @@ function VolumeShockersPage() {
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-      if (['volume', 'avgVolume', 'volJump', 'cmp', 'chg'].includes(sortConfig.key)) {
+      if (sortConfig.key === 'volChgPct') {
+        aValue = a.volChgRaw ?? 0;
+        bValue = b.volChgRaw ?? 0;
+      } else if (['volume', 'avgVolume', 'volJump', 'cmp', 'chg'].includes(sortConfig.key)) {
         aValue = extractNumeric(aValue, sortConfig.key);
         bValue = extractNumeric(bValue, sortConfig.key);
       }
@@ -135,6 +140,7 @@ function VolumeShockersPage() {
     return sortConfig.ascending ? ' ↑' : ' ↓';
   };
 
+  const periodLabel = timeFrame === 'Week' ? 'Weekly' : timeFrame === 'Month' ? 'Monthly' : 'Daily';
   const columnConfig = [
     { key: 'id', label: '#' },
     { key: 'symbol', label: 'Symbol' },
@@ -144,8 +150,9 @@ function VolumeShockersPage() {
     { key: 'volume', label: "Today's Vol" },
     { key: 'avgVolume', label: 'Avg Vol' },
     { key: 'volJump', label: 'Vol Jump' },
+    { key: 'volChgPct', label: `Vol ${periodLabel} %` },
     { key: 'cmp', label: 'CMP' },
-    { key: 'chg', label: 'CHG%' },
+    { key: 'chg', label: `${periodLabel} CHG%` },
     { key: 'actions', label: '+' },
   ];
 
@@ -159,16 +166,29 @@ function VolumeShockersPage() {
           <CircularProgress />
         </Box>
       )}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={2}>
         <Box display="flex" alignItems="center" gap={2}>
-          <Typography variant="h6">Select Date:</Typography>
           <DatePicker
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
             minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
             maxDate={new Date()}
-            renderInput={(params) => <TextField {...params} size="small" />}
+            slotProps={{ textField: { size: 'small', placeholder: 'Select Date' } }}
           />
+          <ButtonGroup variant="contained" size="small">
+            {['Day', 'Week', 'Month'].map(tf => (
+              <Button key={tf} onClick={() => { setTimeFrame(tf); setPage(1); }}
+                sx={{
+                  bgcolor: timeFrame === tf ? '#1565c0' : '#e0e0e0',
+                  color: timeFrame === tf ? '#fff' : '#333',
+                  fontWeight: timeFrame === tf ? 700 : 500,
+                  textTransform: 'uppercase', fontSize: 12, px: 2,
+                  '&:hover': { bgcolor: timeFrame === tf ? '#0d47a1' : '#bdbdbd' },
+                }}>
+                {tf}
+              </Button>
+            ))}
+          </ButtonGroup>
         </Box>
         <TextField
           size="small"
@@ -203,6 +223,7 @@ function VolumeShockersPage() {
                   <td>{row.volume}</td>
                   <td>{row.avgVolume}</td>
                   <td style={{ fontWeight: 600, color: row.volJump && parseFloat(row.volJump) >= 2 ? '#d32f2f' : undefined }}>{row.volJump}</td>
+                  <td style={{ fontWeight: 600, color: row.volChgRaw > 0 ? '#1b5e20' : row.volChgRaw < 0 ? '#c62828' : undefined }}>{row.volChgPct || '—'}</td>
                   <td>{row.cmp}</td>
                   <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
                   <td>

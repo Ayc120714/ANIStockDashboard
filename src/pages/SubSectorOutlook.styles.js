@@ -35,9 +35,9 @@ export const Chips = styled.div`
 `; 
 
 export const Chip = styled.div`
-  background: ${({ active }) => (active ? '#f48a1d' : '#ffffff')};
+  background: ${({ active }) => (active ? '#1a3c5e' : '#ffffff')};
   color: ${({ active }) => (active ? '#ffffff' : '#555555')};
-  border: 1px solid #f48a1d;
+  border: 1px solid #1a3c5e;
   border-radius: 18px;
   padding: 6px 18px;
   font-weight: 600;
@@ -120,7 +120,7 @@ export const LegendTextStrong = styled.span`
 
 export const UpdatedOn = styled.div`
   font-size: 13px;
-  color: #835024;
+  color: #1a3c5e;
   white-space: nowrap;
 `;
 
@@ -134,66 +134,64 @@ export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   overflow: hidden;
+  font-size: 12px;
   caret-color: transparent;
   thead {
-    background-color: #8b6f47;
+    background-color: #1a3c5e;
     color: white;
     th {
-      padding: 14px 16px;
+      padding: 8px 10px;
       text-align: center;
-      font-size: 17px;
-      font-weight: 700;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
       border: none;
+      letter-spacing: 0.2px;
       caret-color: transparent;
+      cursor: pointer;
+      user-select: none;
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
     }
   }
   tbody tr {
     border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.15s;
     &:hover {
-      background-color: #f9f9f9;
+      background-color: #f5f8fc;
     }
   }
   @media (max-width: 900px) {
-    font-size: 12px;
+    font-size: 11px;
     thead th, tbody td {
-      padding: 8px 4px;
-      font-size: 12px;
-    }
-  }
-  @media (max-width: 600px) {
-    display: block;
-    overflow-x: auto;
-    width: 100%;
-    thead, tbody, tr, th, td {
-      display: block;
-    }
-    thead {
-      display: none;
-    }
-    tbody td {
-      border: none;
-      padding: 8px 2px;
+      padding: 5px 6px;
+      font-size: 11px;
     }
   }
 `;
 
 export const TableRow = styled.tr`
-  border-bottom: 1px solid #eaeaea;
-  background: ${({ sector }) => (sector ? '#f5e1c2' : '#ffffff')};
+  border-bottom: 1px solid #f0f0f0;
+  background: ${({ sector }) => (sector ? '#e8edf2' : '#ffffff')};
+  &:hover {
+    background-color: ${({ sector }) => (sector ? '#dce3eb' : '#f5f8fc')};
+  }
 `; 
 
 export const TableCell = styled.td`
   text-align: center;
-  font-size: 15px;
-  padding: 10px 6px;
+  font-size: 12px;
+  padding: 6px 8px;
   background: ${({ highlight }) => highlight || 'inherit'};
-  color: #222222;
-  border-radius: ${({ highlight }) => (highlight ? '6px' : '0')};
+  color: #333;
+  border-radius: ${({ highlight }) => (highlight ? '4px' : '0')};
+  white-space: nowrap;
   caret-color: transparent;
 `; 
 
 export const HeaderRow = styled.tr`
-  background: #8b6f47;    /* header color */
+  background: #1a3c5e;
   color: white;
   border-bottom: none;
   caret-color: transparent;
@@ -201,33 +199,35 @@ export const HeaderRow = styled.tr`
 
 export const HeaderCell = styled.th`
   text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 10px 6px;
-  background: #8b6f47;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 10px;
+  background: #1a3c5e;
   color: #ffffff;
   border: none;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
   caret-color: transparent;
 `;
 export const SectorHeader = styled.tr`
-  background: #ffefd6;
+  background: #e3eaf2;
 
   td {
-    font-size: 14px;
-    color: #a25d16;
-    padding: 11px 16px;
+    font-size: 12px;
+    color: #1a3c5e;
+    padding: 8px 12px;
     text-align: left;
     font-weight: 700;
   }
 `; 
 
 export const RightSidebar = styled.div`
-  width: 340px;
-  min-width: 285px;
+  width: 320px;
+  min-width: 280px;
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
-  padding: 18px 20px 24px 18px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+  padding: 16px 18px 20px 16px;
   margin-top: 6px;
   display: flex;
   flex-direction: column;
@@ -248,7 +248,7 @@ export const TopPerformerTabs = styled.div`
 
 export const TopPerformerHeader = styled.div`
   font-weight: 600;
-  font-size: 17px;
+  font-size: 15px;
   margin: 6px 0 4px;
   border-radius: 18px;
   padding: 8px 22px;
@@ -257,8 +257,8 @@ export const TopPerformerHeader = styled.div`
   cursor: pointer;
   user-select: none;
 
-  background: ${({ active }) => (active ? '#835024' : '#f4ede1')};
-  color: ${({ active }) => (active ? '#ffffff' : '#835024')};
+  background: ${({ active }) => (active ? '#1a3c5e' : '#e8edf2')};
+  color: ${({ active }) => (active ? '#ffffff' : '#1a3c5e')};
 `;
 
 export const BestLabelRow = styled.div`
@@ -273,26 +273,26 @@ export const BestLabelRow = styled.div`
 
 export const BestLabel = styled.span`
   font-weight: 600;
-  color: ${({ under }) => (under ? '#f00' : '#4b8a4b')};
+  color: ${({ under }) => (under ? '#c62828' : '#2e7d32')};
 `;
 
 export const BestChip = styled.span`
   padding: 2px 10px;
   border-radius: 14px;
   font-weight: 600;
-  background: #e8f4e8;
-  color: ${({ under }) => (under ? '#f00' : '#4b8a4b')};
+  background: ${({ under }) => (under ? '#fce4ec' : '#e8f5e9')};
+  color: ${({ under }) => (under ? '#c62828' : '#2e7d32')};
 `;
 
 
 export const TopPerformerCard = styled.div`
   font-weight: 500;
-  color: #835024;
-  background: #f4ede1;
-  border-radius: 10px;
-  margin: 18px 0;
-  padding: 14px 22px;
-  font-size: 15px;
+  color: #1a3c5e;
+  background: #e8edf2;
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 12px 18px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   user-select: none;
@@ -300,6 +300,6 @@ export const TopPerformerCard = styled.div`
 `; 
 
 export const TopPerformerValue = styled.span`
-  color: #ec8200;
+  color: #0b3d91;
   font-weight: 700;
 `; 

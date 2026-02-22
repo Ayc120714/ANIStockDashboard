@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete } from '@mui/material';
+import { Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdDelete, MdSwapHoriz, MdClose } from 'react-icons/md';
-import { fetchWatchlist, addToWatchlist, removeFromWatchlist, updateWatchlistEntry } from '../api/watchlist';
+import { MdClose, MdDeleteSweep, MdSelectAll, MdRefresh } from 'react-icons/md';
+import { fetchWatchlist, addToWatchlist, bulkDeleteFromWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
 const recColors = {
@@ -16,11 +16,12 @@ function LongTermPage() {
   const [loading, setLoading] = useState(true);
   const [allSymbols, setAllSymbols] = useState([]);
   const [selectedStocks, setSelectedStocks] = useState([]);
-  const [addNotes, setAddNotes] = useState('');
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
+  const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
   const rowsPerPage = 15;
 
   const loadSymbols = useCallback(() => {
@@ -37,7 +38,11 @@ function LongTermPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); loadSymbols(); }, [load, loadSymbols]);
+  useEffect(() => {
+    load(); loadSymbols();
+    const iv = setInterval(load, 60000);
+    return () => clearInterval(iv);
+  }, [load, loadSymbols]);
 
   const existingSymbols = useMemo(() => new Set(data.map(d => d.symbol)), [data]);
 
@@ -52,10 +57,9 @@ function LongTermPage() {
     try {
       for (const sym of selectedStocks) {
         const symbol = typeof sym === 'string' ? sym : sym.symbol;
-        await addToWatchlist(symbol.toUpperCase(), 'long_term', addNotes);
+        await addToWatchlist(symbol.toUpperCase(), 'long_term', '');
       }
       setSelectedStocks([]);
-      setAddNotes('');
       load();
     } catch (e) { alert(e?.message || 'Failed to add'); }
     setAdding(false);
@@ -65,19 +69,42 @@ function LongTermPage() {
     setSelectedStocks(prev => prev.filter(s => (typeof s === 'string' ? s : s.symbol) !== (typeof sym === 'string' ? sym : sym.symbol)));
   };
 
-  const handleRemove = async (sym) => {
-    if (!window.confirm(`Remove ${sym} from Long Term?`)) return;
-    try {
-      await removeFromWatchlist(sym, 'long_term');
-    } catch (e) { console.warn('Remove failed:', e); }
-    load();
+  const toggleCheck = (sym) => {
+    setCheckedSymbols(prev => {
+      const next = new Set(prev);
+      if (next.has(sym)) next.delete(sym); else next.add(sym);
+      return next;
+    });
   };
 
-  const handleMoveToShort = async (sym) => {
+  const toggleSelectAllPage = () => {
+    const pageSyms = paged.map(r => r.symbol);
+    const allSelected = pageSyms.every(s => checkedSymbols.has(s));
+    setCheckedSymbols(prev => {
+      const next = new Set(prev);
+      if (allSelected) pageSyms.forEach(s => next.delete(s));
+      else pageSyms.forEach(s => next.add(s));
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setCheckedSymbols(new Set(sorted.map(r => r.symbol)));
+  };
+
+  const clearSelection = () => setCheckedSymbols(new Set());
+
+  const handleBulkDelete = async () => {
+    const syms = [...checkedSymbols];
+    if (!syms.length) return;
+    if (!window.confirm(`Delete ${syms.length} stock(s) from Long Term?\n\n${syms.join(', ')}`)) return;
+    setDeleting(true);
     try {
-      await updateWatchlistEntry(sym, { list_type: 'short_term' });
-    } catch (e) { console.warn('Move failed:', e); }
-    load();
+      await bulkDeleteFromWatchlist(syms, 'long_term');
+      setCheckedSymbols(new Set());
+      load();
+    } catch (e) { alert(e?.message || 'Bulk delete failed'); }
+    setDeleting(false);
   };
 
   const filtered = useMemo(() => {
@@ -111,7 +138,6 @@ function LongTermPage() {
 
   const columns = [
     { key: 'symbol', label: 'Symbol' },
-    { key: 'sector', label: 'Sector' },
     { key: 'price', label: 'CMP' },
     { key: 'day1d', label: '1D %' },
     { key: 'composite_score', label: 'Score' },
@@ -121,12 +147,15 @@ function LongTermPage() {
     { key: 'stop_loss', label: 'SL' },
     { key: 'target_long_term', label: 'Target' },
     { key: 'risk_reward_ratio', label: 'R:R' },
-    { key: 'notes', label: 'Notes' },
   ];
 
   return (
     <TableSection>
-      <TableTitle>Long Term Watchlist</TableTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+        <TableTitle style={{ margin: 0 }}>Long Term Watchlist</TableTitle>
+        <Chip label="Auto-refresh 60s" size="small" variant="outlined" sx={{ fontSize: 11 }} />
+        <IconButton size="small" onClick={load} title="Refresh now"><MdRefresh /></IconButton>
+      </Box>
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <Autocomplete
@@ -153,8 +182,6 @@ function LongTermPage() {
           autoHighlight
           disableCloseOnSelect
         />
-        <TextField size="small" placeholder="Notes" value={addNotes}
-          onChange={e => setAddNotes(e.target.value)} sx={{ width: 150 }} />
         <Button variant="contained" size="small" onClick={handleAddSelected}
           disabled={selectedStocks.length === 0 || adding}
           sx={{ bgcolor: '#1a3c5e', textTransform: 'none', height: 40, minWidth: 100 }}>
@@ -179,6 +206,28 @@ function LongTermPage() {
         </Box>
       )}
 
+      {checkedSymbols.size > 0 && (
+        <Box sx={{ display: 'flex', gap: 1, mb: 1.5, alignItems: 'center', p: '6px 12px',
+          bgcolor: '#e3f2fd', borderRadius: 1, border: '1px solid #90caf9' }}>
+          <Chip label={`${checkedSymbols.size} selected`} size="small"
+            sx={{ fontWeight: 700, fontSize: 12, bgcolor: '#1a3c5e', color: '#fff' }} />
+          <Button size="small" startIcon={<MdSelectAll />} onClick={selectAll}
+            sx={{ textTransform: 'none', fontSize: 11, color: '#1a3c5e' }}>
+            Select All ({sorted.length})
+          </Button>
+          <Button size="small" onClick={clearSelection}
+            sx={{ textTransform: 'none', fontSize: 11, color: '#666' }}>
+            Clear
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Button size="small" variant="contained" color="error" startIcon={<MdDeleteSweep />}
+            onClick={handleBulkDelete} disabled={deleting}
+            sx={{ textTransform: 'none', fontSize: 11 }}>
+            {deleting ? 'Deleting…' : `Delete (${checkedSymbols.size})`}
+          </Button>
+        </Box>
+      )}
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
       ) : (
@@ -186,19 +235,28 @@ function LongTermPage() {
           <Table>
             <thead>
               <tr>
+                <th style={{ width: 36, padding: '4px' }}>
+                  <Checkbox size="small" sx={{ p: 0, color: '#fff', '&.Mui-checked': { color: '#fff' } }}
+                    checked={paged.length > 0 && paged.every(r => checkedSymbols.has(r.symbol))}
+                    indeterminate={paged.some(r => checkedSymbols.has(r.symbol)) && !paged.every(r => checkedSymbols.has(r.symbol))}
+                    onChange={toggleSelectAllPage} />
+                </th>
                 {columns.map(c => (
                   <th key={c.key} onClick={() => handleSort(c.key)} style={{ cursor: 'pointer' }}>
                     {c.label} {sortConfig.key === c.key ? (sortConfig.ascending ? '▲' : '▼') : ''}
                   </th>
                 ))}
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paged.map(row => (
-                <tr key={row.symbol}>
+                <tr key={row.symbol} style={{ background: checkedSymbols.has(row.symbol) ? '#e3f2fd' : undefined }}>
+                  <td style={{ padding: '4px', textAlign: 'center' }}>
+                    <Checkbox size="small" sx={{ p: 0 }}
+                      checked={checkedSymbols.has(row.symbol)}
+                      onChange={() => toggleCheck(row.symbol)} />
+                  </td>
                   <td style={{ fontWeight: 600 }}>{row.symbol}</td>
-                  <td>{row.sector || '—'}</td>
                   <td>{row.price ? `₹${Number(row.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
                   <td style={{ fontWeight: 600, color: (row.day1d || 0) > 0 ? '#2e7d32' : (row.day1d || 0) < 0 ? '#c62828' : undefined }}>
                     {row.day1d != null ? `${row.day1d > 0 ? '+' : ''}${row.day1d.toFixed(2)}%` : '—'}
@@ -215,15 +273,6 @@ function LongTermPage() {
                   <td>{row.stop_loss ? `₹${row.stop_loss.toFixed(2)}` : '—'}</td>
                   <td>{row.target_long_term ? `₹${row.target_long_term.toFixed(2)}` : '—'}</td>
                   <td>{row.risk_reward_ratio ? `${row.risk_reward_ratio}:1` : '—'}</td>
-                  <td style={{ fontSize: 12, color: '#999', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.notes || ''}</td>
-                  <td>
-                    <IconButton size="small" title="Move to Short Term" onClick={() => handleMoveToShort(row.symbol)}>
-                      <MdSwapHoriz />
-                    </IconButton>
-                    <IconButton size="small" title="Remove" color="error" onClick={() => handleRemove(row.symbol)}>
-                      <MdDelete />
-                    </IconButton>
-                  </td>
                 </tr>
               ))}
               {paged.length === 0 && (
