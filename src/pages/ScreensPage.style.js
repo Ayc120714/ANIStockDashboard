@@ -15,7 +15,7 @@ export const PageTitle = styled.h1`
 
 export const TabContainer = styled.div`
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 0;
   margin-bottom: 30px;
   background-color: white;

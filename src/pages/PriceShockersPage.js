@@ -1,12 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchPriceShockers } from '../api/stocks';
+import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { fetchPriceShockers, fetchScreenDates } from '../api/stocks';
+import { addToWatchlist } from '../api/watchlist';
 
 function PriceShockersPage() {
   const [page, setPage] = useState(1);
@@ -19,13 +21,39 @@ function PriceShockersPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [timeFrame, setTimeFrame] = useState('Day');
   const [priceType, setPriceType] = useState('gainers');
+  const [added, setAdded] = useState({});
+  const [availableDates, setAvailableDates] = useState([]);
+
+  useEffect(() => {
+    fetchScreenDates().then(setAvailableDates).catch(() => {});
+  }, []);
+
+  const handleAdd = async (symbol, listType) => {
+    const key = `${symbol}_${listType}`;
+    if (added[key]) return;
+    try {
+      await addToWatchlist(symbol.toUpperCase(), listType, '');
+      setAdded(prev => ({ ...prev, [key]: true }));
+    } catch (_) { /* ignore */ }
+  };
+
+  const formatDateParam = (d) => {
+    if (!d) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
+    setPage(1);
+    const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
+    const dateStr = formatDateParam(selectedDate);
+    const cacheKey = `priceShockersData_${priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cacheKey = `priceShockersData_${priceType}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -33,7 +61,7 @@ function PriceShockersPage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchPriceShockers(priceType).then((fresh) => {
+    fetchPriceShockers(priceType, 50, period, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
@@ -46,7 +74,7 @@ function PriceShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [priceType]);
+  }, [priceType, timeFrame, selectedDate]);
 
   const defaultTableData = [
     { id: '01', symbol: 'MUFIN', sector: 'Financial Services', subSector: 'Finance - Investment', mc: 'Small Cap', cmp: '₹117.73', chg: '19.43%', date: new Date('2026-01-24') },
@@ -62,47 +90,17 @@ function PriceShockersPage() {
 
   const dataToFilter = tableData.length ? tableData : defaultTableData;
 
-  const normalizeDate = (value) => {
-    if (!value) return null;
-    if (value instanceof Date) return value;
-    const parsed = new Date(value);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  };
-
-  const isSameDay = (d1, d2) => d1 && d2 && d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
-  const isSameWeek = (d1, d2) => {
-    if (!d1 || !d2) return false;
-    const startOfWeek = (date) => {
-      const d = new Date(date);
-      d.setDate(d.getDate() - d.getDay());
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
-    return startOfWeek(d1).getTime() === startOfWeek(d2).getTime();
-  };
-  const isSameMonth = (d1, d2) => d1 && d2 && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
-
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
-      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchesSearch) return false;
-      if (!selectedDate) return true;
-      const rowDate = normalizeDate(row.date);
-      if (!rowDate) return false;
-      if (timeFrame === 'Day') return isSameDay(rowDate, selectedDate);
-      if (timeFrame === 'Week') return isSameWeek(rowDate, selectedDate);
-      if (timeFrame === 'Month') return isSameMonth(rowDate, selectedDate);
-      return true;
+      return (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
     });
-    
-    // Remove duplicates - keep only first occurrence of each symbol
     const seen = new Set();
     return filtered.filter((row) => {
       if (seen.has(row.symbol)) return false;
       seen.add(row.symbol);
       return true;
     });
-  }, [dataToFilter, searchTerm, selectedDate, timeFrame]);
+  }, [dataToFilter, searchTerm]);
 
   const extractNumeric = (value) => {
     if (typeof value === 'number') return value;
@@ -142,6 +140,8 @@ function PriceShockersPage() {
     return sortConfig.ascending ? ' ↑' : ' ↓';
   };
 
+  const chgLabel = timeFrame === 'Week' ? '1W CHG%' : timeFrame === 'Month' ? '1M CHG%' : '1D CHG%';
+
   const columnConfig = [
     { key: 'id', label: '#' },
     { key: 'symbol', label: 'Symbol' },
@@ -149,7 +149,8 @@ function PriceShockersPage() {
     { key: 'subSector', label: 'Sub Sector' },
     { key: 'mc', label: 'MC' },
     { key: 'cmp', label: 'CMP' },
-    { key: 'chg', label: 'CHG%' },
+    { key: 'chg', label: chgLabel },
+    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -168,6 +169,8 @@ function PriceShockersPage() {
             label="Select Date"
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
+            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
+            maxDate={new Date()}
             inputFormat="dd/MM/yyyy"
             renderInput={(params) => (
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
@@ -238,6 +241,26 @@ function PriceShockersPage() {
                   <td>{row.mc}</td>
                   <td>{row.cmp}</td>
                   <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <Box sx={{ display: 'flex', gap: 0.3 }}>
+                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
+                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
+                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </td>
                 </tr>
               ))}
             </tbody>

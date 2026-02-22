@@ -1,12 +1,14 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchRelativePerformance } from '../api/stocks';
+import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { fetchRelativePerformance, fetchScreenDates } from '../api/stocks';
+import { addToWatchlist } from '../api/watchlist';
 
 function RelativePerformancePage() {
   const [page, setPage] = useState(1);
@@ -18,14 +20,65 @@ function RelativePerformancePage() {
   const [loadError, setLoadError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [timeFrame, setTimeFrame] = useState('Short Term');
+  const [added, setAdded] = useState({});
+  const [availableDates, setAvailableDates] = useState([]);
+  const autoAddedRef = useRef(false);
+
+  useEffect(() => {
+    fetchScreenDates().then(setAvailableDates).catch(() => {});
+  }, []);
+
+  const handleAdd = async (symbol, listType) => {
+    const key = `${symbol}_${listType}`;
+    if (added[key]) return;
+    try {
+      await addToWatchlist(symbol.toUpperCase(), listType, '');
+      setAdded(prev => ({ ...prev, [key]: true }));
+    } catch (_) { /* ignore */ }
+  };
+
+  const autoAddHighRS = useCallback(async (data) => {
+    if (autoAddedRef.current) return;
+    autoAddedRef.current = true;
+    const extractRs = (val) => {
+      if (typeof val === 'number') return val;
+      if (!val) return 0;
+      const m = val.toString().match(/-?[\d.]+/);
+      return m ? parseFloat(m[0]) : 0;
+    };
+    const highRS = data.filter(r => extractRs(r.rs) > 30);
+    const updates = {};
+    for (const row of highRS) {
+      const key = `${row.symbol}_long_term`;
+      if (!added[key]) {
+        try {
+          await addToWatchlist(row.symbol.toUpperCase(), 'long_term', 'Auto-added: RS > 30%');
+          updates[key] = true;
+        } catch (_) { /* ignore duplicates */ }
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      setAdded(prev => ({ ...prev, ...updates }));
+    }
+  }, [added]);
+
+  const formatDateParam = (d) => {
+    if (!d) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
+    setPage(1);
     let cacheSet = false;
     const period = timeFrame === 'Short Term' ? '1w' : '6m';
-    const cacheKey = `relativePerformanceData_${period}`;
+    const dateStr = formatDateParam(selectedDate);
+    const cacheKey = `relativePerformanceData_${period}${dateStr ? '_' + dateStr : ''}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -33,11 +86,13 @@ function RelativePerformancePage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchRelativePerformance(period).then((fresh) => {
+    fetchRelativePerformance(period, 50, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
-        setTableData(Array.isArray(fresh) ? fresh : []);
+        const arr = Array.isArray(fresh) ? fresh : [];
+        setTableData(arr);
         setIsLoading(false);
+        autoAddHighRS(arr);
       }
     }).catch((err) => {
       if (isMounted && !cacheSet) {
@@ -46,7 +101,8 @@ function RelativePerformancePage() {
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeFrame, selectedDate]);
 
   const defaultTableData = [
     { id: '01', symbol: 'NACLIND', sector: 'Chemicals', subSector: 'Agri Inputs', mc: 'Small Cap', cmp: '₹269.60', chg: '-2.97%', rs: '327.58%', date: new Date('2026-01-24') },
@@ -64,35 +120,15 @@ function RelativePerformancePage() {
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
-      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchesSearch) return false;
-      const now = new Date();
-      const rowDate = row.date ? new Date(row.date) : null;
-      if (!rowDate || isNaN(rowDate.getTime())) return true;
-      const monthsDiff = (now.getFullYear() - rowDate.getFullYear()) * 12 + (now.getMonth() - rowDate.getMonth());
-      let termMatch = true;
-      if (timeFrame === 'Short Term') {
-        termMatch = monthsDiff < 6;
-      } else if (timeFrame === 'Long Term') {
-        termMatch = monthsDiff >= 6;
-      }
-      let dateMatch = true;
-      if (selectedDate) {
-        const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        dateMatch = rowDate >= startDate && rowDate <= endDate;
-      }
-      return termMatch && dateMatch;
+      return (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
     });
-    
-    // Remove duplicates - keep only first occurrence of each symbol
     const seen = new Set();
     return filtered.filter((row) => {
       if (seen.has(row.symbol)) return false;
       seen.add(row.symbol);
       return true;
     });
-  }, [dataToFilter, searchTerm, selectedDate, timeFrame]);
+  }, [dataToFilter, searchTerm]);
 
   const extractNumeric = (value, key) => {
     if (typeof value === 'number') return value;
@@ -144,6 +180,7 @@ function RelativePerformancePage() {
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: 'CHG%' },
     { key: 'rs', label: 'RS%' },
+    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -162,6 +199,8 @@ function RelativePerformancePage() {
             label="Select Date"
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
+            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
+            maxDate={new Date()}
             inputFormat="dd/MM/yyyy"
             renderInput={(params) => (
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
@@ -215,6 +254,26 @@ function RelativePerformancePage() {
                   <td>{row.cmp}</td>
                   <td className={(row.chg || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
                   <td className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.rs}</td>
+                  <td>
+                    <Box sx={{ display: 'flex', gap: 0.3 }}>
+                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
+                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
+                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </td>
                 </tr>
               ))}
             </tbody>

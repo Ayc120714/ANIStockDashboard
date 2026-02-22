@@ -2,21 +2,21 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdDelete, MdSwapHoriz, MdClose } from 'react-icons/md';
-import { fetchWatchlist, addToWatchlist, removeFromWatchlist, updateWatchlistEntry } from '../api/watchlist';
+import { MdDelete, MdSwapHoriz, MdRefresh, MdClose } from 'react-icons/md';
+import { fetchWatchlist, addToWatchlist, removeFromWatchlist, updateWatchlistEntry, fetchWatchlistSignals } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
-const recColors = {
-  strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
-  sell: '#c62828', strong_sell: '#b71c1c',
+const tierColors = {
+  B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
+  S1: '#ef5350', S2: '#c62828', S3: '#b71c1c',
 };
 
-function LongTermPage() {
+function ShortTermPage() {
   const [data, setData] = useState([]);
+  const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allSymbols, setAllSymbols] = useState([]);
   const [selectedStocks, setSelectedStocks] = useState([]);
-  const [addNotes, setAddNotes] = useState('');
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -31,13 +31,21 @@ function LongTermPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchWatchlist('long_term')
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetchWatchlist('short_term'),
+      fetchWatchlistSignals(),
+    ]).then(([wl, sigs]) => {
+      setData(wl);
+      setSignals(sigs);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); loadSymbols(); }, [load, loadSymbols]);
+  useEffect(() => {
+    load();
+    loadSymbols();
+    const interval = setInterval(load, 60000);
+    return () => clearInterval(interval);
+  }, [load, loadSymbols]);
 
   const existingSymbols = useMemo(() => new Set(data.map(d => d.symbol)), [data]);
 
@@ -52,10 +60,9 @@ function LongTermPage() {
     try {
       for (const sym of selectedStocks) {
         const symbol = typeof sym === 'string' ? sym : sym.symbol;
-        await addToWatchlist(symbol.toUpperCase(), 'long_term', addNotes);
+        await addToWatchlist(symbol.toUpperCase(), 'short_term', '');
       }
       setSelectedStocks([]);
-      setAddNotes('');
       load();
     } catch (e) { alert(e?.message || 'Failed to add'); }
     setAdding(false);
@@ -66,28 +73,38 @@ function LongTermPage() {
   };
 
   const handleRemove = async (sym) => {
-    if (!window.confirm(`Remove ${sym} from Long Term?`)) return;
+    if (!window.confirm(`Remove ${sym}?`)) return;
     try {
-      await removeFromWatchlist(sym, 'long_term');
+      await removeFromWatchlist(sym, 'short_term');
     } catch (e) { console.warn('Remove failed:', e); }
     load();
   };
 
-  const handleMoveToShort = async (sym) => {
+  const handleMoveToLong = async (sym) => {
     try {
-      await updateWatchlistEntry(sym, { list_type: 'short_term' });
+      await updateWatchlistEntry(sym, { list_type: 'long_term' });
     } catch (e) { console.warn('Move failed:', e); }
     load();
   };
 
+  const sigMap = useMemo(() => {
+    const m = {};
+    signals.forEach(s => { m[s.symbol] = s; });
+    return m;
+  }, [signals]);
+
+  const merged = useMemo(() => {
+    return data.map(d => ({ ...d, ...(sigMap[d.symbol] || {}) }));
+  }, [data, sigMap]);
+
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return merged;
     const q = search.toLowerCase();
-    return data.filter(r =>
+    return merged.filter(r =>
       (r.symbol || '').toLowerCase().includes(q) ||
       (r.sector || '').toLowerCase().includes(q)
     );
-  }, [data, search]);
+  }, [merged, search]);
 
   const sorted = useMemo(() => {
     if (!sortConfig.key) return filtered;
@@ -114,19 +131,25 @@ function LongTermPage() {
     { key: 'sector', label: 'Sector' },
     { key: 'price', label: 'CMP' },
     { key: 'day1d', label: '1D %' },
-    { key: 'composite_score', label: 'Score' },
-    { key: 'recommendation', label: 'Rating' },
-    { key: 'trend', label: 'Trend' },
+    { key: 'market_cap', label: 'Mkt Cap' },
+    { key: 'buy_sell_tier', label: 'Signal Tier' },
+    { key: 'supertrend_direction', label: 'SuperTrend' },
+    { key: 'rsi', label: 'RSI' },
+    { key: 'macd_cross', label: 'MACD' },
+    { key: 'volume_ratio', label: 'Vol Ratio' },
+    { key: 'signal_score', label: 'Score' },
     { key: 'entry_price', label: 'Entry' },
     { key: 'stop_loss', label: 'SL' },
-    { key: 'target_long_term', label: 'Target' },
-    { key: 'risk_reward_ratio', label: 'R:R' },
-    { key: 'notes', label: 'Notes' },
+    { key: 'target_short_term', label: 'Target' },
   ];
 
   return (
     <TableSection>
-      <TableTitle>Long Term Watchlist</TableTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+        <TableTitle style={{ margin: 0 }}>Short Term Watchlist</TableTitle>
+        <Chip label="Auto-refresh 60s" size="small" variant="outlined" sx={{ fontSize: 11 }} />
+        <IconButton size="small" onClick={load} title="Refresh now"><MdRefresh /></IconButton>
+      </Box>
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <Autocomplete
@@ -153,8 +176,6 @@ function LongTermPage() {
           autoHighlight
           disableCloseOnSelect
         />
-        <TextField size="small" placeholder="Notes" value={addNotes}
-          onChange={e => setAddNotes(e.target.value)} sx={{ width: 150 }} />
         <Button variant="contained" size="small" onClick={handleAddSelected}
           disabled={selectedStocks.length === 0 || adding}
           sx={{ bgcolor: '#1a3c5e', textTransform: 'none', height: 40, minWidth: 100 }}>
@@ -198,26 +219,36 @@ function LongTermPage() {
               {paged.map(row => (
                 <tr key={row.symbol}>
                   <td style={{ fontWeight: 600 }}>{row.symbol}</td>
-                  <td>{row.sector || '—'}</td>
+                  <td style={{ fontSize: 12 }}>{row.sector || '—'}</td>
                   <td>{row.price ? `₹${Number(row.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
                   <td style={{ fontWeight: 600, color: (row.day1d || 0) > 0 ? '#2e7d32' : (row.day1d || 0) < 0 ? '#c62828' : undefined }}>
                     {row.day1d != null ? `${row.day1d > 0 ? '+' : ''}${row.day1d.toFixed(2)}%` : '—'}
                   </td>
-                  <td style={{ fontWeight: 600 }}>{row.composite_score != null ? row.composite_score.toFixed(0) : '—'}</td>
+                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{row.market_cap || '—'}</td>
                   <td>
-                    {row.recommendation ? (
-                      <Chip label={row.recommendation.replace('_', ' ').toUpperCase()} size="small"
-                        sx={{ bgcolor: recColors[row.recommendation] || '#666', color: '#fff', fontWeight: 600, fontSize: 11 }} />
+                    {row.buy_sell_tier ? (
+                      <Chip label={row.buy_sell_tier} size="small"
+                        sx={{ bgcolor: tierColors[row.buy_sell_tier] || '#666', color: '#fff', fontWeight: 700, fontSize: 12 }} />
                     ) : '—'}
                   </td>
-                  <td>{row.trend || '—'}</td>
+                  <td style={{ color: row.supertrend_direction === 'up' ? '#2e7d32' : row.supertrend_direction === 'down' ? '#c62828' : undefined, fontWeight: 600 }}>
+                    {row.supertrend_direction ? row.supertrend_direction.toUpperCase() : '—'}
+                  </td>
+                  <td style={{ color: (row.rsi || 0) > 60 ? '#2e7d32' : (row.rsi || 0) < 40 ? '#c62828' : undefined }}>
+                    {row.rsi != null ? row.rsi.toFixed(1) : '—'}
+                  </td>
+                  <td style={{ color: row.macd_cross === 'buy' ? '#2e7d32' : row.macd_cross === 'sell' ? '#c62828' : undefined, fontWeight: 600 }}>
+                    {row.macd_cross ? row.macd_cross.toUpperCase() : '—'}
+                  </td>
+                  <td style={{ fontWeight: 600, color: (row.volume_ratio || 0) >= 2 ? '#c62828' : undefined }}>
+                    {row.volume_ratio != null ? `${row.volume_ratio.toFixed(1)}x` : '—'}
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{row.signal_score != null ? row.signal_score.toFixed(0) : '—'}</td>
                   <td>{row.entry_price ? `₹${row.entry_price.toFixed(2)}` : '—'}</td>
                   <td>{row.stop_loss ? `₹${row.stop_loss.toFixed(2)}` : '—'}</td>
-                  <td>{row.target_long_term ? `₹${row.target_long_term.toFixed(2)}` : '—'}</td>
-                  <td>{row.risk_reward_ratio ? `${row.risk_reward_ratio}:1` : '—'}</td>
-                  <td style={{ fontSize: 12, color: '#999', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.notes || ''}</td>
+                  <td>{row.target_short_term ? `₹${row.target_short_term.toFixed(2)}` : (row.target_1 ? `₹${row.target_1.toFixed(2)}` : '—')}</td>
                   <td>
-                    <IconButton size="small" title="Move to Short Term" onClick={() => handleMoveToShort(row.symbol)}>
+                    <IconButton size="small" title="Move to Long Term" onClick={() => handleMoveToLong(row.symbol)}>
                       <MdSwapHoriz />
                     </IconButton>
                     <IconButton size="small" title="Remove" color="error" onClick={() => handleRemove(row.symbol)}>
@@ -228,7 +259,7 @@ function LongTermPage() {
               ))}
               {paged.length === 0 && (
                 <tr><td colSpan={columns.length + 1} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
-                  No stocks in Long Term watchlist. Search and select stocks above to add.
+                  No stocks in Short Term watchlist. Search and select stocks above to add.
                 </td></tr>
               )}
             </tbody>
@@ -245,4 +276,4 @@ function LongTermPage() {
   );
 }
 
-export default LongTermPage;
+export default ShortTermPage;

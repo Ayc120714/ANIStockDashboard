@@ -1,7 +1,6 @@
-// ...existing code...
 import React, { useState } from 'react';
 import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph } from 'react-icons/md';
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -34,9 +33,19 @@ function Sidebar() {
             <span className="label">Long Term</span>
           </NavLink>
 
+          <NavLink to="/short-term" collapsed={collapsed} title={collapsed ? 'Short Term' : undefined}>
+            <MdSpeed />
+            <span className="label">Short Term</span>
+          </NavLink>
+
           <NavLink to="/screens" collapsed={collapsed} title={collapsed ? 'Screens' : undefined}>
             <MdGridView />
             <span className="label">Screens</span>
+          </NavLink>
+
+          <NavLink to="/advisor" collapsed={collapsed} title={collapsed ? 'Advisor' : undefined}>
+            <MdAutoGraph />
+            <span className="label">Advisor</span>
           </NavLink>
 
           <NavLink to="/alerts" collapsed={collapsed} title={collapsed ? 'Alerts' : undefined}>
@@ -64,4 +73,3 @@ function Sidebar() {
 }
 
 export default Sidebar;
-// ...existing code...

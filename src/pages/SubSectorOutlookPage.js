@@ -68,15 +68,6 @@ function matchesChip(chip, sub, weekLabels) {
   return true;
 }
 
-function getWeekValues(sub, weekLabels) {
-  if (weekLabels && weekLabels.length) {
-    return weekLabels.map((lbl) => sub[lbl]);
-  }
-  return Object.entries(sub)
-    .filter(([key]) => /^W\d+$/.test(key))
-    .map(([, value]) => value);
-}
-
 
 function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const [chip, setChip] = useState('All');
@@ -325,32 +316,6 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const topPerformers = sortedSubsectors.slice(0, 5);
   const underPerformers = sortedSubsectors.slice(-5).reverse();
 
-  // Calculate stock count per subsector
-  const subsectorStockCount = useMemo(() => {
-    const countMap = {};
-    if (allStocks && allStocks.length > 0) {
-      // Count unique symbols per subsector (avoid duplicates)
-      const subsectorSymbols = {};
-      allStocks.forEach(stock => {
-        if (stock.symbol && stock.subSector && stock.subSector !== '—') {
-          const normalized = stock.subSector.trim().toLowerCase();
-          if (!subsectorSymbols[normalized]) {
-            subsectorSymbols[normalized] = new Set();
-          }
-          subsectorSymbols[normalized].add(stock.symbol);
-        }
-      });
-      
-      // Convert to counts
-      Object.keys(subsectorSymbols).forEach(key => {
-        countMap[key] = subsectorSymbols[key].size;
-      });
-      
-      console.log('Stock count map:', countMap);
-    }
-    return countMap;
-  }, [allStocks]); 
-
   return (
     <Container>
       <LeftContent>
@@ -469,13 +434,13 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                       onClick={() => handleSubsectorClick(sub.name, sector.sector)}
                     >
                       {sub.name} 
-                      {subsectorStockCount[sub.name.trim().toLowerCase()] > 0 && (
+                      {(sub.stock_count || sub.all) > 0 && (
                         <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>
-                          ({subsectorStockCount[sub.name.trim().toLowerCase()]})
+                          ({sub.stock_count || sub.all})
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>{sub.all}</TableCell>
+                    <TableCell>{sub.stock_count || sub.all}</TableCell>
                     <TableCell>{sub.trend}</TableCell>
                     {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => {
                       const val = weekLabels.length ? sub[lbl] : null;

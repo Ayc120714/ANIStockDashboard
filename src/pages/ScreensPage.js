@@ -5,14 +5,18 @@ import PriceShockersPage from './PriceShockersPage';
 import VolumeShockersPage from './VolumeShockersPage';
 import RelativePerformancePage from './RelativePerformancePage';
 import IPOsPage from './IPOsPage';
+import AiPicksPage from './AiPicksPage';
 
 function ScreensPage() {
-  const [activeTab, setActiveTab] = useState('Trending');
+  const [activeTab, setActiveTab] = useState('AI Picks');
 
   return (
     <PageContainer>
       <PageTitle>Screens</PageTitle>
       <TabContainer>
+        <Tab active={activeTab === 'AI Picks'} onClick={() => setActiveTab('AI Picks')}>
+          AI Picks
+        </Tab>
         <Tab active={activeTab === 'Trending'} onClick={() => setActiveTab('Trending')}>
           Trending
         </Tab>
@@ -29,6 +33,10 @@ function ScreensPage() {
           IPOs
         </Tab>
       </TabContainer>
+
+      <TabContent active={activeTab === 'AI Picks'}>
+        <AiPicksPage />
+      </TabContent>
 
       <TabContent active={activeTab === 'Trending'}>
           <TrendingPage />

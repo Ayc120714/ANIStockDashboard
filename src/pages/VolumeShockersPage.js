@@ -1,12 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Typography } from '@mui/material';
+import { Box, TextField, Typography, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchVolumeShockers } from '../api/stocks';
+import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
+import { addToWatchlist } from '../api/watchlist';
 
 function VolumeShockersPage() {
   const [page, setPage] = useState(1);
@@ -17,21 +19,47 @@ function VolumeShockersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [added, setAdded] = useState({});
+  const [availableDates, setAvailableDates] = useState([]);
+
+  useEffect(() => {
+    fetchScreenDates().then(setAvailableDates).catch(() => {});
+  }, []);
+
+  const handleAdd = async (symbol, listType) => {
+    const key = `${symbol}_${listType}`;
+    if (added[key]) return;
+    try {
+      await addToWatchlist(symbol.toUpperCase(), listType, '');
+      setAdded(prev => ({ ...prev, [key]: true }));
+    } catch (_) { /* ignore */ }
+  };
+
+  const formatDateParam = (d) => {
+    if (!d) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
+    setPage(1);
+    const dateStr = formatDateParam(selectedDate);
+    const cacheKey = `volumeShockersData${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cached = sessionStorage.getItem('volumeShockersData');
+    const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
       setTableData(Array.isArray(parsed) ? parsed : []);
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchVolumeShockers().then((fresh) => {
-      sessionStorage.setItem('volumeShockersData', JSON.stringify(fresh));
+    fetchVolumeShockers(50, dateStr).then((fresh) => {
+      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
         setIsLoading(false);
@@ -43,7 +71,7 @@ function VolumeShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, []);
+  }, [selectedDate]);
 
   const defaultTableData = [
     { id: '01', symbol: 'TATACHEM', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Mid Cap', volume: '2,100,000', avgVolume: '1,200,000', cmp: '₹1,050.00', chg: '8.50%', date: '2026-01-24' },
@@ -56,24 +84,15 @@ function VolumeShockersPage() {
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
-      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchesSearch) return false;
-      if (!selectedDate) return true;
-      const rowDate = new Date(row.date);
-      if (isNaN(rowDate.getTime())) return false;
-      const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-      const endDate = new Date();
-      return rowDate >= startDate && rowDate <= endDate;
+      return (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
     });
-    
-    // Remove duplicates - keep only first occurrence of each symbol
     const seen = new Set();
     return filtered.filter((row) => {
       if (seen.has(row.symbol)) return false;
       seen.add(row.symbol);
       return true;
     });
-  }, [dataToFilter, searchTerm, selectedDate]);
+  }, [dataToFilter, searchTerm]);
 
   const extractNumeric = (value, key) => {
     if (typeof value === 'number') return value;
@@ -88,7 +107,7 @@ function VolumeShockersPage() {
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-      if (['volume', 'avgVolume', 'cmp', 'chg'].includes(sortConfig.key)) {
+      if (['volume', 'avgVolume', 'volJump', 'cmp', 'chg'].includes(sortConfig.key)) {
         aValue = extractNumeric(aValue, sortConfig.key);
         bValue = extractNumeric(bValue, sortConfig.key);
       }
@@ -123,9 +142,11 @@ function VolumeShockersPage() {
     { key: 'subSector', label: 'Sub Sector' },
     { key: 'mc', label: 'MC' },
     { key: 'volume', label: "Today's Vol" },
-    { key: 'avgVolume', label: 'Avg.Vol' },
+    { key: 'avgVolume', label: 'Avg Vol' },
+    { key: 'volJump', label: 'Vol Jump' },
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: 'CHG%' },
+    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -144,6 +165,8 @@ function VolumeShockersPage() {
           <DatePicker
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
+            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
+            maxDate={new Date()}
             renderInput={(params) => <TextField {...params} size="small" />}
           />
         </Box>
@@ -179,8 +202,29 @@ function VolumeShockersPage() {
                   <td>{row.mc}</td>
                   <td>{row.volume}</td>
                   <td>{row.avgVolume}</td>
+                  <td style={{ fontWeight: 600, color: row.volJump && parseFloat(row.volJump) >= 2 ? '#d32f2f' : undefined }}>{row.volJump}</td>
                   <td>{row.cmp}</td>
                   <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <Box sx={{ display: 'flex', gap: 0.3 }}>
+                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
+                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
+                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </td>
                 </tr>
               ))}
             </tbody>

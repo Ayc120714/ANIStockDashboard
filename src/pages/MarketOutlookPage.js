@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
+import { fetchFiiDiiActivity } from '../api/fiiDii';
 import {
   CardContainer,
   Card,
@@ -7,7 +8,6 @@ import {
   CardValue,
   CardChange,
   CardStats,
-  CardChart,
   CashCard,
   CashTitle,
   CashSubtitle,
@@ -30,10 +30,7 @@ function MarketOutlookPage() {
     { title: 'Midcap 100', trend: 'UP TREND', value: '60,692', change: '-0.35%', percentile: '98%', pe: '34 PE' }
   ];
 
-  const cashCards = [
-    { title: 'FII Cash', subtitle: 'Foreign Institutional Investors', value: '₹383.68 Cr', change: '+78.08%', isPositive: true },
-    { title: 'DII Cash', subtitle: 'Domestic Institutional Investors', value: '₹3,091.87 Cr', change: '-39.7%', isPositive: false }
-  ];
+  const [fiiDiiData, setFiiDiiData] = useState(null);
 
   const defaultSmallcapCards = [
     { title: 'Smallcap 100', trend: 'UP TREND', value: '18,184', change: '-0.37%', percentile: '71%', pe: '31 PE' },
@@ -70,7 +67,18 @@ function MarketOutlookPage() {
         if (isMounted) setIsLoading(false);
       }
     };
+
+    const loadFiiDii = async () => {
+      try {
+        const data = await fetchFiiDiiActivity();
+        if (isMounted && data) setFiiDiiData(data);
+      } catch (err) {
+        console.warn('FII/DII fetch failed:', err?.message || err);
+      }
+    };
+
     load();
+    loadFiiDii();
     return () => {
       isMounted = false;
     };
@@ -132,27 +140,64 @@ function MarketOutlookPage() {
     { key: 'year3y', label: '3Y' }
   ];
 
+  const fmtCr = (val) => {
+    if (val == null || isNaN(val)) return '—';
+    const abs = Math.abs(val);
+    const formatted = abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${val < 0 ? '-' : '+'}₹${formatted} Cr`;
+  };
+
+  const fiiCard = useMemo(() => {
+    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [] };
+    const latest = fiiDiiData.daily[0];
+    const mtdNet = fiiDiiData.mtd?.fii?.net ?? 0;
+    const bars = [...fiiDiiData.daily].reverse().map(d => d.fii.net);
+    return {
+      value: latest ? fmtCr(latest.fii.net) : '—',
+      latestNet: latest?.fii.net ?? 0,
+      latestDate: latest?.date ?? '',
+      mtdNet,
+      bars,
+    };
+  }, [fiiDiiData]);
+
+  const diiCard = useMemo(() => {
+    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [] };
+    const latest = fiiDiiData.daily[0];
+    const mtdNet = fiiDiiData.mtd?.dii?.net ?? 0;
+    const bars = [...fiiDiiData.daily].reverse().map(d => d.dii.net);
+    return {
+      value: latest ? fmtCr(latest.dii.net) : '—',
+      latestNet: latest?.dii.net ?? 0,
+      latestDate: latest?.date ?? '',
+      mtdNet,
+      bars,
+    };
+  }, [fiiDiiData]);
+
+  const buildBarChart = (values, width = 100, height = 60) => {
+    if (!values || values.length < 2) return null;
+    const maxAbs = Math.max(...values.map(Math.abs), 1);
+    const gap = 1;
+    const barW = Math.max(2, (width - gap * (values.length - 1)) / values.length);
+    const midY = height / 2;
+    const maxH = midY - 2;
+
+    const rects = values.map((val, i) => {
+      const x = i * (barW + gap);
+      const h = (Math.abs(val) / maxAbs) * maxH;
+      const y = val >= 0 ? midY - h : midY;
+      const fill = val >= 0 ? '#28a745' : '#dc3545';
+      return { x, y, w: barW, h, fill };
+    });
+
+    return { rects, midY, width, height };
+  };
+
   const getTrendClass = (trend) => {
     if (/bullish|up|↗/i.test(trend)) return 'up';
     if (/bearish|down|↘/i.test(trend)) return 'down';
     return 'sideways';
-  };
-
-  const buildSparkline = (data, width = 100, height = 40, padding = 4) => {
-    if (!data || data.length < 2) return null;
-    const min = Math.min(...data);
-    const max = Math.max(...data);
-    const range = max - min || 1;
-    const points = data.map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = padding + ((max - v) / range) * (height - padding * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    const linePoints = points.join(' ');
-    const fillPoints = `${points.join(' ')} ${width},${height} 0,${height}`;
-    const isUp = data[data.length - 1] >= data[0];
-    const color = isUp ? '#28a745' : '#dc3545';
-    return { linePoints, fillPoints, color };
   };
 
   // Sort arrow helper similar to SectorOutlookPage.js
@@ -175,126 +220,123 @@ function MarketOutlookPage() {
       )}
       {/* Index Cards Row 1 */}
       <CardContainer>
-        {indexCards.map((card, idx) => {
-          const spark = buildSparkline(card.perfData);
-          return (
-            <Card key={idx}>
-              <CardHeader>
-                <div>
-                  <h3>{card.title}</h3>
-                  <span className={`trend-badge ${card.trendDirection || getTrendClass(card.trend)}`}>{card.trend}</span>
-                </div>
-              </CardHeader>
-              <CardValue>{card.value}</CardValue>
-              <CardChange className={(card.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{card.change}</CardChange>
-              <CardStats>
-                <span>{card.percentile} Percentile</span>
-                <span>|</span>
-                <span>{card.pe}</span>
-              </CardStats>
-              <CardChart>
-                {spark ? (
-                  <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                    <polyline points={spark.linePoints} fill="none" stroke={spark.color} strokeWidth="1.5" />
-                    <polygon points={spark.fillPoints} fill={spark.color} fillOpacity="0.1" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                    <line x1="0" y1="20" x2="100" y2="20" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
-                  </svg>
-                )}
-              </CardChart>
-            </Card>
-          );
-        })}
+        {indexCards.map((card, idx) => (
+          <Card key={idx}>
+            <CardHeader>
+              <div>
+                <h3>{card.title}</h3>
+                <span className={`trend-badge ${card.trendDirection || getTrendClass(card.trend)}`}>{card.trend}</span>
+              </div>
+            </CardHeader>
+            <CardValue>{card.value}</CardValue>
+            <CardChange className={(card.change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{card.change}</CardChange>
+            <CardStats>
+              <span>{card.percentile} Percentile</span>
+              <span>|</span>
+              <span>{card.pe}</span>
+            </CardStats>
+          </Card>
+        ))}
       </CardContainer>
 
       {/* Cash Cards + Smallcap Cards Row 2 */}
       <CashCardContainer>
         {/* FII Cash - Left Column */}
-        <CashCard>
-          <CashTitle>{cashCards[0].title}</CashTitle>
-          <CashSubtitle>{cashCards[0].subtitle}</CashSubtitle>
-          <CashValue>{cashCards[0].value}</CashValue>
-          <div style={{ marginTop: '16px', fontSize: '14px', color: (cashCards[0].change || '').toString().startsWith('-') ? '#dc3545' : '#28a745', fontWeight: '600' }}>
-            {cashCards[0].change}
-          </div>
-          <BarChart>
-            <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
-              <rect x="5" y="45" width="6" height="12" fill="#4A90E2" />
-              <rect x="13" y="40" width="6" height="17" fill="#4A90E2" />
-              <rect x="21" y="50" width="6" height="7" fill="#4A90E2" />
-              <rect x="29" y="35" width="6" height="22" fill="#4A90E2" />
-              <rect x="37" y="42" width="6" height="15" fill="#4A90E2" />
-              <rect x="45" y="38" width="6" height="19" fill="#4A90E2" />
-              <rect x="53" y="48" width="6" height="9" fill="#4A90E2" />
-              <rect x="61" y="43" width="6" height="14" fill="#4A90E2" />
-              <rect x="69" y="40" width="6" height="17" fill="#4A90E2" />
-              <rect x="77" y="45" width="6" height="12" fill="#4A90E2" />
-            </svg>
-          </BarChart>
-        </CashCard>
+        {(() => {
+          const bars = buildBarChart(fiiCard.bars);
+          return (
+            <CashCard>
+              <CashTitle>FII Cash</CashTitle>
+              <CashSubtitle>Foreign Institutional Investors</CashSubtitle>
+              <CashValue style={{ color: fiiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
+                {fiiCard.value}
+              </CashValue>
+              {fiiCard.latestDate && (
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{fiiCard.latestDate}</div>
+              )}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: fiiCard.mtdNet >= 0 ? '#28a745' : '#dc3545' }}>
+                  {fmtCr(fiiCard.mtdNet)}
+                </span>
+              </div>
+              <BarChart>
+                {bars ? (
+                  <svg viewBox={`0 0 ${bars.width} ${bars.height}`} preserveAspectRatio="xMidYMid meet">
+                    <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
+                    {bars.rects.map((r, i) => (
+                      <rect key={i} x={r.x} y={r.y} width={r.w} height={Math.max(r.h, 0.5)} fill={r.fill} rx="1" />
+                    ))}
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
+                    <line x1="0" y1="30" x2="100" y2="30" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
+                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">Loading...</text>
+                  </svg>
+                )}
+              </BarChart>
+            </CashCard>
+          );
+        })()}
 
         {/* DII Cash - Right Column */}
-        <CashCard>
-          <CashTitle>{cashCards[1].title}</CashTitle>
-          <CashSubtitle>{cashCards[1].subtitle}</CashSubtitle>
-          <CashValue>{cashCards[1].value}</CashValue>
-          <div style={{ marginTop: '16px', fontSize: '14px', color: (cashCards[1].change || '').toString().startsWith('-') ? '#dc3545' : '#28a745', fontWeight: '600' }}>
-            {cashCards[1].change}
-          </div>
-          <BarChart>
-            <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
-              <rect x="5" y="20" width="6" height="37" fill="#28a745" />
-              <rect x="13" y="25" width="6" height="32" fill="#28a745" />
-              <rect x="21" y="15" width="6" height="42" fill="#28a745" />
-              <rect x="29" y="30" width="6" height="27" fill="#28a745" />
-              <rect x="37" y="20" width="6" height="37" fill="#28a745" />
-              <rect x="45" y="25" width="6" height="32" fill="#28a745" />
-              <rect x="53" y="18" width="6" height="39" fill="#28a745" />
-              <rect x="61" y="22" width="6" height="35" fill="#28a745" />
-              <rect x="69" y="28" width="6" height="29" fill="#28a745" />
-              <rect x="77" y="20" width="6" height="37" fill="#28a745" />
-            </svg>
-          </BarChart>
-        </CashCard>
+        {(() => {
+          const bars = buildBarChart(diiCard.bars);
+          return (
+            <CashCard>
+              <CashTitle>DII Cash</CashTitle>
+              <CashSubtitle>Domestic Institutional Investors</CashSubtitle>
+              <CashValue style={{ color: diiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
+                {diiCard.value}
+              </CashValue>
+              {diiCard.latestDate && (
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{diiCard.latestDate}</div>
+              )}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: diiCard.mtdNet >= 0 ? '#28a745' : '#dc3545' }}>
+                  {fmtCr(diiCard.mtdNet)}
+                </span>
+              </div>
+              <BarChart>
+                {bars ? (
+                  <svg viewBox={`0 0 ${bars.width} ${bars.height}`} preserveAspectRatio="xMidYMid meet">
+                    <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
+                    {bars.rects.map((r, i) => (
+                      <rect key={i} x={r.x} y={r.y} width={r.w} height={Math.max(r.h, 0.5)} fill={r.fill} rx="1" />
+                    ))}
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
+                    <line x1="0" y1="30" x2="100" y2="30" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
+                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">Loading...</text>
+                  </svg>
+                )}
+              </BarChart>
+            </CashCard>
+          );
+        })()}
 
         {/* Smallcap column (right): top = full smallcap; bottom row = microcap + India VIX */}
         <SmallCardContainer>
-          {(() => {
-            const spark0 = buildSparkline(smallcapCards[0].perfData);
-            return (
-              <SmallFull>
-                <CardHeader>
-                  <div>
-                    <h3>{smallcapCards[0].title}</h3>
-                    <span className={`trend-badge ${smallcapCards[0].trendDirection || getTrendClass(smallcapCards[0].trend)}`}>{smallcapCards[0].trend}</span>
-                  </div>
-                </CardHeader>
-                <CardValue>{smallcapCards[0].value}</CardValue>
-                <CardChange className={(smallcapCards[0].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[0].change}</CardChange>
-                <CardStats>
-                  <span>{smallcapCards[0].percentile} Percentile</span>
-                  <span>|</span>
-                  <span>{smallcapCards[0].pe}</span>
-                </CardStats>
-                <CardChart>
-                  {spark0 ? (
-                    <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-                      <polyline points={spark0.linePoints} fill="none" stroke={spark0.color} strokeWidth="1.5" />
-                      <polygon points={spark0.fillPoints} fill={spark0.color} fillOpacity="0.1" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 100 40"><line x1="0" y1="20" x2="100" y2="20" stroke="#ccc" strokeWidth="1" strokeDasharray="4" /></svg>
-                  )}
-                </CardChart>
-              </SmallFull>
-            );
-          })()}
+          <SmallFull>
+            <CardHeader>
+              <div>
+                <h3>{smallcapCards[0].title}</h3>
+                <span className={`trend-badge ${smallcapCards[0].trendDirection || getTrendClass(smallcapCards[0].trend)}`}>{smallcapCards[0].trend}</span>
+              </div>
+            </CardHeader>
+            <CardValue>{smallcapCards[0].value}</CardValue>
+            <CardChange className={(smallcapCards[0].change || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{smallcapCards[0].change}</CardChange>
+            <CardStats>
+              <span>{smallcapCards[0].percentile} Percentile</span>
+              <span>|</span>
+              <span>{smallcapCards[0].pe}</span>
+            </CardStats>
+          </SmallFull>
 
           {[1, 2].map((i) => {
             const sc = smallcapCards[i];
-            const sparkSm = buildSparkline(sc.perfData, 100, 30);
             return (
               <SmallHalf key={i}>
                 <CardHeader>
@@ -310,16 +352,6 @@ function MarketOutlookPage() {
                   <span>|</span>
                   <span>{sc.pe}</span>
                 </CardStats>
-                <CardChart>
-                  {sparkSm ? (
-                    <svg viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
-                      <polyline points={sparkSm.linePoints} fill="none" stroke={sparkSm.color} strokeWidth="1" />
-                      <polygon points={sparkSm.fillPoints} fill={sparkSm.color} fillOpacity="0.1" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 100 30"><line x1="0" y1="15" x2="100" y2="15" stroke="#ccc" strokeWidth="1" strokeDasharray="4" /></svg>
-                  )}
-                </CardChart>
               </SmallHalf>
             );
           })}

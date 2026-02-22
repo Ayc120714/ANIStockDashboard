@@ -1,4 +1,4 @@
-import { apiGet } from './apiClient';
+import { apiGet, apiPost } from './apiClient';
 
 const formatCurrency = (v) => {
   if (v == null) return '—';
@@ -27,19 +27,11 @@ const rsFieldByPeriod = {
 const mapStockToTable = (s, idx, opts = {}) => {
   const rsField = rsFieldByPeriod[opts.period] || 'week1w';
   const rsVal = s[rsField] ?? s.week1w ?? s.month1m ?? s.day1d;
-  
-  // Debug logging for first stock
-  if (idx === 0) {
-    console.log('Raw stock data structure:', {
-      hasSubsector: 'subsector' in s,
-      hasSector: 'sector' in s,
-      subsectorValue: s.subsector,
-      sectorValue: s.sector,
-      symbol: s.symbol,
-      allKeys: Object.keys(s).slice(0, 15)
-    });
-  }
-  
+
+  const volJump = (s.volume && s.avg_volume && s.avg_volume > 0)
+    ? (s.volume / s.avg_volume).toFixed(1) + 'x'
+    : '—';
+
   return {
     id: String(idx + 1).padStart(2, '0'),
     symbol: s.symbol,
@@ -51,34 +43,60 @@ const mapStockToTable = (s, idx, opts = {}) => {
     cmp: formatCurrency(s.price),
     chg: formatPercent(s.day1d),
     rs: formatPercent(rsVal),
-    volume: s.volume != null ? s.volume.toLocaleString() : '—',
-    avgVolume: '—',
+    volume: s.volume != null ? s.volume.toLocaleString('en-IN') : '—',
+    avgVolume: s.avg_volume != null ? Math.round(s.avg_volume).toLocaleString('en-IN') : '—',
+    volJump,
     date: s.last_updated,
   };
 };
 
-export const fetchRelativePerformance = async (period = '1d', limit = 50) => {
-  const data = await apiGet(`/stocks/relative-performance?period=${period}&limit=${limit}`);
+export const fetchRelativePerformance = async (period = '1d', limit = 50, dateStr = null) => {
+  let url = `/stocks/relative-performance?period=${period}&limit=${limit}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
   const list = data?.data ?? [];
   return list.map((s, i) => mapStockToTable(s, i, { period }));
 };
 
-export const fetchVolumeShockers = async (limit = 50) => {
-  const data = await apiGet(`/stocks/volume-shockers?limit=${limit}`);
+export const fetchVolumeShockers = async (limit = 50, dateStr = null) => {
+  let url = `/stocks/volume-shockers?limit=${limit}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
   const list = data?.data ?? [];
   return list.map((s, i) => mapStockToTable(s, i, {}));
 };
 
-export const fetchPriceShockers = async (type = 'gainers', limit = 50) => {
-  const data = await apiGet(`/stocks/price-shockers?type=${type}&limit=${limit}`);
+export const fetchPriceShockers = async (type = 'gainers', limit = 50, period = 'day', dateStr = null) => {
+  let url = `/stocks/price-shockers?type=${type}&limit=${limit}&period=${period}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
+  const list = data?.data ?? [];
+  const periodFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
+  const chgField = periodFieldMap[period] || 'day1d';
+  return list.map((s, i) => ({
+    ...mapStockToTable(s, i, {}),
+    chg: formatPercent(s[chgField]),
+  }));
+};
+
+export const fetchTrending = async (limit = 50, dateStr = null) => {
+  let url = `/stocks/trending?limit=${limit}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
   const list = data?.data ?? [];
   return list.map((s, i) => mapStockToTable(s, i, {}));
 };
 
-export const fetchTrending = async (limit = 50) => {
-  const data = await apiGet(`/stocks/trending?limit=${limit}`);
-  const list = data?.data ?? [];
-  return list.map((s, i) => mapStockToTable(s, i, {}));
+export const fetchScreenDates = async () => {
+  const data = await apiGet('/stocks/screen-dates');
+  return data?.dates ?? [];
+};
+
+export const fetchIPOs = async (status = null, limit = 100) => {
+  let url = `/ipo?limit=${limit}`;
+  if (status) url += `&status=${encodeURIComponent(status)}`;
+  const data = await apiGet(url);
+  return data?.data ?? [];
 };
 
 export const fetchStocksBySubsector = async (subsector, limit = 200) => {
@@ -121,4 +139,12 @@ export const fetchStocksBySubsector = async (subsector, limit = 200) => {
 
   console.warn(`All subsector endpoints failed for "${subsector}"`);
   return [];
+};
+
+export const fetchWeeklyPicks = async () => {
+  return apiGet('/stocks/weekly-picks');
+};
+
+export const triggerWeeklyPicks = async () => {
+  return apiPost('/stocks/weekly-picks/run');
 };

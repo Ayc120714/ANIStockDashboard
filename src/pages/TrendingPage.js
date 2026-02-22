@@ -1,12 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Typography } from '@mui/material';
+import { Box, TextField, Typography, IconButton, Tooltip } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchTrending } from '../api/stocks';
+import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { fetchTrending, fetchScreenDates } from '../api/stocks';
+import { addToWatchlist } from '../api/watchlist';
 
 function TrendingPage() {
   const [page, setPage] = useState(1);
@@ -17,21 +19,47 @@ function TrendingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [added, setAdded] = useState({});
+  const [availableDates, setAvailableDates] = useState([]);
+
+  useEffect(() => {
+    fetchScreenDates().then(setAvailableDates).catch(() => {});
+  }, []);
+
+  const handleAdd = async (symbol, listType) => {
+    const key = `${symbol}_${listType}`;
+    if (added[key]) return;
+    try {
+      await addToWatchlist(symbol.toUpperCase(), listType, '');
+      setAdded(prev => ({ ...prev, [key]: true }));
+    } catch (_) { /* ignore */ }
+  };
+
+  const formatDateParam = (d) => {
+    if (!d) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
+    setPage(1);
+    const dateStr = formatDateParam(selectedDate);
+    const cacheKey = `trendingStocksData${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cached = sessionStorage.getItem('trendingStocksData');
+    const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
       setTableData(Array.isArray(parsed) ? parsed : []);
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchTrending().then((fresh) => {
-      sessionStorage.setItem('trendingStocksData', JSON.stringify(fresh));
+    fetchTrending(50, dateStr).then((fresh) => {
+      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
         setIsLoading(false);
@@ -43,37 +71,21 @@ function TrendingPage() {
       }
     });
     return () => { isMounted = false; };
-  }, []);
+  }, [selectedDate]);
 
-  const defaultTableData = [
-    { id: '01', symbol: 'NAVINFLUOR', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Small Cap', ema21: '₹4,994.48', ema50: '₹4,891.23', cmp: '₹5,687.40', chg: '14.28%', date: '2025-10-31' },
-    { id: '02', symbol: 'TDPOWERSYS', sector: 'Energy', subSector: 'Heavy Electrical Equipment', mc: 'Small Cap', ema21: '₹643.94', ema50: '₹597.84', cmp: '₹774.90', chg: '13.32%', date: '2025-10-31' },
-    { id: '03', symbol: 'INTELLECT', sector: 'IT', subSector: 'IT Software', mc: 'Small Cap', ema21: '₹1,012.06', ema50: '₹1,006.89', cmp: '₹1,133.50', chg: '8.29%', date: '2025-10-30' },
-    { id: '04', symbol: 'TATVA', sector: 'Chemicals', subSector: 'Specialty Chemicals', mc: 'Small Cap', ema21: '₹1,266.03', ema50: '₹1,164.88', cmp: '₹1,422.30', chg: '4.60%', date: '2025-10-29' },
-  ];
-
-  const dataToFilter = tableData.length ? tableData : defaultTableData;
+  const dataToFilter = tableData;
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
-      const matchesSearch = (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchesSearch) return false;
-      if (!selectedDate) return true;
-      const rowDate = new Date(row.date);
-      if (isNaN(rowDate.getTime())) return false;
-      const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-      const endDate = new Date();
-      return rowDate >= startDate && rowDate <= endDate;
+      return (row.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
     });
-    
-    // Remove duplicates - keep only first occurrence of each symbol
     const seen = new Set();
     return filtered.filter((row) => {
       if (seen.has(row.symbol)) return false;
       seen.add(row.symbol);
       return true;
     });
-  }, [dataToFilter, searchTerm, selectedDate]);
+  }, [dataToFilter, searchTerm]);
 
   const extractNumeric = (value, key) => {
     if (typeof value === 'number') return value;
@@ -126,6 +138,7 @@ function TrendingPage() {
     { key: 'ema50', label: 'EMA 50' },
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: 'CHG%' },
+    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -144,6 +157,8 @@ function TrendingPage() {
           <DatePicker
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
+            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
+            maxDate={new Date()}
             renderInput={(params) => <TextField {...params} size="small" />}
           />
         </Box>
@@ -181,6 +196,26 @@ function TrendingPage() {
                   <td>{row.ema50}</td>
                   <td>{row.cmp}</td>
                   <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <Box sx={{ display: 'flex', gap: 0.3 }}>
+                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
+                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
+                        <span>
+                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
+                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
+                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </td>
                 </tr>
               ))}
             </tbody>
