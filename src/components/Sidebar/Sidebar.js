@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange } from 'react-icons/md';
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -51,6 +51,25 @@ function Sidebar() {
           <NavLink to="/alerts" collapsed={collapsed} title={collapsed ? 'Alerts' : undefined}>
             <MdNotifications />
             <span className="label">Alerts</span>
+          </NavLink>
+        </Section>
+
+        <Section collapsed={collapsed}>
+          <SectionTitle collapsed={collapsed}>Derivatives</SectionTitle>
+
+          <NavLink to="/fno" collapsed={collapsed} title={collapsed ? 'F&O' : undefined}>
+            <MdBarChart />
+            <span className="label">F&O</span>
+          </NavLink>
+
+          <NavLink to="/commodities" collapsed={collapsed} title={collapsed ? 'Commodities' : undefined}>
+            <MdDiamond />
+            <span className="label">Commodities</span>
+          </NavLink>
+
+          <NavLink to="/forex" collapsed={collapsed} title={collapsed ? 'Forex' : undefined}>
+            <MdCurrencyExchange />
+            <span className="label">Forex</span>
           </NavLink>
         </Section>
 

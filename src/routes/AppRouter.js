@@ -10,6 +10,9 @@ import StockAlertsPage from '../pages/StockAlertsPage';
 import FinancialAdvisorPage from '../pages/FinancialAdvisorPage';
 import ProfilePage from '../pages/ProfilePage';
 import EventsPage from '../pages/EventsPage';
+import FnOPage from '../pages/FnOPage';
+import CommoditiesPage from '../pages/CommoditiesPage';
+import ForexPage from '../pages/ForexPage';
 
 function AppRouter() {
   return (
@@ -25,6 +28,9 @@ function AppRouter() {
           <Route path="/alerts" element={<StockAlertsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/fno" element={<FnOPage />} />
+          <Route path="/commodities" element={<CommoditiesPage />} />
+          <Route path="/forex" element={<ForexPage />} />
         </Route>
       </Routes>
     </Router>
