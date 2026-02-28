@@ -5,6 +5,7 @@ import Pagination from '@mui/material/Pagination';
 import { MdRefresh, MdClose, MdDeleteSweep, MdSelectAll } from 'react-icons/md';
 import { fetchWatchlist, addToWatchlist, fetchWatchlistSignals, bulkDeleteFromWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
+import { useAuth } from '../auth/AuthContext';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
@@ -12,6 +13,7 @@ const tierColors = {
 };
 
 function ShortTermPage() {
+  const { isAdmin } = useAuth();
   const [data, setData] = useState([]);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,13 +36,13 @@ function ShortTermPage() {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetchWatchlist('short_term'),
-      fetchWatchlistSignals(),
+      fetchWatchlist('short_term', { includeAll: isAdmin }),
+      fetchWatchlistSignals({ includeAll: isAdmin }),
     ]).then(([wl, sigs]) => {
       setData(wl);
       setSignals(sigs);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     load();
@@ -105,7 +107,7 @@ function ShortTermPage() {
     if (!window.confirm(`Delete ${syms.length} stock(s) from Short Term?\n\n${syms.join(', ')}`)) return;
     setDeleting(true);
     try {
-      await bulkDeleteFromWatchlist(syms, 'short_term');
+      await bulkDeleteFromWatchlist(syms, 'short_term', { includeAll: isAdmin });
       setCheckedSymbols(new Set());
       load();
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }

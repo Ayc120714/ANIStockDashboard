@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { forgotPasswordComplete, forgotPasswordStart, resendOtp, verifyOtp } from '../api/auth';
 
 const onlyDigits = (value) => (value || '').replace(/\D/g, '').slice(0, 8);
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -15,14 +16,22 @@ function ForgotPasswordPage() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [mobileVerified, setMobileVerified] = useState(false);
   const [hint, setHint] = useState('');
+  const [requires, setRequires] = useState(['email', 'mobile']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const canStart = useMemo(() => identifier.trim().length > 3 && newPassword.length >= 8, [identifier, newPassword]);
+  const canStart = useMemo(
+    () => identifier.trim().length > 3 && strongPasswordRegex.test(newPassword || ''),
+    [identifier, newPassword]
+  );
   const canVerifyEmail = useMemo(() => flowId && emailOtp.length >= 4, [flowId, emailOtp]);
   const canVerifyMobile = useMemo(() => flowId && mobileOtp.length >= 4, [flowId, mobileOtp]);
-  const bothVerified = emailVerified && mobileVerified;
+  const requiresMobile = useMemo(() => requires.includes('mobile'), [requires]);
+  const verificationReady = useMemo(
+    () => emailVerified && (!requiresMobile || mobileVerified),
+    [emailVerified, mobileVerified, requiresMobile]
+  );
 
   const startReset = async (e) => {
     e.preventDefault();
@@ -33,8 +42,12 @@ function ForgotPasswordPage() {
     try {
       const res = await forgotPasswordStart(identifier.trim());
       setFlowId(res?.flow_id || '');
+      const nextRequires = Array.isArray(res?.requires) && res.requires.length ? res.requires : ['email'];
+      setRequires(nextRequires);
       setHint(
-        `OTP sent to ${res?.masked_email || 'registered email'} and ${res?.masked_mobile || 'registered mobile'}`
+        nextRequires.includes('mobile')
+          ? `OTP sent to ${res?.masked_email || 'registered email'} and ${res?.masked_mobile || 'registered mobile'}`
+          : `OTP sent to ${res?.masked_email || 'registered email'}`
       );
       if (res?.debug_otp?.email || res?.debug_otp?.mobile) {
         setHint((prev) => `${prev}. Test OTPs: email=${res?.debug_otp?.email || '-'} mobile=${res?.debug_otp?.mobile || '-'}`);
@@ -83,7 +96,7 @@ function ForgotPasswordPage() {
   };
 
   const completeReset = async () => {
-    if (!flowId || !bothVerified || newPassword.length < 8) return;
+    if (!flowId || !verificationReady || !strongPasswordRegex.test(newPassword || '')) return;
     setLoading(true);
     setError('');
     setMessage('');
@@ -117,7 +130,7 @@ function ForgotPasswordPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 size="small"
-                helperText="Minimum 8 characters"
+                helperText="Min 8 chars with uppercase, lowercase, number and special character"
               />
               <Button type="submit" variant="contained" disabled={!canStart || loading}>
                 {loading ? 'Sending OTP...' : 'Send OTP for Reset'}
@@ -143,24 +156,28 @@ function ForgotPasswordPage() {
                 </Button>
               </Box>
 
-              <TextField
-                size="small"
-                label="Mobile OTP"
-                value={mobileOtp}
-                onChange={(e) => setMobileOtp(onlyDigits(e.target.value))}
-                disabled={mobileVerified}
-                helperText={mobileVerified ? 'Mobile OTP verified' : 'Enter OTP sent to mobile'}
-              />
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Button variant="contained" disabled={!canVerifyMobile || loading || mobileVerified} onClick={() => onVerify('mobile')}>
-                  Verify Mobile OTP
-                </Button>
-                <Button variant="outlined" disabled={loading || mobileVerified} onClick={() => onResend('mobile')}>
-                  Resend Mobile OTP
-                </Button>
-              </Box>
+              {requiresMobile ? (
+                <>
+                  <TextField
+                    size="small"
+                    label="Mobile OTP"
+                    value={mobileOtp}
+                    onChange={(e) => setMobileOtp(onlyDigits(e.target.value))}
+                    disabled={mobileVerified}
+                    helperText={mobileVerified ? 'Mobile OTP verified' : 'Enter OTP sent to mobile'}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button variant="contained" disabled={!canVerifyMobile || loading || mobileVerified} onClick={() => onVerify('mobile')}>
+                      Verify Mobile OTP
+                    </Button>
+                    <Button variant="outlined" disabled={loading || mobileVerified} onClick={() => onResend('mobile')}>
+                      Resend Mobile OTP
+                    </Button>
+                  </Box>
+                </>
+              ) : null}
 
-              <Button color="success" variant="contained" disabled={!bothVerified || loading} onClick={completeReset}>
+              <Button color="success" variant="contained" disabled={!verificationReady || loading} onClick={completeReset}>
                 Reset Password
               </Button>
             </Box>

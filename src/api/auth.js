@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './apiClient';
+import { apiGet, apiPost, apiRequest } from './apiClient';
 
 export const validateEmail = (email) => apiPost('/auth/validate-email', { email });
 
@@ -13,6 +13,9 @@ export const adminPasswordlessLogin = (email) =>
 export const loginStart = (email, password) =>
   apiPost('/auth/login/start', { email, password });
 
+export const loginWithEmailOtpStart = (email) =>
+  apiPost('/auth/login/email-otp/start', { email });
+
 export const resendOtp = (flowId, purpose, channel) =>
   apiPost('/auth/otp/send', { flow_id: flowId, purpose, channel });
 
@@ -24,8 +27,14 @@ export const verifyOtp = (flowId, purpose, channel, otpCode) =>
     otp_code: otpCode,
   });
 
-export const completeLogin = (flowId) =>
-  apiPost('/auth/login/complete', { flow_id: flowId });
+export const completeLogin = (flowId, trustDevice = false) =>
+  apiPost('/auth/login/complete', { flow_id: flowId, trust_device: Boolean(trustDevice) });
+
+export const completeEmailOtpLogin = (flowId, trustDevice = false) =>
+  apiPost('/auth/login/email-otp/complete', { flow_id: flowId, trust_device: Boolean(trustDevice) });
+
+export const completeSignup = (flowId, trustDevice = true) =>
+  apiPost('/auth/signup/complete', { flow_id: flowId, trust_device: Boolean(trustDevice) });
 
 export const refreshSession = (refreshToken) =>
   apiPost('/auth/refresh', { refresh_token: refreshToken });
@@ -34,3 +43,15 @@ export const logoutSession = (refreshToken) =>
   apiPost('/auth/logout', { refresh_token: refreshToken });
 
 export const fetchMe = () => apiGet('/auth/me');
+
+export const fetchAdminUsers = (includeInactive = true) =>
+  apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`);
+
+export const addAdminUser = (payload) =>
+  apiPost('/auth/admin/users', payload);
+
+export const deleteAdminUser = (userId) =>
+  apiRequest(`/auth/admin/users/${encodeURIComponent(String(userId))}`, { method: 'DELETE' });
+
+export const blockAdminUser = (userId, blocked = true) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/block`, { blocked: Boolean(blocked) });

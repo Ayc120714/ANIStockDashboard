@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { completeLogin, resendOtp, verifyOtp } from '../api/auth';
+import { completeEmailOtpLogin, completeLogin, completeSignup, resendOtp, verifyOtp } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 
 const onlyDigits = (value) => (value || '').replace(/\D/g, '').slice(0, 8);
@@ -13,6 +13,9 @@ function OtpVerifyPage() {
   const flowId = location.state?.flowId || '';
   const purpose = location.state?.purpose || '';
   const from = location.state?.from || '/';
+  const requestedChannels = Array.isArray(location.state?.requires) && location.state.requires.length
+    ? location.state.requires
+    : (purpose === 'login_email' ? ['email'] : ['email', 'mobile']);
 
   const [emailOtp, setEmailOtp] = useState('');
   const [mobileOtp, setMobileOtp] = useState('');
@@ -21,10 +24,13 @@ function OtpVerifyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [trustDevice, setTrustDevice] = useState(true);
+  const isEmailOnlyFlow = purpose === 'login_email';
+  const requiresMobile = requestedChannels.includes('mobile') && !isEmailOnlyFlow;
 
   const canSubmitEmail = useMemo(() => flowId && purpose && emailOtp.length >= 4, [flowId, purpose, emailOtp]);
   const canSubmitMobile = useMemo(() => flowId && purpose && mobileOtp.length >= 4, [flowId, purpose, mobileOtp]);
-  const bothVerified = emailVerified && mobileVerified;
+  const verificationReady = emailVerified && (!requiresMobile || mobileVerified);
 
   const onVerify = async (channel) => {
     const otpCode = channel === 'email' ? emailOtp : mobileOtp;
@@ -60,17 +66,24 @@ function OtpVerifyPage() {
   };
 
   const onContinue = async () => {
-    if (!bothVerified || !flowId) return;
+    if (!verificationReady || !flowId) return;
     setLoading(true);
     setError('');
     setMessage('');
     try {
       if (purpose === 'signup') {
-        setMessage('Signup verification complete. Please login.');
-        navigate('/login');
+        const res = await completeSignup(flowId, trustDevice);
+        persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+        navigate(from, { replace: true, state: { showTelegramBotInfo: true } });
         return;
       }
-      const res = await completeLogin(flowId);
+      if (purpose === 'login_email') {
+        const res = await completeEmailOtpLogin(flowId, trustDevice);
+        persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+        navigate(from, { replace: true });
+        return;
+      }
+      const res = await completeLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
       navigate(from, { replace: true });
     } catch (err) {
@@ -104,7 +117,9 @@ function OtpVerifyPage() {
         <CardContent>
           <Typography variant="h5" sx={{ mb: 1.5 }}>Verify OTP</Typography>
           <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
-            Verify both Email OTP and Mobile OTP to continue.
+            {!requiresMobile
+              ? 'Enter the OTP sent to your email to continue.'
+              : 'Verify both Email OTP and Mobile OTP to continue.'}
           </Typography>
           {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
           {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}
@@ -136,41 +151,52 @@ function OtpVerifyPage() {
             </Box>
           </Box>
 
-          <Box sx={{ display: 'grid', gap: 1.5, mb: 2 }}>
-            <TextField
-              size="small"
-              label="Mobile OTP"
-              value={mobileOtp}
-              onChange={(e) => setMobileOtp(onlyDigits(e.target.value))}
-              disabled={mobileVerified}
-              helperText={mobileVerified ? 'Mobile OTP verified' : 'Enter OTP sent to your mobile'}
-            />
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                onClick={() => onVerify('mobile')}
-                disabled={!canSubmitMobile || loading || mobileVerified}
-              >
-                Verify Mobile OTP
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => onResend('mobile')}
-                disabled={loading || mobileVerified}
-              >
-                Resend Mobile OTP
-              </Button>
+          {requiresMobile ? (
+            <Box sx={{ display: 'grid', gap: 1.5, mb: 2 }}>
+              <TextField
+                size="small"
+                label="Mobile OTP"
+                value={mobileOtp}
+                onChange={(e) => setMobileOtp(onlyDigits(e.target.value))}
+                disabled={mobileVerified}
+                helperText={mobileVerified ? 'Mobile OTP verified' : 'Enter OTP sent to your mobile'}
+              />
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  onClick={() => onVerify('mobile')}
+                  disabled={!canSubmitMobile || loading || mobileVerified}
+                >
+                  Verify Mobile OTP
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => onResend('mobile')}
+                  disabled={loading || mobileVerified}
+                >
+                  Resend Mobile OTP
+                </Button>
+              </Box>
             </Box>
-          </Box>
+          ) : null}
 
           <Button
             variant="contained"
             color="success"
             onClick={onContinue}
-            disabled={!bothVerified || loading}
+            disabled={!verificationReady || loading}
           >
             {purpose === 'signup' ? 'Finish Signup' : 'Complete Login'}
           </Button>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={trustDevice}
+                onChange={(e) => setTrustDevice(e.target.checked)}
+              />
+            }
+            label="Trust this device for 7 days (skip OTP on next login)"
+          />
         </CardContent>
       </Card>
     </Box>

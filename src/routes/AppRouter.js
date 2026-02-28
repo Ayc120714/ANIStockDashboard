@@ -14,6 +14,7 @@ import FnOPage from '../pages/FnOPage';
 import CommoditiesPage from '../pages/CommoditiesPage';
 import ForexPage from '../pages/ForexPage';
 import TelegramAdminPage from '../pages/TelegramAdminPage';
+import AdminUsersPage from '../pages/AdminUsersPage';
 import LoginPage from '../pages/LoginPage';
 import SignupPage from '../pages/SignupPage';
 import OtpVerifyPage from '../pages/OtpVerifyPage';
@@ -46,6 +47,7 @@ function AppRouter() {
           <Route path="/commodities" element={<CommoditiesPage />} />
           <Route path="/forex" element={<ForexPage />} />
           <Route path="/telegram-admin" element={<AdminRoute><TelegramAdminPage /></AdminRoute>} />
+          <Route path="/admin-users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
         </Route>
       </Routes>
     </Router>

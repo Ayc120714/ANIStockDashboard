@@ -19,6 +19,12 @@ import { deleteTelegramSubscriber, fetchTelegramSubscribers, setTelegramSubscrib
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
 
 const validateSubscriber = (row) => {
+  if (row?.is_approved) {
+    return {
+      ok: true,
+      checks: ['Validation skipped for approved subscriber'],
+    };
+  }
   const checks = [];
   if (!row?.chat_id) checks.push('Missing chat id');
   if (row?.chat_id && !/^-?\d+$/.test(String(row.chat_id))) checks.push('Chat id must be numeric');
@@ -163,6 +169,7 @@ function TelegramAdminPage() {
                 <th style={compact}>Chat ID</th>
                 <th style={compact}>Username</th>
                 <th style={compact}>Name</th>
+                <th style={compact}>Mobile</th>
                 <th style={compact}>Active</th>
                 <th style={compact}>Approved</th>
                 <th style={compact}>Validation</th>
@@ -182,6 +189,7 @@ function TelegramAdminPage() {
                     <td style={compact}>
                       {[row.first_name, row.last_name].filter(Boolean).join(' ') || '—'}
                     </td>
+                    <td style={compact}>{row.linked_mobile || '—'}</td>
                     <td style={compact}>{row.is_active ? 'Yes' : 'No'}</td>
                     <td style={{ ...compact, fontWeight: 700, color: row.is_approved ? '#2e7d32' : '#ed6c02' }}>
                       {row.is_approved ? 'Approved' : 'Pending'}
@@ -211,7 +219,7 @@ function TelegramAdminPage() {
                             size="small"
                             color="success"
                             variant="contained"
-                            disabled={busy || !result.ok}
+                            disabled={busy}
                             onClick={() => setApproval(row, true)}
                           >
                             Approve
@@ -233,7 +241,7 @@ function TelegramAdminPage() {
               })}
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
                     No subscribers found for the selected filters.
                   </td>
                 </tr>

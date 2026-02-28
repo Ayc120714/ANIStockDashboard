@@ -5,6 +5,7 @@ import Pagination from '@mui/material/Pagination';
 import { MdClose, MdDeleteSweep, MdSelectAll, MdRefresh } from 'react-icons/md';
 import { fetchWatchlist, addToWatchlist, bulkDeleteFromWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
+import { useAuth } from '../auth/AuthContext';
 
 const recColors = {
   strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
@@ -12,6 +13,7 @@ const recColors = {
 };
 
 function LongTermPage() {
+  const { isAdmin } = useAuth();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allSymbols, setAllSymbols] = useState([]);
@@ -32,11 +34,11 @@ function LongTermPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchWatchlist('long_term')
+    fetchWatchlist('long_term', { includeAll: isAdmin })
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     load(); loadSymbols();
@@ -100,7 +102,7 @@ function LongTermPage() {
     if (!window.confirm(`Delete ${syms.length} stock(s) from Long Term?\n\n${syms.join(', ')}`)) return;
     setDeleting(true);
     try {
-      await bulkDeleteFromWatchlist(syms, 'long_term');
+      await bulkDeleteFromWatchlist(syms, 'long_term', { includeAll: isAdmin });
       setCheckedSymbols(new Set());
       load();
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }

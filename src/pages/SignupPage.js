@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { signup, validateEmail } from '../api/auth';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 function SignupPage() {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ function SignupPage() {
   const [existingUser, setExistingUser] = useState(false);
 
   const canSubmit = useMemo(() => {
-    return form.email && form.mobile && form.password && form.password.length >= 8;
+    return form.email && form.mobile && strongPasswordRegex.test(form.password || '');
   }, [form]);
 
   const onChange = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
@@ -58,6 +59,7 @@ function SignupPage() {
         state: {
           flowId: res?.flow_id,
           purpose: 'signup',
+          requires: res?.requires || ['email'],
           email: res?.email || form.email.trim(),
           mobile: res?.mobile || form.mobile.trim(),
         },
@@ -92,7 +94,14 @@ function SignupPage() {
               Validate email
             </Button>
             <TextField label="Mobile" value={form.mobile} onChange={onChange('mobile')} size="small" />
-            <TextField label="Password" type="password" value={form.password} onChange={onChange('password')} size="small" helperText="Minimum 8 characters" />
+            <TextField
+              label="Password"
+              type="password"
+              value={form.password}
+              onChange={onChange('password')}
+              size="small"
+              helperText="Min 8 chars with uppercase, lowercase, number and special character"
+            />
             <Button type="submit" variant="contained" disabled={!canSubmit || loading}>
               {loading ? 'Creating account...' : 'Sign up and send OTP'}
             </Button>

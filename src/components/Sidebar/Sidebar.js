@@ -89,6 +89,13 @@ function Sidebar() {
           </NavLink>
 
           {isAdmin ? (
+            <NavLink to="/admin-users" collapsed={collapsed} title={collapsed ? 'Admin Users' : undefined}>
+              <MdVerifiedUser />
+              <span className="label">Admin Users</span>
+            </NavLink>
+          ) : null}
+
+          {isAdmin ? (
             <NavLink to="/telegram-admin" collapsed={collapsed} title={collapsed ? 'Telegram Admin' : undefined}>
               <MdVerifiedUser />
               <span className="label">Telegram Admin</span>

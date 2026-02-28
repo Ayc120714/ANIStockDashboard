@@ -3,6 +3,10 @@ const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010/api';
 const defaultHeaders = {
   'Content-Type': 'application/json'
 };
+const DEVICE_ID_KEY = 'auth_device_id';
+const DEVICE_ID_HEADER = 'X-Device-Id';
+const OBF_RESPONSE_HEADER = 'X-Obf-Response';
+const OBF_SALT = 'ani-obf-key';
 
 const requestInterceptors = [];
 const responseInterceptors = [];
@@ -48,6 +52,51 @@ const buildUrl = (endpoint) => {
   return `${base}${path}`;
 };
 
+const getOrCreateDeviceId = () => {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const generated =
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `dev_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`);
+    localStorage.setItem(DEVICE_ID_KEY, generated);
+    return generated;
+  } catch (_) {
+    return `dev_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+};
+
+const toBase64Bytes = (value) => {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const deriveObfKey = async (token) => {
+  const seed = `${OBF_SALT}:${token || ''}`;
+  const data = new TextEncoder().encode(seed);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return new Uint8Array(digest);
+};
+
+const decodeObfuscatedPayload = async (payload, token) => {
+  if (!payload || payload.alg !== 'xor-b64-v1' || typeof payload.obf !== 'string') {
+    return payload;
+  }
+  const key = await deriveObfKey(token);
+  const bytes = toBase64Bytes(payload.obf);
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) {
+    out[i] = bytes[i] ^ key[i % key.length];
+  }
+  const text = new TextDecoder().decode(out);
+  return JSON.parse(text);
+};
+
 export const apiRequest = async (endpoint, options = {}) => {
   const bearerToken = authTokenGetter ? authTokenGetter() : null;
   const config = await runRequestInterceptors({
@@ -55,6 +104,8 @@ export const apiRequest = async (endpoint, options = {}) => {
     ...options,
     headers: {
       ...defaultHeaders,
+      [DEVICE_ID_HEADER]: getOrCreateDeviceId(),
+      [OBF_RESPONSE_HEADER]: '1',
       ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
       ...(options.headers || {})
     }
@@ -94,7 +145,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   const contentType = interceptedResponse.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    return interceptedResponse.json();
+    const parsed = await interceptedResponse.json();
+    return decodeObfuscatedPayload(parsed, bearerToken);
   }
 
   return interceptedResponse.text();

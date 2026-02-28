@@ -1,19 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import { MdRefresh, MdTrendingUp, MdTrendingDown, MdRemoveRedEye } from 'react-icons/md';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchPriceShockers } from '../api/stocks';
 import { fetchAlerts, fetchRatings } from '../api/advisor';
 import { apiGet } from '../api/apiClient';
+import { fetchTelegramSubscribers } from '../api/telegram';
+import { useAuth } from '../auth/AuthContext';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
 const fmtPct = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`; };
 const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
+const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
+const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
 
 const Card = ({ children, sx, ...props }) => (
   <Box sx={{ bgcolor: '#fff', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', p: 2, ...sx }} {...props}>{children}</Box>
@@ -553,6 +557,9 @@ function LatestRatings({ ratings }) {
 
 // ─── Main Dashboard ─────────────────────────────────────────────────────────
 function DashboardPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [indices, setIndices] = useState(null);
   const [sectors, setSectors] = useState([]);
@@ -562,6 +569,8 @@ function DashboardPage() {
   const [ratings, setRatings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketMode, setMarketMode] = useState('unknown');
+  const [telegramStatusChecked, setTelegramStatusChecked] = useState(false);
+  const [hasApprovedTelegramAccess, setHasApprovedTelegramAccess] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -593,6 +602,38 @@ function DashboardPage() {
     return () => clearInterval(timer);
   }, [loadAll, marketMode]);
 
+  useEffect(() => {
+    if (location.state?.showTelegramBotInfo) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkTelegramStatus = async () => {
+      try {
+        const rows = await fetchTelegramSubscribers({ activeOnly: true, approvedOnly: true });
+        const userId = Number(user?.id);
+        const mobile = normalizeMobile(user?.mobile);
+        const approved = (rows || []).some((row) => {
+          if (!row?.is_approved || !row?.is_identity_verified) return false;
+          const sameUserId = Number.isFinite(userId) && Number(row?.linked_user_id) === userId;
+          const sameMobile = Boolean(mobile) && normalizeMobile(row?.linked_mobile) === mobile;
+          return sameUserId || sameMobile;
+        });
+        if (mounted) setHasApprovedTelegramAccess(approved);
+      } catch (_) {
+        if (mounted) setHasApprovedTelegramAccess(false);
+      } finally {
+        if (mounted) setTelegramStatusChecked(true);
+      }
+    };
+    checkTelegramStatus();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, user?.mobile]);
+
   return (
     <Box sx={{ width: '100%', px: { xs: 1, sm: 2, md: 3 }, py: { xs: 1, md: 2 }, boxSizing: 'border-box' }}>
       {/* Header */}
@@ -610,6 +651,33 @@ function DashboardPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
       ) : (
         <>
+          {location.state?.showTelegramBotInfo ? (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Registration completed. To receive Telegram updates, open{' '}
+              <a href="https://t.me/ani_120714_bot" target="_blank" rel="noreferrer">t.me/ani_120714_bot</a>{' '}
+              and send <b>/start</b>.
+            </Alert>
+          ) : null}
+          {!isAdmin && telegramStatusChecked && !hasApprovedTelegramAccess ? (
+            <Alert
+              severity="info"
+              sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}
+              action={
+                <Button
+                  size="small"
+                  variant="contained"
+                  href={TELEGRAM_BOT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                >
+                  Enable Telegram Alerts
+                </Button>
+              }
+            >
+              Get live approved alerts in Telegram by opening the bot and sending <b>/start &lt;your_registered_mobile&gt;</b>.
+            </Alert>
+          ) : null}
           {/* Market Pulse Banner */}
           <Box sx={{ mb: 2 }}>
             <MarketPulse indices={indices} />

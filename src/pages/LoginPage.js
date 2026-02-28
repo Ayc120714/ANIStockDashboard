@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { adminPasswordlessLogin, loginStart } from '../api/auth';
+import { adminPasswordlessLogin, loginStart, loginWithEmailOtpStart } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 
 const DEFAULT_ADMIN_EMAIL = 'gvc1990@gmail.com';
@@ -19,6 +19,7 @@ function LoginPage() {
     () => email.trim().length > 0 && password.length >= 8,
     [email, password]
   );
+  const canEmailOtp = useMemo(() => email.trim().length > 4, [email]);
   const canPasswordlessAdminLogin = useMemo(
     () => email.trim().toLowerCase() === DEFAULT_ADMIN_EMAIL,
     [email]
@@ -32,10 +33,16 @@ function LoginPage() {
     setError('');
     try {
       const res = await loginStart(email.trim(), password);
+      if (res?.mfa_required === false && res?.access_token && res?.refresh_token) {
+        persistAuth(res.access_token, res.refresh_token, res?.user || null);
+        navigate(location.state?.from?.pathname || '/', { replace: true });
+        return;
+      }
       navigate('/verify-otp', {
         state: {
           flowId: res?.flow_id,
-          purpose: 'login',
+          purpose: res?.purpose || 'login',
+          requires: res?.requires || ['email'],
           email: email.trim(),
           from: location.state?.from?.pathname || '/',
         },
@@ -57,6 +64,28 @@ function LoginPage() {
       navigate(location.state?.from?.pathname || '/', { replace: true });
     } catch (err) {
       setError(err?.message || 'Admin passwordless login failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onEmailOtpLogin = async () => {
+    if (!canEmailOtp) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await loginWithEmailOtpStart(email.trim());
+      navigate('/verify-otp', {
+        state: {
+          flowId: res?.flow_id,
+          purpose: 'login_email',
+          requires: res?.requires || ['email'],
+          email: email.trim(),
+          from: location.state?.from?.pathname || '/',
+        },
+      });
+    } catch (err) {
+      setError(err?.message || 'Unable to send email OTP.');
     } finally {
       setLoading(false);
     }
@@ -96,6 +125,9 @@ function LoginPage() {
                 {loading ? 'Sending OTP...' : 'Continue with OTP'}
               </Button>
             ) : null}
+            <Button variant="outlined" onClick={onEmailOtpLogin} disabled={!canEmailOtp || loading}>
+              Login with Email OTP
+            </Button>
             {canPasswordlessAdminLogin ? (
               <Button variant="outlined" color="warning" onClick={onAdminPasswordlessLogin} disabled={loading}>
                 Admin Quick Login (No Password / OTP)

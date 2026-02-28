@@ -1,0 +1,272 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  FormControlLabel,
+  Switch,
+  TextField,
+} from '@mui/material';
+import { addAdminUser, blockAdminUser, deleteAdminUser, fetchAdminUsers } from '../api/auth';
+import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.styles';
+
+const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
+
+function AdminUsersPage() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [includeInactive, setIncludeInactive] = useState(true);
+  const [search, setSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetchAdminUsers(includeInactive);
+      setRows(Array.isArray(res?.data) ? res.data : []);
+    } catch (err) {
+      setError(err?.message || 'Failed to load users.');
+    } finally {
+      setLoading(false);
+    }
+  }, [includeInactive]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  const filteredRows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((r) => {
+      return (
+        String(r.id || '').includes(term) ||
+        String(r.email || '').toLowerCase().includes(term) ||
+        String(r.mobile || '').toLowerCase().includes(term) ||
+        String(r.full_name || '').toLowerCase().includes(term)
+      );
+    });
+  }, [rows, search]);
+
+  const canCreate = useMemo(() => {
+    return email.trim().length > 5 && mobile.trim().length >= 10 && password.length >= 8;
+  }, [email, mobile, password]);
+
+  const onCreate = async () => {
+    if (!canCreate) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await addAdminUser({
+        email: email.trim(),
+        mobile: mobile.trim(),
+        full_name: fullName.trim() || null,
+        password,
+      });
+      setMessage(`User ${res?.action || 'saved'} successfully.`);
+      setEmail('');
+      setMobile('');
+      setFullName('');
+      setPassword('');
+      await loadUsers();
+    } catch (err) {
+      setError(err?.message || 'Unable to add user.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    const userId = deleteTarget?.id;
+    if (!userId) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await deleteAdminUser(userId);
+      setMessage(`User ${deleteTarget?.email || userId} deleted permanently.`);
+      setDeleteTarget(null);
+      await loadUsers();
+    } catch (err) {
+      setError(err?.message || 'Unable to delete user.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <TableSection>
+      <TableTitle>Admin User Management</TableTitle>
+
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}
+
+      <Box sx={{ border: '1px solid #e5e7eb', borderRadius: 2, p: 2, mb: 2, bgcolor: '#fff' }}>
+        <Box sx={{ fontWeight: 700, mb: 1 }}>Add User</Box>
+        <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <TextField size="small" label="Email (User ID)" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <TextField size="small" label="Mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} />
+          <TextField size="small" label="Full Name (Optional)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          <TextField size="small" type="password" label="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Box>
+        <Box sx={{ mt: 1.5, display: 'flex', gap: 1 }}>
+          <Button variant="contained" onClick={onCreate} disabled={!canCreate || busy}>Add User</Button>
+          <Button variant="outlined" onClick={loadUsers} disabled={busy}>Refresh</Button>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1, flexWrap: 'wrap' }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+            />
+          }
+          label="Show inactive (old IDs)"
+        />
+        <TextField
+          size="small"
+          placeholder="Search id/email/mobile/name"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: 240 }}
+        />
+      </Box>
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <th style={compact}>ID</th>
+                <th style={compact}>Email (User ID)</th>
+                <th style={compact}>Mobile</th>
+                <th style={compact}>Name</th>
+                <th style={compact}>Status</th>
+                <th style={compact}>Created</th>
+                <th style={compact}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((row) => (
+                <tr key={row.id}>
+                  <td style={compact}>{row.id}</td>
+                  <td style={compact}>{row.email}</td>
+                  <td style={compact}>{row.mobile}</td>
+                  <td style={compact}>{row.full_name || '—'}</td>
+                  <td style={{ ...compact, fontWeight: 700, color: row.is_active ? '#2e7d32' : '#c62828' }}>
+                    {row.is_active ? 'Active' : 'Blocked'}
+                  </td>
+                  <td style={compact}>{row.created_at || '—'}</td>
+                  <td style={compact}>
+                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                      {row.is_active ? (
+                        <Button
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            setError('');
+                            setMessage('');
+                            try {
+                              await blockAdminUser(row.id, true);
+                              setMessage(`User ${row.email} blocked successfully.`);
+                              await loadUsers();
+                            } catch (err) {
+                              setError(err?.message || 'Unable to block user.');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Block
+                        </Button>
+                      ) : (
+                        <Button
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            setError('');
+                            setMessage('');
+                            try {
+                              await blockAdminUser(row.id, false);
+                              setMessage(`User ${row.email} unblocked successfully.`);
+                              await loadUsers();
+                            } catch (err) {
+                              setError(err?.message || 'Unable to unblock user.');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Unblock
+                        </Button>
+                      )}
+                      <Button
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                        disabled={busy}
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        Delete
+                      </Button>
+                    </Box>
+                  </td>
+                </tr>
+              ))}
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+                    No users found.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      )}
+
+      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>Delete User</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Delete user <strong>{deleteTarget?.email || ''}</strong> permanently from DB?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={busy}>Cancel</Button>
+          <Button onClick={onDelete} color="error" variant="contained" disabled={busy}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+    </TableSection>
+  );
+}
+
+export default AdminUsersPage;
