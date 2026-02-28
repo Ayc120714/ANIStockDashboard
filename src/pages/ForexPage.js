@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { MdRefresh, MdCurrencyExchange } from 'react-icons/md';
 import {
@@ -112,6 +112,7 @@ export default function ForexPage() {
   const [history, setHistory] = useState([]);
   const [futures, setFutures] = useState([]);
   const [sparkData, setSparkData] = useState({});
+  const [sort, setSort] = useState({ col: null, dir: 'desc' });
 
   const loadRates = useCallback(async () => {
     setLoading(true);
@@ -160,6 +161,20 @@ export default function ForexPage() {
   useEffect(() => { if (tab === 2) loadFutures(); }, [tab, loadFutures]);
   useEffect(() => { if (tab === 3) loadSparklines(); }, [tab, loadSparklines]);
 
+  const toggleSort = (col) => {
+    setSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' });
+  };
+  const sortIcon = (col) => sort.col === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const sortedRates = useMemo(() => {
+    if (!sort.col) return rates;
+    return [...rates].sort((a, b) => {
+      const va = typeof a[sort.col] === 'string' ? a[sort.col] : (a[sort.col] ?? 0);
+      const vb = typeof b[sort.col] === 'string' ? b[sort.col] : (b[sort.col] ?? 0);
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [rates, sort]);
+
   const INR_PAIRS = rates.filter(r => r.quote === 'INR');
 
   return (
@@ -191,10 +206,19 @@ export default function ForexPage() {
       {tab === 0 && (
         <Table>
           <thead>
-            <tr><th>Pair</th><th>Rate</th><th>Change</th><th>Change %</th><th>Bid</th><th>Ask</th><th>High</th><th>Low</th></tr>
+            <tr>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('pair')}>Pair{sortIcon('pair')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('rate')}>Rate{sortIcon('rate')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('change')}>Change{sortIcon('change')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('changePct')}>Change %{sortIcon('changePct')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('bid')}>Bid{sortIcon('bid')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('ask')}>Ask{sortIcon('ask')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('high')}>High{sortIcon('high')}</th>
+              <th style={{cursor:'pointer'}} onClick={() => toggleSort('low')}>Low{sortIcon('low')}</th>
+            </tr>
           </thead>
           <tbody>
-            {rates.map(r => (
+            {sortedRates.map(r => (
               <tr key={r.pair} style={{ cursor: 'pointer' }} onClick={() => setSelectedPair(r.pair)}>
                 <td>{r.pair}</td>
                 <td style={{ fontWeight: 600 }}>{fmt(r.rate)}</td>

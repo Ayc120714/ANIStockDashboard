@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:8001/api';
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010/api';
 
 const defaultHeaders = {
   'Content-Type': 'application/json'
@@ -6,6 +6,8 @@ const defaultHeaders = {
 
 const requestInterceptors = [];
 const responseInterceptors = [];
+let authTokenGetter = null;
+let unauthorizedHandler = null;
 
 export const addRequestInterceptor = (interceptor) => {
   requestInterceptors.push(interceptor);
@@ -13,6 +15,11 @@ export const addRequestInterceptor = (interceptor) => {
 
 export const addResponseInterceptor = (interceptor) => {
   responseInterceptors.push(interceptor);
+};
+
+export const configureAuthHandlers = ({ getAccessToken, onUnauthorized } = {}) => {
+  authTokenGetter = typeof getAccessToken === 'function' ? getAccessToken : null;
+  unauthorizedHandler = typeof onUnauthorized === 'function' ? onUnauthorized : null;
 };
 
 const runRequestInterceptors = async (config) => {
@@ -42,21 +49,46 @@ const buildUrl = (endpoint) => {
 };
 
 export const apiRequest = async (endpoint, options = {}) => {
+  const bearerToken = authTokenGetter ? authTokenGetter() : null;
   const config = await runRequestInterceptors({
     method: 'GET',
     ...options,
     headers: {
       ...defaultHeaders,
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
       ...(options.headers || {})
     }
   });
 
-  const response = await fetch(buildUrl(endpoint), config);
+  let response;
+  try {
+    response = await fetch(buildUrl(endpoint), config);
+  } catch (_) {
+    throw new Error('Unable to reach server. Please check backend and network.');
+  }
   const interceptedResponse = await runResponseInterceptors(response);
 
+  if (interceptedResponse.status === 401 && unauthorizedHandler) {
+    unauthorizedHandler(interceptedResponse);
+  }
+
   if (!interceptedResponse.ok) {
-    const errorText = await interceptedResponse.text().catch(() => '');
-    const errorMessage = errorText || `Request failed: ${interceptedResponse.status}`;
+    const contentType = interceptedResponse.headers.get('content-type') || '';
+    let errorMessage = `Request failed: ${interceptedResponse.status}`;
+    if (contentType.includes('application/json')) {
+      const data = await interceptedResponse.json().catch(() => null);
+      const detail = data?.detail;
+      if (typeof detail === 'string' && detail) {
+        errorMessage = detail;
+      } else if (detail && typeof detail === 'object') {
+        errorMessage = detail.message || detail.reason_code || JSON.stringify(detail);
+      } else if (typeof data?.message === 'string' && data.message) {
+        errorMessage = data.message;
+      }
+    } else {
+      const errorText = await interceptedResponse.text().catch(() => '');
+      if (errorText) errorMessage = errorText;
+    }
     throw new Error(errorMessage);
   }
 

@@ -19,6 +19,15 @@ export const fetchLatestSignals = async (limit = 50) => {
   return data?.data ?? [];
 };
 
+export const fetchLatestSignalsPayload = async (limit = 50) => {
+  return apiGet(`/advisor/signals/latest?limit=${limit}`);
+};
+
+export const fetchMonthlyMacdSetup = async (limit = 200) => {
+  const data = await apiGet(`/advisor/monthly-macd-setup?limit=${limit}`);
+  return data?.data ?? [];
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];

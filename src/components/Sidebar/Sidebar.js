@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser } from 'react-icons/md';
+import { useAuth } from '../../auth/AuthContext';
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const { isAdmin } = useAuth();
 
   return (
     <SidebarContainer collapsed={collapsed}>
@@ -85,6 +87,13 @@ function Sidebar() {
             <MdEventNote />
             <span className="label">Events</span>
           </NavLink>
+
+          {isAdmin ? (
+            <NavLink to="/telegram-admin" collapsed={collapsed} title={collapsed ? 'Telegram Admin' : undefined}>
+              <MdVerifiedUser />
+              <span className="label">Telegram Admin</span>
+            </NavLink>
+          ) : null}
         </Section>
       </nav>
     </SidebarContainer>

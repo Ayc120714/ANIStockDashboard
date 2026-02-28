@@ -4,8 +4,9 @@ import {
   AreaChart, Area, ResponsiveContainer,
 } from 'recharts';
 import { MdRefresh } from 'react-icons/md';
+import { SiTradingview } from 'react-icons/si';
 import {
-  fetchOptionChain, fetchOptionsSummary, fetchTopMovers,
+  fetchFnOSymbols, fetchOptionChain, fetchOptionsSummary, fetchTopMovers,
   fetchExpiryDates, fetchFutureChain, calculatePayoff,
 } from '../api/fno';
 import {
@@ -47,32 +48,55 @@ const STRATEGIES = {
 const fmt = (n, dec = 0) => n != null ? Number(n).toLocaleString('en-IN', { maximumFractionDigits: dec }) : '—';
 const fmtPct = (n) => n != null ? `${n >= 0 ? '+' : ''}${Number(n).toFixed(2)}%` : '—';
 
+const tvOptionUrl = (sym, strike, type, expiry) => {
+  if (!expiry) return '#';
+  const d = new Date(expiry + 'T00:00:00');
+  const yy = String(d.getFullYear()).slice(2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const optChar = type === 'CE' ? 'C' : 'P';
+  const ticker = `${sym}${yy}${mm}${dd}${optChar}${strike}`;
+  return `https://www.tradingview.com/chart/?symbol=NSE%3A${ticker}`;
+};
+
+
 export default function FnOPage() {
   const [tab, setTab] = useState(0);
   const [symbol, setSymbol] = useState('NIFTY');
   const [expiry, setExpiry] = useState('');
   const [expiryDates, setExpiryDates] = useState([]);
+  const [fnoSymbols, setFnoSymbols] = useState([]);
+  const [fnoDetails, setFnoDetails] = useState([]);
   const [chainData, setChainData] = useState(null);
   const [summary, setSummary] = useState(null);
   const [movers, setMovers] = useState([]);
   const [moversFilter, setMoversFilter] = useState('volume');
   const [loading, setLoading] = useState(false);
+  const [moverSort, setMoverSort] = useState({ col: null, dir: 'desc' });
 
-  // Strategy state
   const [direction, setDirection] = useState('Bullish');
   const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [legs, setLegs] = useState([]);
   const [payoffResult, setPayoffResult] = useState(null);
   const [computingPayoff, setComputingPayoff] = useState(false);
 
+  useEffect(() => {
+    fetchFnOSymbols()
+      .then(resp => {
+        setFnoSymbols(resp.symbols || []);
+        setFnoDetails(resp.details || []);
+      })
+      .catch(() => setFnoSymbols(['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']));
+  }, []);
+
   const loadExpiries = useCallback(async (sym) => {
     try {
       const resp = await fetchExpiryDates(sym);
       const dates = resp.expiryDates || [];
       setExpiryDates(dates);
-      if (dates.length && !dates.includes(expiry)) setExpiry(dates[0]);
+      setExpiry(prev => (dates.length && !dates.includes(prev)) ? dates[0] : prev || dates[0] || '');
     } catch { setExpiryDates([]); }
-  }, [expiry]);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -98,6 +122,14 @@ export default function FnOPage() {
   useEffect(() => { loadExpiries(symbol); }, [symbol, loadExpiries]);
   useEffect(() => { if (expiry) loadData(); }, [expiry, loadData]);
   useEffect(() => { if (tab === 3) loadMovers(); }, [tab, loadMovers]);
+  useEffect(() => {
+    if (!expiry) return undefined;
+    const id = setInterval(() => {
+      loadData();
+      if (tab === 3) loadMovers();
+    }, 300000); // refresh every 5 minutes
+    return () => clearInterval(id);
+  }, [expiry, tab, loadData, loadMovers]);
 
   const chain = chainData?.chain || [];
   const spot = chainData?.spotPrice || summary?.spotPrice || 0;
@@ -109,6 +141,15 @@ export default function FnOPage() {
   }, [chain, spot]);
 
   const strikes = useMemo(() => chain.map(r => r.strikePrice), [chain]);
+
+  const visibleChain = useMemo(() => {
+    if (!chain.length || !atmStrike) return chain;
+    const atmIdx = chain.findIndex(r => r.strikePrice === atmStrike);
+    if (atmIdx < 0) return chain;
+    const lo = Math.max(0, atmIdx - 15);
+    const hi = Math.min(chain.length, atmIdx + 16);
+    return chain.slice(lo, hi);
+  }, [chain, atmStrike]);
 
   const applyStrategy = useCallback((strat) => {
     setSelectedStrategy(strat.name);
@@ -267,41 +308,86 @@ export default function FnOPage() {
           <ExpiryPill key={d} $active={d === expiry} onClick={() => setExpiry(d)}>{d}</ExpiryPill>
         ))}
       </ExpiryBar>
+      <div style={{ fontSize: 11, color: '#8899a6', marginBottom: 8 }}>
+        Showing 15 strikes above & below ATM ({fmt(atmStrike)}) · Spot: {fmt(spot, 2)} · Lot: {chainData?.lotSize || '—'}
+      </div>
       <div style={{ overflowX: 'auto' }}>
         <ChainTable>
           <thead>
             <tr>
-              <th>CE OI</th><th>CE Chg</th><th>CE Vol</th><th>CE IV</th><th>CE LTP</th>
-              <th style={{ textAlign: 'center' }}>Strike</th>
-              <th>PE LTP</th><th>PE IV</th><th>PE Vol</th><th>PE Chg</th><th>PE OI</th>
+              <th colSpan={6} style={{ textAlign: 'center', borderRight: '2px solid #2a5280', background: '#1a3c5e', letterSpacing: 0.5 }}>
+                CALLS (CE)
+              </th>
+              <th style={{ textAlign: 'center', background: '#0f2b45' }}>STRIKE</th>
+              <th colSpan={6} style={{ textAlign: 'center', borderLeft: '2px solid #2a5280', background: '#1a3c5e', letterSpacing: 0.5 }}>
+                PUTS (PE)
+              </th>
+            </tr>
+            <tr>
+              <th>OI</th><th>OI Chg</th><th>Vol</th><th>IV</th><th>LTP</th><th>Chart</th>
+              <th style={{ textAlign: 'center', background: '#0f2b45' }}></th>
+              <th>Chart</th><th>LTP</th><th>IV</th><th>Vol</th><th>OI Chg</th><th>OI</th>
             </tr>
           </thead>
           <tbody>
-            {chain.map(row => {
+            {visibleChain.map(row => {
               const isATM = row.strikePrice === atmStrike;
               const ceITM = row.strikePrice < spot;
               const peITM = row.strikePrice > spot;
+              const ceUrl = tvOptionUrl(symbol, row.strikePrice, 'CE', expiry);
+              const peUrl = tvOptionUrl(symbol, row.strikePrice, 'PE', expiry);
               return (
-                <tr key={row.strikePrice} style={isATM ? { background: '#e8edf2', fontWeight: 600 } : undefined}>
+                <tr key={row.strikePrice} style={isATM ? { background: '#e3eaf2', fontWeight: 600, borderTop: '2px solid #1a3c5e', borderBottom: '2px solid #1a3c5e' } : undefined}>
                   <CeCell $itm={ceITM}>{fmt(row.ce_oi)}</CeCell>
-                  <CeCell $itm={ceITM}>{fmt(row.ce_oi_change)}</CeCell>
+                  <CeCell $itm={ceITM} style={{ color: (row.ce_oi_change || 0) >= 0 ? '#2e7d32' : '#c62828' }}>{fmt(row.ce_oi_change)}</CeCell>
                   <CeCell $itm={ceITM}>{fmt(row.ce_volume)}</CeCell>
                   <CeCell $itm={ceITM}>{row.ce_iv?.toFixed(1) || '—'}</CeCell>
-                  <CeCell $itm={ceITM} style={{ fontWeight: 600 }}>{fmt(row.ce_ltp, 2)}</CeCell>
-                  <StrikeCell $atm={isATM}>{fmt(row.strikePrice)}</StrikeCell>
-                  <PeCell $itm={peITM} style={{ fontWeight: 600 }}>{fmt(row.pe_ltp, 2)}</PeCell>
+                  <CeCell $itm={ceITM} style={{ fontWeight: 700 }}>{fmt(row.ce_ltp, 2)}</CeCell>
+                  <CeCell $itm={ceITM} style={{ textAlign: 'center', padding: '2px 4px' }}>
+                    <a href={ceUrl} target="_blank" rel="noopener noreferrer" title={`${symbol} ${row.strikePrice} CE`}
+                      style={{ color: '#1a3c5e', opacity: 0.65 }}>
+                      <SiTradingview size={12} />
+                    </a>
+                  </CeCell>
+                  <StrikeCell $atm={isATM} style={{ borderLeft: '2px solid #d0d7de', borderRight: '2px solid #d0d7de', fontSize: 13 }}>
+                    {fmt(row.strikePrice)}
+                  </StrikeCell>
+                  <PeCell $itm={peITM} style={{ textAlign: 'center', padding: '2px 4px' }}>
+                    <a href={peUrl} target="_blank" rel="noopener noreferrer" title={`${symbol} ${row.strikePrice} PE`}
+                      style={{ color: '#1a3c5e', opacity: 0.65 }}>
+                      <SiTradingview size={12} />
+                    </a>
+                  </PeCell>
+                  <PeCell $itm={peITM} style={{ fontWeight: 700 }}>{fmt(row.pe_ltp, 2)}</PeCell>
                   <PeCell $itm={peITM}>{row.pe_iv?.toFixed(1) || '—'}</PeCell>
                   <PeCell $itm={peITM}>{fmt(row.pe_volume)}</PeCell>
-                  <PeCell $itm={peITM}>{fmt(row.pe_oi_change)}</PeCell>
+                  <PeCell $itm={peITM} style={{ color: (row.pe_oi_change || 0) >= 0 ? '#2e7d32' : '#c62828' }}>{fmt(row.pe_oi_change)}</PeCell>
                   <PeCell $itm={peITM}>{fmt(row.pe_oi)}</PeCell>
                 </tr>
               );
             })}
+            {!visibleChain.length && (
+              <tr><td colSpan={13} style={{ textAlign: 'center', padding: 20, color: '#8899a6' }}>No chain data available</td></tr>
+            )}
           </tbody>
         </ChainTable>
       </div>
     </>
   );
+
+  const toggleMoverSort = (col) => {
+    setMoverSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' });
+  };
+  const sortedMovers = useMemo(() => {
+    if (!moverSort.col) return movers;
+    const sorted = [...movers].sort((a, b) => {
+      const va = a[moverSort.col] ?? 0, vb = b[moverSort.col] ?? 0;
+      return moverSort.dir === 'asc' ? va - vb : vb - va;
+    });
+    return sorted;
+  }, [movers, moverSort]);
+
+  const moverSortIcon = (col) => moverSort.col === col ? (moverSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const renderMoversTab = () => (
     <>
@@ -313,10 +399,18 @@ export default function FnOPage() {
       </ControlRow>
       <ChainTable>
         <thead>
-          <tr><th style={{textAlign:'left'}}>Contract</th><th>LTP</th><th>Change %</th><th>Volume</th><th>OI</th><th>OI Chg %</th><th>IV</th></tr>
+          <tr>
+            <th style={{textAlign:'left'}}>Contract</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('ltp')}>LTP{moverSortIcon('ltp')}</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('changePct')}>Change %{moverSortIcon('changePct')}</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('volume')}>Volume{moverSortIcon('volume')}</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('oi')}>OI{moverSortIcon('oi')}</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('oiChangePct')}>OI Chg %{moverSortIcon('oiChangePct')}</th>
+            <th style={{cursor:'pointer'}} onClick={() => toggleMoverSort('iv')}>IV{moverSortIcon('iv')}</th>
+          </tr>
         </thead>
         <tbody>
-          {movers.map((m, i) => (
+          {sortedMovers.map((m, i) => (
             <MoverRow key={i}>
               <td style={{ textAlign: 'left', fontWeight: 600 }}>{m.contract}</td>
               <td>{fmt(m.ltp, 2)}</td>
@@ -327,7 +421,7 @@ export default function FnOPage() {
               <td>{m.iv?.toFixed(1) || '—'}</td>
             </MoverRow>
           ))}
-          {!movers.length && <tr><td colSpan={7}><EmptyState>No movers data</EmptyState></td></tr>}
+          {!sortedMovers.length && <tr><td colSpan={7}><EmptyState>No movers data</EmptyState></td></tr>}
         </tbody>
       </ChainTable>
     </>
@@ -430,11 +524,18 @@ export default function FnOPage() {
           <select
             value={symbol}
             onChange={e => setSymbol(e.target.value)}
-            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #d0d7de', borderRadius: 6, background: '#fff' }}
+            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #d0d7de', borderRadius: 6, background: '#fff', maxWidth: 340 }}
           >
-            {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','RELIANCE','TCS','INFY','HDFCBANK','ICICIBANK','SBIN','BHARTIARTL','ITC','TATAMOTORS','BAJFINANCE','LT'].map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {fnoDetails.length > 0
+              ? fnoDetails.map(d => (
+                  <option key={d.symbol} value={d.symbol}>
+                    {d.symbol} — {d.name} (Lot: {d.lotSize})
+                  </option>
+                ))
+              : fnoSymbols.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))
+            }
           </select>
           <RefreshBtn onClick={loadData} disabled={loading}>
             <MdRefresh size={14} className={loading ? 'spin' : ''} /> Refresh

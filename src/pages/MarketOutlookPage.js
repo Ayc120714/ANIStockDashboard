@@ -43,6 +43,8 @@ function MarketOutlookPage() {
   const [tableData, setTableData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [fiiHoverIdx, setFiiHoverIdx] = useState(null);
+  const [diiHoverIdx, setDiiHoverIdx] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -148,34 +150,54 @@ function MarketOutlookPage() {
   };
 
   const fiiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [] };
+    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
     const latest = fiiDiiData.daily[0];
     const mtdNet = fiiDiiData.mtd?.fii?.net ?? 0;
-    const bars = [...fiiDiiData.daily].reverse().map(d => d.fii.net);
+    const series = [...fiiDiiData.daily].reverse().map(d => ({ date: d.date, net: d.fii.net }));
+    const bars = series.map(d => d.net);
     return {
       value: latest ? fmtCr(latest.fii.net) : '—',
       latestNet: latest?.fii.net ?? 0,
       latestDate: latest?.date ?? '',
       mtdNet,
       bars,
+      series,
     };
   }, [fiiDiiData]);
 
   const diiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [] };
+    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
     const latest = fiiDiiData.daily[0];
     const mtdNet = fiiDiiData.mtd?.dii?.net ?? 0;
-    const bars = [...fiiDiiData.daily].reverse().map(d => d.dii.net);
+    const series = [...fiiDiiData.daily].reverse().map(d => ({ date: d.date, net: d.dii.net }));
+    const bars = series.map(d => d.net);
     return {
       value: latest ? fmtCr(latest.dii.net) : '—',
       latestNet: latest?.dii.net ?? 0,
       latestDate: latest?.date ?? '',
       mtdNet,
       bars,
+      series,
     };
   }, [fiiDiiData]);
 
-  const buildBarChart = (values, width = 100, height = 60) => {
+  const fiiShownPoint = useMemo(() => {
+    if (!fiiCard.series?.length) return { net: fiiCard.latestNet, date: fiiCard.latestDate };
+    if (fiiHoverIdx != null && fiiCard.series[fiiHoverIdx]) {
+      return fiiCard.series[fiiHoverIdx];
+    }
+    return fiiCard.series[fiiCard.series.length - 1];
+  }, [fiiCard, fiiHoverIdx]);
+
+  const diiShownPoint = useMemo(() => {
+    if (!diiCard.series?.length) return { net: diiCard.latestNet, date: diiCard.latestDate };
+    if (diiHoverIdx != null && diiCard.series[diiHoverIdx]) {
+      return diiCard.series[diiHoverIdx];
+    }
+    return diiCard.series[diiCard.series.length - 1];
+  }, [diiCard, diiHoverIdx]);
+
+  const buildBarChart = (values, activeIndex = null, width = 100, height = 60) => {
     if (!values || values.length < 2) return null;
     const maxAbs = Math.max(...values.map(Math.abs), 1);
     const gap = 1;
@@ -188,7 +210,8 @@ function MarketOutlookPage() {
       const h = (Math.abs(val) / maxAbs) * maxH;
       const y = val >= 0 ? midY - h : midY;
       const fill = val >= 0 ? '#28a745' : '#dc3545';
-      return { x, y, w: barW, h, fill };
+      const isActive = activeIndex === i;
+      return { x, y, w: barW, h, fill, isActive, i };
     });
 
     return { rects, midY, width, height };
@@ -243,16 +266,16 @@ function MarketOutlookPage() {
       <CashCardContainer>
         {/* FII Cash - Left Column */}
         {(() => {
-          const bars = buildBarChart(fiiCard.bars);
+          const bars = buildBarChart(fiiCard.bars, fiiHoverIdx);
           return (
             <CashCard>
               <CashTitle>FII Cash</CashTitle>
               <CashSubtitle>Foreign Institutional Investors</CashSubtitle>
               <CashValue style={{ color: fiiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
-                {fiiCard.value}
+                {fmtCr(fiiShownPoint.net)}
               </CashValue>
-              {fiiCard.latestDate && (
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{fiiCard.latestDate}</div>
+              {fiiShownPoint.date && (
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{fiiShownPoint.date}</div>
               )}
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
@@ -262,10 +285,27 @@ function MarketOutlookPage() {
               </div>
               <BarChart>
                 {bars ? (
-                  <svg viewBox={`0 0 ${bars.width} ${bars.height}`} preserveAspectRatio="xMidYMid meet">
+                  <svg
+                    viewBox={`0 0 ${bars.width} ${bars.height}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    onMouseLeave={() => setFiiHoverIdx(null)}
+                  >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
                     {bars.rects.map((r, i) => (
-                      <rect key={i} x={r.x} y={r.y} width={r.w} height={Math.max(r.h, 0.5)} fill={r.fill} rx="1" />
+                      <rect
+                        key={i}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={Math.max(r.h, 0.5)}
+                        fill={r.fill}
+                        rx="1"
+                        opacity={r.isActive ? 1 : 0.9}
+                        stroke={r.isActive ? '#1a3c5e' : 'none'}
+                        strokeWidth={r.isActive ? 0.8 : 0}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setFiiHoverIdx(r.i)}
+                      />
                     ))}
                   </svg>
                 ) : (
@@ -281,16 +321,16 @@ function MarketOutlookPage() {
 
         {/* DII Cash - Right Column */}
         {(() => {
-          const bars = buildBarChart(diiCard.bars);
+          const bars = buildBarChart(diiCard.bars, diiHoverIdx);
           return (
             <CashCard>
               <CashTitle>DII Cash</CashTitle>
               <CashSubtitle>Domestic Institutional Investors</CashSubtitle>
               <CashValue style={{ color: diiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
-                {diiCard.value}
+                {fmtCr(diiShownPoint.net)}
               </CashValue>
-              {diiCard.latestDate && (
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{diiCard.latestDate}</div>
+              {diiShownPoint.date && (
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{diiShownPoint.date}</div>
               )}
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
@@ -300,10 +340,27 @@ function MarketOutlookPage() {
               </div>
               <BarChart>
                 {bars ? (
-                  <svg viewBox={`0 0 ${bars.width} ${bars.height}`} preserveAspectRatio="xMidYMid meet">
+                  <svg
+                    viewBox={`0 0 ${bars.width} ${bars.height}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    onMouseLeave={() => setDiiHoverIdx(null)}
+                  >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
                     {bars.rects.map((r, i) => (
-                      <rect key={i} x={r.x} y={r.y} width={r.w} height={Math.max(r.h, 0.5)} fill={r.fill} rx="1" />
+                      <rect
+                        key={i}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={Math.max(r.h, 0.5)}
+                        fill={r.fill}
+                        rx="1"
+                        opacity={r.isActive ? 1 : 0.9}
+                        stroke={r.isActive ? '#1a3c5e' : 'none'}
+                        strokeWidth={r.isActive ? 0.8 : 0}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setDiiHoverIdx(r.i)}
+                      />
                     ))}
                   </svg>
                 ) : (

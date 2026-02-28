@@ -9,6 +9,43 @@ const gradeColor = { A: '#1b5e20', B: '#2e7d32', C: '#f57f17', D: '#c62828' };
 const gradeBg = { A: '#e8f5e9', B: '#f1f8e9', C: '#fff8e1', D: '#ffebee' };
 const compact = { fontSize: 11, padding: '4px 5px', whiteSpace: 'nowrap' };
 
+function normalizePickTargets(row, isBullish) {
+  const entry = Number(row?.entry_price);
+  const sl = Number(row?.stop_loss);
+  let t1 = Number(row?.target_1);
+  let t2 = Number(row?.target_2);
+  if (!Number.isFinite(entry) || !Number.isFinite(sl)) return row;
+  if (!Number.isFinite(t1)) return row;
+  if (!Number.isFinite(t2)) t2 = t1;
+  const risk = Math.abs(entry - sl);
+  const minGap = Math.max(risk * 1.5, entry * 0.02);
+  if (isBullish && t2 <= t1) t2 = t1 + minGap;
+  if (!isBullish && t2 >= t1) t2 = t1 - minGap;
+  return { ...row, target_1: t1, target_2: t2 };
+}
+
+function computeRRTargets(row, isBullish) {
+  const entry = Number(row?.entry_price);
+  const sl = Number(row?.stop_loss);
+  if (!Number.isFinite(entry) || !Number.isFinite(sl) || entry <= 0) {
+    return { risk: null, t4r: null, t6r: null, t10r: null, t4r_pct: null, t6r_pct: null, t10r_pct: null };
+  }
+  const risk = Math.abs(entry - sl);
+  if (!(risk > 0)) {
+    return { risk: null, t4r: null, t6r: null, t10r: null, t4r_pct: null, t6r_pct: null, t10r_pct: null };
+  }
+  const sign = isBullish ? 1 : -1;
+  return {
+    risk,
+    t4r: entry + sign * 4 * risk,
+    t6r: entry + sign * 6 * risk,
+    t10r: entry + sign * 10 * risk,
+    t4r_pct: sign * 4 * risk / entry * 100,
+    t6r_pct: sign * 6 * risk / entry * 100,
+    t10r_pct: sign * 10 * risk / entry * 100,
+  };
+}
+
 function AiPicksPage() {
   const [data, setData] = useState({ bullish: [], bearish: [], fno_bullish: [], fno_bearish: [], pick_date: null });
   const [loading, setLoading] = useState(true);
@@ -124,6 +161,8 @@ function AiPicksPage() {
                 </tr>
               )}
               {rows.map((r, i) => {
+                const pick = normalizePickTargets(r, isBullish);
+                const rr = computeRRTargets(pick, isBullish);
                 const shortKey = `${r.symbol}_short_term`;
                 const longKey = `${r.symbol}_long_term`;
                 return (
@@ -154,19 +193,19 @@ function AiPicksPage() {
                     <td style={{ ...compact, color: (r.sl_pct && r.sl_pct < 3) ? '#2e7d32' : '#c62828', fontSize: 10 }}>
                       {r.sl_pct != null ? `${Number(r.sl_pct).toFixed(1)}%` : '—'}
                     </td>
-                    <td style={{ ...compact, color: isBullish ? '#2e7d32' : '#c62828', fontWeight: 600 }}>{fmt(r.target_1)}</td>
-                    <td style={{ ...compact, color: isBullish ? '#2e7d32' : '#c62828', fontWeight: 600 }}>{fmt(r.target_2)}</td>
+                    <td style={{ ...compact, color: isBullish ? '#2e7d32' : '#c62828', fontWeight: 600 }}>{fmt(pick.target_1)}</td>
+                    <td style={{ ...compact, color: isBullish ? '#2e7d32' : '#c62828', fontWeight: 600 }}>{fmt(pick.target_2)}</td>
                     <td style={{ ...compact, background: '#e3f2fd', fontWeight: 700, color: '#0d47a1' }}>
-                      {r.t4r ? fmt(r.t4r) : '—'}
-                      {r.t4r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({r.t4r_pct}%)</span>}
+                      {rr.t4r != null ? fmt(rr.t4r) : '—'}
+                      {rr.t4r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({rr.t4r_pct.toFixed(1)}%)</span>}
                     </td>
                     <td style={{ ...compact, background: '#e8eaf6', fontWeight: 700, color: '#283593' }}>
-                      {r.t6r ? fmt(r.t6r) : '—'}
-                      {r.t6r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({r.t6r_pct}%)</span>}
+                      {rr.t6r != null ? fmt(rr.t6r) : '—'}
+                      {rr.t6r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({rr.t6r_pct.toFixed(1)}%)</span>}
                     </td>
                     <td style={{ ...compact, background: '#ede7f6', fontWeight: 700, color: '#4a148c' }}>
-                      {r.t10r ? fmt(r.t10r) : '—'}
-                      {r.t10r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({r.t10r_pct}%)</span>}
+                      {rr.t10r != null ? fmt(rr.t10r) : '—'}
+                      {rr.t10r_pct != null && <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.7 }}>({rr.t10r_pct.toFixed(1)}%)</span>}
                     </td>
                     <td style={compact}>
                       <Chip
@@ -224,7 +263,9 @@ function AiPicksPage() {
         </Box>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
           {rows.map(r => {
-            if (!r.entry_price || !r.stop_loss || !r.risk) return null;
+            const pick = normalizePickTargets(r, true);
+            const rr = computeRRTargets(pick, true);
+            if (!pick.entry_price || !pick.stop_loss || !rr.risk) return null;
             return (
               <Box key={r.symbol} sx={{ p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '1px solid #e0e0e0' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -234,18 +275,18 @@ function AiPicksPage() {
                 </Box>
                 <Box sx={{ fontSize: 12, lineHeight: 1.8 }}>
                   <Box><span style={{ color: '#888', width: 90, display: 'inline-block' }}>Risk per share:</span>
-                    <strong style={{ color: '#c62828' }}>₹{r.risk?.toFixed(2)}</strong>
-                    <span style={{ color: '#888', fontSize: 10, marginLeft: 4 }}>({r.sl_pct?.toFixed(1)}%)</span>
+                    <strong style={{ color: '#c62828' }}>₹{rr.risk?.toFixed(2)}</strong>
+                    <span style={{ color: '#888', fontSize: 10, marginLeft: 4 }}>({pick.sl_pct?.toFixed(1)}%)</span>
                   </Box>
                   <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #1565c0' }}>
                     <Box><strong>1.</strong> Enter at <strong style={{ color: '#1565c0' }}>{fmt(r.entry_price)}</strong>, SL at <strong style={{ color: '#c62828' }}>{fmt(r.stop_loss)}</strong></Box>
-                    <Box><strong>2.</strong> Price moves above T1 <strong style={{ color: '#2e7d32' }}>{fmt(r.target_1)}</strong> → trail SL to entry (risk-free)</Box>
-                    <Box><strong>3.</strong> Add at T1, new SL at entry → <strong style={{ color: '#0d47a1' }}>T 4R {fmt(r.t4r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{r.t4r_pct}%)</span></Box>
-                    <Box><strong>4.</strong> Add at T2 <strong>{fmt(r.target_2)}</strong> → <strong style={{ color: '#283593' }}>T 6R {fmt(r.t6r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{r.t6r_pct}%)</span></Box>
-                    <Box><strong>5.</strong> Hold runners → <strong style={{ color: '#4a148c' }}>T 10R {fmt(r.t10r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{r.t10r_pct}%)</span></Box>
+                    <Box><strong>2.</strong> Price moves above T1 <strong style={{ color: '#2e7d32' }}>{fmt(pick.target_1)}</strong> → trail SL to entry (risk-free)</Box>
+                    <Box><strong>3.</strong> Add at T1, new SL at entry → <strong style={{ color: '#0d47a1' }}>T 4R {fmt(rr.t4r)}</strong>
+                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t4r_pct?.toFixed(1)}%)</span></Box>
+                    <Box><strong>4.</strong> Add at T2 <strong>{fmt(pick.target_2)}</strong> → <strong style={{ color: '#283593' }}>T 6R {fmt(rr.t6r)}</strong>
+                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t6r_pct?.toFixed(1)}%)</span></Box>
+                    <Box><strong>5.</strong> Hold runners → <strong style={{ color: '#4a148c' }}>T 10R {fmt(rr.t10r)}</strong>
+                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t10r_pct?.toFixed(1)}%)</span></Box>
                   </Box>
                 </Box>
               </Box>

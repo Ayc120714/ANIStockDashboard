@@ -4,7 +4,7 @@ import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, Menu
 import Pagination from '@mui/material/Pagination';
 import { MdPlaylistAdd, MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchLatestSignals, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
@@ -57,8 +57,47 @@ function trendLabel(trend, recommendation) {
   return short ? `${t} (${short})` : t;
 }
 
+function normalizeReco(value) {
+  const v = String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (v === 'strongbuy') return 'strong_buy';
+  if (v === 'strongsell') return 'strong_sell';
+  return v;
+}
+
+function dedupeSignalsBySymbol(rows) {
+  const bySymbol = new Map();
+  for (const row of rows || []) {
+    const symbol = String(row?.symbol || '').toUpperCase();
+    if (!symbol) continue;
+    const prev = bySymbol.get(symbol);
+    if (!prev) {
+      bySymbol.set(symbol, row);
+      continue;
+    }
+    const prevScore = Number(prev.conviction_score ?? prev.signal_score ?? Number.NEGATIVE_INFINITY);
+    const curScore = Number(row.conviction_score ?? row.signal_score ?? Number.NEGATIVE_INFINITY);
+    if (curScore > prevScore) {
+      bySymbol.set(symbol, row);
+    }
+  }
+  return Array.from(bySymbol.values());
+}
+
 function FinancialAdvisorPage() {
   const [tab, setTab] = useState(0);
+  const [marketMode, setMarketMode] = useState({ mode: 'unknown', isMarketHours: null });
+
+  useEffect(() => {
+    apiGet('/system/status')
+      .then((res) => {
+        const orch = res?.orchestrator || {};
+        setMarketMode({
+          mode: orch.mode || 'unknown',
+          isMarketHours: orch.is_market_hours,
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <TableSection>
@@ -84,6 +123,7 @@ function FinancialAdvisorPage() {
 const SIG_COLS = [
   { key: 'symbol', label: 'Symbol' },
   { key: 'conviction_score', label: 'Conv', numeric: true },
+  { key: 'status', label: 'Status' },
   { key: 'buy_sell_tier', label: 'Tier' },
   { key: 'trend', label: 'Trend' },
   { key: 'weekly_trend', label: 'Wk Trend' },
@@ -93,6 +133,7 @@ const SIG_COLS = [
   { key: 'sl_pct', label: 'SL%', numeric: true },
   { key: 'target_1', label: 'T1', numeric: true },
   { key: 'target_2', label: 'T2', numeric: true },
+  { key: 'next_scope_target', label: 'Scope', numeric: true },
   { key: 'sector', label: 'Sector' },
   { key: '_actions', label: '+' },
 ];
@@ -112,6 +153,8 @@ const ALERT_COLS = [
 function SignalsAlertsTab() {
   const [view, setView] = useState('signals');
   const [signalData, setSignalData] = useState([]);
+  const [signalPayload, setSignalPayload] = useState(null);
+  const [monthlySetupData, setMonthlySetupData] = useState([]);
   const [alertData, setAlertData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sourceFilter, setSourceFilter] = useState('');
@@ -121,6 +164,7 @@ function SignalsAlertsTab() {
   const [sortCol, setSortCol] = useState('conviction_score');
   const [sortDir, setSortDir] = useState('desc');
   const [convFilter, setConvFilter] = useState('all');
+  const [recoFilter, setRecoFilter] = useState('all');
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
@@ -148,30 +192,59 @@ function SignalsAlertsTab() {
 
   useEffect(() => {
     setLoading(true);
-    const p1 = fetchLatestSignals(200).then(setSignalData).catch(() => {});
+    const p1 = fetchLatestSignalsPayload(250).then((payload) => {
+      setSignalPayload(payload || null);
+      setSignalData(payload?.data || []);
+    }).catch(() => {});
+    const pMonthly = fetchMonthlyMacdSetup(300).then(setMonthlySetupData).catch(() => {});
     const p2 = fetchAlerts({ limit: 200, ...(sourceFilter ? { source: sourceFilter } : {}), ...(symbolFilter ? { symbol: symbolFilter } : {}) }).then(setAlertData).catch(() => {});
-    Promise.all([p1, p2]).finally(() => setLoading(false));
+    Promise.all([p1, pMonthly, p2]).finally(() => setLoading(false));
   }, [sourceFilter, symbolFilter]);
 
   const filteredSignals = useMemo(() => {
-    let rows = signalData.filter(s => s.cmp && s.entry_price && !s.hit_target);
+    let rows = convFilter === 'monthly_setup'
+      ? monthlySetupData
+      : signalData.filter(s => s.cmp && s.entry_price && (convFilter === 'done' ? true : !s.hit_target));
     if (symbolFilter) {
       const q = symbolFilter.toUpperCase();
       rows = rows.filter(s => s.symbol?.includes(q));
     }
     if (convFilter === 'high') {
       rows = rows.filter(s => s.high_conviction);
+    } else if (convFilter === 'high_bull') {
+      rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish');
+    } else if (convFilter === 'high_bear') {
+      rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish');
     } else if (convFilter === 'weekly') {
       rows = rows.filter(s => s.weekly_aligned);
     } else if (convFilter === 'actionable') {
       rows = rows.filter(s => s.actionable);
+    } else if (convFilter === 'entry_ready') {
+      rows = rows.filter(s => s.status === 'entry_ready');
+    } else if (convFilter === 'done') {
+      rows = rows.filter(s => s.target_done || s.status === 'done');
     }
-    return rows;
-  }, [signalData, symbolFilter, convFilter]);
+    if (recoFilter !== 'all') {
+      rows = rows.filter(s => {
+        const rec = normalizeReco(s.signal_type || s.recommendation);
+        return rec === recoFilter;
+      });
+    }
+    return dedupeSignalsBySymbol(rows);
+  }, [signalData, monthlySetupData, symbolFilter, convFilter, recoFilter]);
 
-  const highConvCount = signalData.filter(s => s.high_conviction && !s.hit_target).length;
-  const weeklyAlignedCount = signalData.filter(s => s.weekly_aligned && !s.hit_target).length;
-  const actionableCount = signalData.filter(s => s.actionable && !s.hit_target).length;
+  const uniqueSignalData = useMemo(
+    () => dedupeSignalsBySymbol(signalData.filter(s => s.cmp && s.entry_price)),
+    [signalData]
+  );
+  const highConvCount = uniqueSignalData.filter(s => s.high_conviction).length;
+  const highConvBullCount = uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish').length;
+  const highConvBearCount = uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish').length;
+  const weeklyAlignedCount = uniqueSignalData.filter(s => s.weekly_aligned).length;
+  const actionableCount = uniqueSignalData.filter(s => s.actionable).length;
+  const doneCount = uniqueSignalData.filter(s => s.target_done || s.status === 'done').length;
+  const entryReadyCount = uniqueSignalData.filter(s => s.status === 'entry_ready').length;
+  const monthlySetupCount = useMemo(() => dedupeSignalsBySymbol(monthlySetupData).length, [monthlySetupData]);
 
   const sortedData = useMemo(() => {
     const src = view === 'signals' ? filteredSignals : alertData;
@@ -231,12 +304,30 @@ function SignalsAlertsTab() {
         </Box>
         {view === 'signals' && (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Select
+              size="small"
+              value={recoFilter}
+              onChange={e => { setRecoFilter(e.target.value); setPage(1); }}
+              sx={{ minWidth: 150, fontSize: 12 }}
+            >
+              <MenuItem value="all">All Reco</MenuItem>
+              <MenuItem value="strong_buy">Strong Buy</MenuItem>
+              <MenuItem value="buy">Buy</MenuItem>
+              <MenuItem value="hold">Hold</MenuItem>
+              <MenuItem value="sell">Sell</MenuItem>
+              <MenuItem value="strong_sell">Strong Sell</MenuItem>
+            </Select>
             <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
               {[
                 { val: 'all', label: `All` },
                 { val: 'high', label: `High Conv (${highConvCount})`, color: '#1b5e20', bg: '#e8f5e9' },
+                { val: 'high_bull', label: `HC Bull (${highConvBullCount})`, color: '#1b5e20', bg: '#e8f5e9' },
+                { val: 'high_bear', label: `HC Bear (${highConvBearCount})`, color: '#c62828', bg: '#ffebee' },
                 { val: 'weekly', label: `Wk Aligned (${weeklyAlignedCount})` },
+                { val: 'entry_ready', label: `Entry Ready (${entryReadyCount})`, color: '#1565c0', bg: '#e3f2fd' },
+                { val: 'done', label: `Done (${doneCount})`, color: '#6d4c41', bg: '#efebe9' },
                 { val: 'actionable', label: `Actionable (${actionableCount})` },
+                { val: 'monthly_setup', label: `Monthly Setup (${monthlySetupCount})`, color: '#0d47a1', bg: '#e3f2fd' },
               ].map(opt => (
                 <Button key={opt.val} size="small"
                   onClick={() => { setConvFilter(opt.val); setPage(1); }}
@@ -302,6 +393,13 @@ function SignalsAlertsTab() {
                 sx={{ textTransform: 'none', fontSize: 11, px: 1, color: '#888', minWidth: 0 }}>
                 Clear
               </Button>
+            )}
+            {signalPayload?.high_conviction_bullish_count != null && (
+              <Chip
+                size="small"
+                label={`API HC Split ${signalPayload.high_conviction_bullish_count}/${signalPayload.high_conviction_bearish_count}`}
+                sx={{ fontSize: 10, bgcolor: '#f3e5f5', color: '#6a1b9a', fontWeight: 700 }}
+              />
             )}
           </Box>
         )}
@@ -405,6 +503,20 @@ function SignalsAlertsTab() {
                     {s.conviction_score?.toFixed(0)}
                   </td>
                   <td style={compact}>
+                    <Chip
+                      label={String(s.status || 'in_trade').replace(/_/g, ' ')}
+                      size="small"
+                      sx={{
+                        fontSize: 9,
+                        height: 17,
+                        textTransform: 'uppercase',
+                        fontWeight: 700,
+                        bgcolor: s.status === 'done' ? '#efebe9' : s.status === 'entry_ready' ? '#e3f2fd' : '#f1f8e9',
+                        color: s.status === 'done' ? '#6d4c41' : s.status === 'entry_ready' ? '#1565c0' : '#33691e',
+                      }}
+                    />
+                  </td>
+                  <td style={compact}>
                     {tier ? (
                       <Chip label={tier} size="small" sx={{ fontSize: 10, height: 18, fontWeight: 700,
                         bgcolor: tierBg, color: tierColor, minWidth: 28 }} />
@@ -428,6 +540,9 @@ function SignalsAlertsTab() {
                   <td style={{ ...compact, color: slColor, fontSize: 10 }}>{s.sl_pct != null ? `${s.sl_pct}%` : '—'}</td>
                   <td style={{ ...compact, fontWeight: 600, color: tgtColor }}>{fmt(s.target_1)}</td>
                   <td style={compact}>{fmt(s.target_2)}</td>
+                  <td style={{ ...compact, fontWeight: s.further_scope ? 700 : 400, color: s.further_scope ? '#2e7d32' : '#888' }}>
+                    {s.further_scope ? fmt(s.next_scope_target) : (s.target_done ? 'Done' : '—')}
+                  </td>
                   <td style={{ ...compact, fontSize: 10, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sector || '—'}</td>
                   <td style={compact}><WatchlistButtons symbol={s.symbol} added={added} onAdd={handleAdd} /></td>
                 </tr>

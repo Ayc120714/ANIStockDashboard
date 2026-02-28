@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { MdRefresh, MdDiamond } from 'react-icons/md';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -98,6 +98,7 @@ export default function CommoditiesPage() {
   const [tab, setTab] = useState(0);
   const [selectedSym, setSelectedSym] = useState('GOLDM');
   const [ocData, setOcData] = useState(null);
+  const [sort, setSort] = useState({ col: null, dir: 'desc' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,6 +118,20 @@ export default function CommoditiesPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (tab === 1 && selectedSym) loadOC(selectedSym); }, [tab, selectedSym, loadOC]);
+
+  const toggleSort = (col) => {
+    setSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' });
+  };
+  const sortIcon = (col) => sort.col === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const sortedQuotes = useMemo(() => {
+    if (!sort.col) return quotes;
+    return [...quotes].sort((a, b) => {
+      const va = typeof a[sort.col] === 'string' ? a[sort.col] : (a[sort.col] ?? 0);
+      const vb = typeof b[sort.col] === 'string' ? b[sort.col] : (b[sort.col] ?? 0);
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [quotes, sort]);
 
   const topFour = quotes.slice(0, 4);
   const oiData = (ocData?.chain || []).map(r => ({
@@ -156,10 +171,20 @@ export default function CommoditiesPage() {
           {!loading && (
             <Table>
               <thead>
-                <tr><th>Commodity</th><th>Symbol</th><th>Unit</th><th>Price (₹)</th><th>Change</th><th>Change %</th><th>Open</th><th>High</th><th>Low</th></tr>
+                <tr>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('name')}>Commodity{sortIcon('name')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('symbol')}>Symbol{sortIcon('symbol')}</th>
+                  <th>Unit</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('price')}>Price (₹){sortIcon('price')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('change')}>Change{sortIcon('change')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('changePct')}>Change %{sortIcon('changePct')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('open')}>Open{sortIcon('open')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('high')}>High{sortIcon('high')}</th>
+                  <th style={{cursor:'pointer'}} onClick={() => toggleSort('low')}>Low{sortIcon('low')}</th>
+                </tr>
               </thead>
               <tbody>
-                {quotes.map(q => (
+                {sortedQuotes.map(q => (
                   <tr key={q.symbol} onClick={() => setSelectedSym(q.symbol)} style={{ cursor: 'pointer' }}>
                     <td>{q.name}</td>
                     <td style={{ textAlign: 'right' }}>{q.symbol}</td>

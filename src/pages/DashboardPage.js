@@ -3,11 +3,11 @@ import { Box, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material'
 import { MdRefresh, MdTrendingUp, MdTrendingDown, MdRemoveRedEye } from 'react-icons/md';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import { fetchWatchlist, fetchWatchlistSignals, fetchWeeklyIndicators, fetchOrderBlocks } from '../api/watchlist';
 import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchPriceShockers } from '../api/stocks';
 import { fetchAlerts, fetchRatings } from '../api/advisor';
+import { apiGet } from '../api/apiClient';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -555,41 +555,32 @@ function LatestRatings({ ratings }) {
 function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [indices, setIndices] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
-  const [signals, setSignals] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [gainers, setGainers] = useState([]);
   const [losers, setLosers] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [ratings, setRatings] = useState([]);
-  const [weeklyData, setWeeklyData] = useState([]);
-  const [obData, setObData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [marketMode, setMarketMode] = useState('unknown');
 
   const loadAll = useCallback(async () => {
     try {
-      const [idx, wl, sigs, sec, g, l, al, rat, wk, ob] = await Promise.allSettled([
+      const [idx, sec, g, l, al, rat, sys] = await Promise.allSettled([
         fetchMarketIndices(),
-        fetchWatchlist(),
-        fetchWatchlistSignals(),
         fetchSectorOutlook(),
         fetchPriceShockers('gainers', 8, 'day'),
         fetchPriceShockers('losers', 8, 'day'),
         fetchAlerts({ limit: 10 }),
         fetchRatings({ limit: 8 }),
-        fetchWeeklyIndicators(),
-        fetchOrderBlocks(),
+        apiGet('/system/status'),
       ]);
       if (idx.status === 'fulfilled') setIndices(idx.value);
-      if (wl.status === 'fulfilled') setWatchlist(wl.value);
-      if (sigs.status === 'fulfilled') setSignals(sigs.value);
       if (sec.status === 'fulfilled') setSectors(sec.value);
       if (g.status === 'fulfilled') setGainers(g.value);
       if (l.status === 'fulfilled') setLosers(l.value);
       if (al.status === 'fulfilled') setAlerts(al.value);
       if (rat.status === 'fulfilled') setRatings(rat.value);
-      if (wk.status === 'fulfilled') setWeeklyData(wk.value);
-      if (ob.status === 'fulfilled') setObData(ob.value);
+      if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       setLastUpdated(new Date());
     } finally {
       setLoading(false);
@@ -598,9 +589,9 @@ function DashboardPage() {
 
   useEffect(() => {
     loadAll();
-    const timer = setInterval(loadAll, 60000);
+    const timer = setInterval(loadAll, marketMode === 'websocket' ? 60000 : 180000);
     return () => clearInterval(timer);
-  }, [loadAll]);
+  }, [loadAll, marketMode]);
 
   return (
     <Box sx={{ width: '100%', px: { xs: 1, sm: 2, md: 3 }, py: { xs: 1, md: 2 }, boxSizing: 'border-box' }}>
@@ -622,17 +613,6 @@ function DashboardPage() {
           {/* Market Pulse Banner */}
           <Box sx={{ mb: 2 }}>
             <MarketPulse indices={indices} />
-          </Box>
-
-          {/* Portfolio Snapshot (full width) */}
-          <Box sx={{ mb: 2 }}>
-            <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
-          </Box>
-
-          {/* Weekly Entries – MyIndicator (PSAR + ST + Fib) + Order Blocks */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2, '@media (max-width: 1000px)': { gridTemplateColumns: '1fr' } }}>
-            <WeeklyEntries weeklyData={weeklyData} />
-            <OrderBlockZones obData={obData} />
           </Box>
 
           {/* Sector Heatmap (full width) */}
