@@ -1,12 +1,11 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button, IconButton, Tooltip } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
 import { fetchRelativePerformance, fetchScreenDates } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
 
@@ -22,7 +21,7 @@ function RelativePerformancePage() {
   const [timeFrame, setTimeFrame] = useState('Short Term');
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
-  const autoAddedRef = useRef(false);
+  const [checkedSymbols, setCheckedSymbols] = useState(new Set());
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
@@ -37,30 +36,13 @@ function RelativePerformancePage() {
     } catch (_) { /* ignore */ }
   };
 
-  const autoAddHighRS = useCallback(async (data) => {
-    if (autoAddedRef.current) return;
-    autoAddedRef.current = true;
-    const extractRs = (val) => {
-      if (typeof val === 'number') return val;
-      if (!val) return 0;
-      const m = val.toString().match(/-?[\d.]+/);
-      return m ? parseFloat(m[0]) : 0;
-    };
-    const highRS = data.filter(r => extractRs(r.rs) > 30);
-    const updates = {};
-    for (const row of highRS) {
-      const key = `${row.symbol}_long_term`;
-      if (!added[key]) {
-        try {
-          await addToWatchlist(row.symbol.toUpperCase(), 'long_term', 'Auto-added: RS > 30%');
-          updates[key] = true;
-        } catch (_) { /* ignore duplicates */ }
-      }
+  const handleAddSelected = async (listType) => {
+    const syms = [...checkedSymbols].filter(Boolean);
+    for (const symbol of syms) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleAdd(symbol, listType);
     }
-    if (Object.keys(updates).length > 0) {
-      setAdded(prev => ({ ...prev, ...updates }));
-    }
-  }, [added]);
+  };
 
   const formatDateParam = (d) => {
     if (!d) return null;
@@ -92,7 +74,6 @@ function RelativePerformancePage() {
         const arr = Array.isArray(fresh) ? fresh : [];
         setTableData(arr);
         setIsLoading(false);
-        autoAddHighRS(arr);
       }
     }).catch((err) => {
       if (isMounted && !cacheSet) {
@@ -101,7 +82,6 @@ function RelativePerformancePage() {
       }
     });
     return () => { isMounted = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeFrame, selectedDate]);
 
   const defaultTableData = [
@@ -180,7 +160,6 @@ function RelativePerformancePage() {
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: 'CHG%' },
     { key: 'rs', label: 'RS%' },
-    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -228,6 +207,14 @@ function RelativePerformancePage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
+            {`Add ST (${checkedSymbols.size})`}
+          </Button>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('long_term')} sx={{ textTransform: 'none', bgcolor: '#2e7d32' }}>
+            {`Add LT (${checkedSymbols.size})`}
+          </Button>
+        </Box>
       </Box>
       <TableSection>
         <TableTitle>Relative Performance</TableTitle>
@@ -235,6 +222,23 @@ function RelativePerformancePage() {
           <Table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <Checkbox
+                    size="small"
+                    checked={paginatedData.length > 0 && paginatedData.every((r) => checkedSymbols.has(r.symbol))}
+                    indeterminate={paginatedData.some((r) => checkedSymbols.has(r.symbol)) && !paginatedData.every((r) => checkedSymbols.has(r.symbol))}
+                    onChange={() => {
+                      const pageSyms = paginatedData.map((r) => r.symbol);
+                      const allSelected = pageSyms.every((s) => checkedSymbols.has(s));
+                      setCheckedSymbols((prev) => {
+                        const next = new Set(prev);
+                        if (allSelected) pageSyms.forEach((s) => next.delete(s));
+                        else pageSyms.forEach((s) => next.add(s));
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 {columnConfig.map((col) => (
                   <th key={col.key} onClick={() => handleSort(col.key)}>
                     {col.label}
@@ -246,6 +250,20 @@ function RelativePerformancePage() {
             <tbody>
               {paginatedData.map((row) => (
                 <tr key={row.id}>
+                  <td>
+                    <Checkbox
+                      size="small"
+                      checked={checkedSymbols.has(row.symbol)}
+                      onChange={() => {
+                        setCheckedSymbols((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.symbol)) next.delete(row.symbol);
+                          else next.add(row.symbol);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   <td className="index">{row.id}</td>
                   <td>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -280,26 +298,6 @@ function RelativePerformancePage() {
                   <td>{row.cmp}</td>
                   <td className={(row.chg || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
                   <td className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.rs}</td>
-                  <td>
-                    <Box sx={{ display: 'flex', gap: 0.3 }}>
-                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
-                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
-                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  </td>
                 </tr>
               ))}
             </tbody>

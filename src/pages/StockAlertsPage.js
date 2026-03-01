@@ -1,48 +1,56 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, CircularProgress, Select, MenuItem, IconButton, Tooltip } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
+import { MdDelete } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchAlerts, markAlertRead } from '../api/advisor';
-import { addToWatchlist } from '../api/watchlist';
+import { clearPriceAlertTriggers, deletePriceAlertTrigger, fetchPriceAlertTriggers } from '../api/priceAlerts';
+import { useAuth } from '../auth/AuthContext';
 
-const fmt = (v) => {
+const fmtRupee = (v) => {
   if (v == null || v === '' || isNaN(v)) return '—';
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 
 const SORTABLE_COLS = [
-  { key: 'timestamp', label: 'Time' },
+  { key: 'triggered_at', label: 'Time' },
+  { key: 'list_type', label: 'List' },
   { key: 'symbol', label: 'Symbol' },
-  { key: 'entry_price', label: 'Entry', numeric: true },
-  { key: 'stop_loss', label: 'SL', numeric: true },
-  { key: 'target_1', label: 'T1', numeric: true },
-  { key: 'target_2', label: 'T2', numeric: true },
-  { key: 'signal_score', label: 'Score', numeric: true },
+  { key: 'direction', label: 'Direction' },
+  { key: 'threshold_price', label: 'Threshold', numeric: true },
+  { key: 'trigger_price', label: 'Triggered At', numeric: true },
+  { key: 'message', label: 'Message' },
 ];
 
 function StockAlertsPage() {
+  const { user } = useAuth();
+  const userId = String(user?.id || user?.user_id || user?.email || '');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sourceFilter, setSourceFilter] = useState('');
+  const [listTypeFilter, setListTypeFilter] = useState('');
   const [symbolFilter, setSymbolFilter] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [page, setPage] = useState(1);
-  const [added, setAdded] = useState({});
   const [sortCol, setSortCol] = useState('');
   const [sortDir, setSortDir] = useState('desc');
   const rowsPerPage = 25;
 
-  const load = () => {
+  const load = useCallback(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const f = { limit: 200 };
-    if (sourceFilter) f.source = sourceFilter;
-    if (symbolFilter) f.symbol = symbolFilter;
-    fetchAlerts(f).then(setData).finally(() => setLoading(false));
-  };
+    setErrorMsg('');
+    fetchPriceAlertTriggers({ userId, limit: 500 })
+      .then((rows) => setData(Array.isArray(rows) ? rows : []))
+      .catch((e) => setErrorMsg(e?.message || 'Failed to load alert history'))
+      .finally(() => setLoading(false));
+  }, [userId]);
 
-  useEffect(load, [sourceFilter, symbolFilter]);
+  useEffect(() => { load(); }, [load]);
 
   const handleSort = (col) => {
     if (sortCol === col) {
@@ -55,11 +63,19 @@ function StockAlertsPage() {
     setPage(1);
   };
 
+  const filteredData = useMemo(() => {
+    return data.filter((row) => {
+      if (listTypeFilter && String(row.list_type || '').toLowerCase() !== listTypeFilter.toLowerCase()) return false;
+      if (symbolFilter && !String(row.symbol || '').toLowerCase().includes(symbolFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [data, listTypeFilter, symbolFilter]);
+
   const sortedData = useMemo(() => {
-    if (!sortCol) return data;
+    if (!sortCol) return filteredData;
     const colDef = SORTABLE_COLS.find(c => c.key === sortCol);
     const isNum = colDef?.numeric;
-    return [...data].sort((a, b) => {
+    return [...filteredData].sort((a, b) => {
       let va = a[sortCol], vb = b[sortCol];
       if (va == null) va = isNum ? -Infinity : '';
       if (vb == null) vb = isNum ? -Infinity : '';
@@ -74,31 +90,32 @@ function StockAlertsPage() {
       if (va > vb) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [data, sortCol, sortDir]);
+  }, [filteredData, sortCol, sortDir]);
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   const paged = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
-  const handleMarkRead = async (id) => {
-    await markAlertRead(id);
-    load();
-  };
-
-  const handleMarkAllRead = async () => {
-    const unread = data.filter(a => !a.is_read);
-    for (const a of unread.slice(0, 50)) {
-      await markAlertRead(a.id);
-    }
-    load();
-  };
-
-  const handleAdd = async (symbol, listType) => {
-    const key = `${symbol}_${listType}`;
-    if (added[key]) return;
+  const handleDeleteRow = async (id) => {
+    if (!userId) return;
     try {
-      await addToWatchlist(symbol.toUpperCase(), listType, '');
-      setAdded(prev => ({ ...prev, [key]: true }));
-    } catch (_) { /* ignore */ }
+      await deletePriceAlertTrigger({ userId, triggerId: id });
+      setStatusMsg('Alert history row deleted.');
+      setData((prev) => prev.filter((row) => row.id !== id));
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to delete alert history row');
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!userId) return;
+    if (!window.confirm('Clear complete alert trigger history?')) return;
+    try {
+      await clearPriceAlertTriggers({ userId });
+      setStatusMsg('Alert history cleared.');
+      setData([]);
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to clear alert history');
+    }
   };
 
   const SortIcon = ({ col }) => {
@@ -113,20 +130,23 @@ function StockAlertsPage() {
       <TableTitle>Stock Alerts</TableTitle>
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Select size="small" value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} displayEmpty sx={{ width: 130 }}>
-          <MenuItem value="">All Sources</MenuItem>
-          <MenuItem value="intraday">Intraday</MenuItem>
-          <MenuItem value="eod">EOD</MenuItem>
-          <MenuItem value="ai">AI</MenuItem>
-          <MenuItem value="youtube_strategy">Strategy</MenuItem>
+        <Select size="small" value={listTypeFilter} onChange={e => { setListTypeFilter(e.target.value); setPage(1); }} displayEmpty sx={{ width: 140 }}>
+          <MenuItem value="">All Lists</MenuItem>
+          <MenuItem value="short_term">Short Term</MenuItem>
+          <MenuItem value="long_term">Long Term</MenuItem>
         </Select>
         <TextField size="small" placeholder="Symbol…" value={symbolFilter}
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
         <Box sx={{ flex: 1 }} />
-        <Button size="small" variant="outlined" onClick={handleMarkAllRead} sx={{ textTransform: 'none', fontSize: 12 }}>
-          Mark All Read
+        <Button size="small" variant="outlined" onClick={load} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Refresh
+        </Button>
+        <Button size="small" variant="outlined" color="error" onClick={handleClearHistory} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Clear History
         </Button>
       </Box>
+      {statusMsg ? <Alert severity="success" sx={{ mb: 1 }}>{statusMsg}</Alert> : null}
+      {errorMsg ? <Alert severity="error" sx={{ mb: 1 }}>{errorMsg}</Alert> : null}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
@@ -142,53 +162,29 @@ function StockAlertsPage() {
                     {col.label}<SortIcon col={col.key} />
                   </th>
                 ))}
-                <th style={compact}>+</th>
-                <th style={compact}></th>
+                <th style={compact}>Action</th>
               </tr>
             </thead>
             <tbody>
               {paged.map(a => (
-                <tr key={a.id} style={{ opacity: a.is_read ? 0.55 : 1, background: !a.is_read ? '#fffde7' : undefined }}>
-                  <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 16) || '—'}</td>
+                <tr key={a.id}>
+                  <td style={compact}>{a.triggered_at?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                  <td style={{ ...compact, textTransform: 'capitalize' }}>{String(a.list_type || '—').replace('_', ' ')}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.symbol}</td>
-                  <td style={{ ...compact, fontWeight: 600, color: '#1565c0' }}>{fmt(a.entry_price)}</td>
-                  <td style={{ ...compact, fontWeight: 600, color: '#c62828' }}>{fmt(a.stop_loss)}</td>
-                  <td style={{ ...compact, fontWeight: 600, color: '#2e7d32' }}>{fmt(a.target_1)}</td>
-                  <td style={compact}>{fmt(a.target_2)}</td>
-                  <td style={{ ...compact, textAlign: 'center' }}>{a.signal_score != null ? a.signal_score : '—'}</td>
+                  <td style={{ ...compact, fontWeight: 600 }}>{a.direction || '—'}</td>
+                  <td style={{ ...compact, fontWeight: 600, color: '#1565c0' }}>{fmtRupee(a.threshold_price)}</td>
+                  <td style={{ ...compact, fontWeight: 600, color: '#2e7d32' }}>{fmtRupee(a.trigger_price)}</td>
+                  <td style={{ ...compact, maxWidth: 400, whiteSpace: 'normal' }}>{a.message || '—'}</td>
                   <td style={compact}>
-                    <Box sx={{ display: 'flex', gap: 0.3 }}>
-                      <Tooltip title={added[`${a.symbol}_short_term`] ? 'Added' : 'Short Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${a.symbol}_short_term`]}
-                            onClick={() => handleAdd(a.symbol, 'short_term')}
-                            sx={{ p: '2px', bgcolor: added[`${a.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${a.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 13 }}>
-                            {added[`${a.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={added[`${a.symbol}_long_term`] ? 'Added' : 'Long Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${a.symbol}_long_term`]}
-                            onClick={() => handleAdd(a.symbol, 'long_term')}
-                            sx={{ p: '2px', bgcolor: added[`${a.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${a.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 13 }}>
-                            {added[`${a.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  </td>
-                  <td style={compact}>
-                    {!a.is_read && (
-                      <Button size="small" onClick={() => handleMarkRead(a.id)}
-                        sx={{ textTransform: 'none', fontSize: 10, minWidth: 36, p: '1px 4px' }}>Read</Button>
-                    )}
+                    <IconButton size="small" color="error" onClick={() => handleDeleteRow(a.id)} title="Delete row">
+                      <MdDelete />
+                    </IconButton>
                   </td>
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
-                  No alerts matching filters.
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+                  No alert history matching filters.
                 </td></tr>
               )}
             </tbody>

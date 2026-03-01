@@ -57,6 +57,7 @@ function MarketPulse({ indices }) {
 }
 
 // ─── Portfolio Snapshot ─────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
   const navigate = useNavigate();
   const all = watchlist || [];
@@ -266,6 +267,7 @@ function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
 }
 
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
+// eslint-disable-next-line no-unused-vars
 function WeeklyEntries({ weeklyData }) {
   if (!weeklyData || !weeklyData.length) return null;
   const nearEntries = weeklyData.filter(w => (w.weekly_entry_gap_pct || 100) <= 10);
@@ -332,6 +334,7 @@ function WeeklyEntries({ weeklyData }) {
 }
 
 // ─── Order Block Zones (Multi-Timeframe) ────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 function OrderBlockZones({ obData }) {
   if (!obData || !obData.length) return null;
 

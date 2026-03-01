@@ -1,12 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button, IconButton, Tooltip } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
 import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
 
@@ -22,6 +21,7 @@ function VolumeShockersPage() {
   const [timeFrame, setTimeFrame] = useState('Day');
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
+  const [checkedSymbols, setCheckedSymbols] = useState(new Set());
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
@@ -34,6 +34,14 @@ function VolumeShockersPage() {
       await addToWatchlist(symbol.toUpperCase(), listType, '');
       setAdded(prev => ({ ...prev, [key]: true }));
     } catch (_) { /* ignore */ }
+  };
+
+  const handleAddSelected = async (listType) => {
+    const syms = [...checkedSymbols].filter(Boolean);
+    for (const symbol of syms) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleAdd(symbol, listType);
+    }
   };
 
   const formatDateParam = (d) => {
@@ -153,7 +161,6 @@ function VolumeShockersPage() {
     { key: 'volChgPct', label: `Vol ${periodLabel} %` },
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: `${periodLabel} CHG%` },
-    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -197,6 +204,14 @@ function VolumeShockersPage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
+            {`Add ST (${checkedSymbols.size})`}
+          </Button>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('long_term')} sx={{ textTransform: 'none', bgcolor: '#2e7d32' }}>
+            {`Add LT (${checkedSymbols.size})`}
+          </Button>
+        </Box>
       </Box>
       <TableSection>
         <TableTitle>Volume Shockers</TableTitle>
@@ -204,6 +219,23 @@ function VolumeShockersPage() {
           <Table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <Checkbox
+                    size="small"
+                    checked={paginatedData.length > 0 && paginatedData.every((r) => checkedSymbols.has(r.symbol))}
+                    indeterminate={paginatedData.some((r) => checkedSymbols.has(r.symbol)) && !paginatedData.every((r) => checkedSymbols.has(r.symbol))}
+                    onChange={() => {
+                      const pageSyms = paginatedData.map((r) => r.symbol);
+                      const allSelected = pageSyms.every((s) => checkedSymbols.has(s));
+                      setCheckedSymbols((prev) => {
+                        const next = new Set(prev);
+                        if (allSelected) pageSyms.forEach((s) => next.delete(s));
+                        else pageSyms.forEach((s) => next.add(s));
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 {columnConfig.map((col) => (
                   <th key={col.key} onClick={() => handleSort(col.key)}>
                     {col.label}
@@ -215,6 +247,20 @@ function VolumeShockersPage() {
             <tbody>
               {paginatedData.map((row) => (
                 <tr key={row.id}>
+                  <td>
+                    <Checkbox
+                      size="small"
+                      checked={checkedSymbols.has(row.symbol)}
+                      onChange={() => {
+                        setCheckedSymbols((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.symbol)) next.delete(row.symbol);
+                          else next.add(row.symbol);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   <td className="index">{row.id}</td>
                   <td>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -252,26 +298,6 @@ function VolumeShockersPage() {
                   <td style={{ fontWeight: 600, color: row.volChgRaw > 0 ? '#1b5e20' : row.volChgRaw < 0 ? '#c62828' : undefined }}>{row.volChgPct || '—'}</td>
                   <td>{row.cmp}</td>
                   <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
-                  <td>
-                    <Box sx={{ display: 'flex', gap: 0.3 }}>
-                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
-                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
-                        <span>
-                          <IconButton size="small" disabled={!!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
-                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  </td>
                 </tr>
               ))}
             </tbody>

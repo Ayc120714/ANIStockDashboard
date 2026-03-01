@@ -7,7 +7,7 @@ import { MdRefresh } from 'react-icons/md';
 import { SiTradingview } from 'react-icons/si';
 import {
   fetchFnOSymbols, fetchOptionChain, fetchOptionsSummary, fetchTopMovers,
-  fetchExpiryDates, fetchFutureChain, calculatePayoff,
+  fetchExpiryDates, calculatePayoff,
 } from '../api/fno';
 import {
   PageWrapper, PageHeader, Title, ControlRow, TabBar, Tab,
@@ -78,7 +78,6 @@ export default function FnOPage() {
   const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [legs, setLegs] = useState([]);
   const [payoffResult, setPayoffResult] = useState(null);
-  const [computingPayoff, setComputingPayoff] = useState(false);
 
   useEffect(() => {
     fetchFnOSymbols()
@@ -131,7 +130,7 @@ export default function FnOPage() {
     return () => clearInterval(id);
   }, [expiry, tab, loadData, loadMovers]);
 
-  const chain = chainData?.chain || [];
+  const chain = useMemo(() => chainData?.chain || [], [chainData]);
   const spot = chainData?.spotPrice || summary?.spotPrice || 0;
   const atmStrike = useMemo(() => {
     if (!chain.length || !spot) return 0;
@@ -153,7 +152,6 @@ export default function FnOPage() {
 
   const applyStrategy = useCallback((strat) => {
     setSelectedStrategy(strat.name);
-    const step = chain.length > 2 ? chain[1].strikePrice - chain[0].strikePrice : 50;
     const atmIdx = chain.findIndex(r => r.strikePrice === atmStrike);
     const newLegs = strat.legs.map(l => {
       const idx = Math.max(0, Math.min(chain.length - 1, atmIdx + l.offset));
@@ -168,14 +166,12 @@ export default function FnOPage() {
 
   const computePayoff = useCallback(async () => {
     if (!legs.length) return;
-    setComputingPayoff(true);
     try {
       const result = await calculatePayoff({
         symbol, legs, spotPrice: spot, lotSize: chainData?.lotSize || 50,
       });
       setPayoffResult(result);
     } catch (e) { console.error('Payoff calc failed:', e); }
-    finally { setComputingPayoff(false); }
   }, [legs, symbol, spot, chainData]);
 
   useEffect(() => { if (legs.length) computePayoff(); }, [legs, computePayoff]);
@@ -193,12 +189,6 @@ export default function FnOPage() {
       'Put OI': r.pe_oi || 0,
     }))
   , [chain]);
-
-  const maxOI = useMemo(() => {
-    let max = 0;
-    chain.forEach(r => { max = Math.max(max, r.ce_oi || 0, r.pe_oi || 0); });
-    return max;
-  }, [chain]);
 
   const renderSummaryTab = () => (
     <>

@@ -8,6 +8,7 @@ import OutlookPage from '../pages/OutlookPage';
 import ScreensPage from '../pages/ScreensPage';
 import StockAlertsPage from '../pages/StockAlertsPage';
 import FinancialAdvisorPage from '../pages/FinancialAdvisorPage';
+import PortfolioManagerPage from '../pages/PortfolioManagerPage';
 import ProfilePage from '../pages/ProfilePage';
 import EventsPage from '../pages/EventsPage';
 import FnOPage from '../pages/FnOPage';
@@ -40,6 +41,7 @@ function AppRouter() {
           <Route path="/outlook" element={<OutlookPage />} />
           <Route path="/screens" element={<ScreensPage />} />
           <Route path="/advisor" element={<FinancialAdvisorPage />} />
+          <Route path="/portfolio-manager" element={<PortfolioManagerPage />} />
           <Route path="/alerts" element={<StockAlertsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/events" element={<EventsPage />} />

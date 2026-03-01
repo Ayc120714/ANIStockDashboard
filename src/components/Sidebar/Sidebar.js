@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
 function Sidebar() {
@@ -48,6 +48,11 @@ function Sidebar() {
           <NavLink to="/advisor" collapsed={collapsed} title={collapsed ? 'Advisor' : undefined}>
             <MdAutoGraph />
             <span className="label">Advisor</span>
+          </NavLink>
+
+          <NavLink to="/portfolio-manager" collapsed={collapsed} title={collapsed ? 'Portfolio Manager' : undefined}>
+            <MdAccountBalanceWallet />
+            <span className="label">Portfolio Manager</span>
           </NavLink>
 
           <NavLink to="/alerts" collapsed={collapsed} title={collapsed ? 'Alerts' : undefined}>

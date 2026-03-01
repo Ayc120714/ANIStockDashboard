@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, IconButton, Tooltip, Checkbox } from '@mui/material';
+import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdPlaylistAdd, MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
+import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
@@ -14,6 +14,10 @@ const fmt = (v) => {
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
+const parseNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
 
 function useSymbolList() {
   const [allSymbols, setAllSymbols] = useState([]);
@@ -24,30 +28,6 @@ function useSymbolList() {
   }, []);
   useEffect(() => { load(); }, [load]);
   return allSymbols;
-}
-
-function WatchlistButtons({ symbol, added, onAdd }) {
-  return (
-    <Box sx={{ display: 'flex', gap: 0.3 }}>
-      {['short_term', 'long_term'].map(lt => {
-        const key = `${symbol}_${lt}`;
-        const done = added[key];
-        const isST = lt === 'short_term';
-        return (
-          <Tooltip key={lt} title={done ? 'Added' : (isST ? 'Short Term' : 'Long Term')}>
-            <span>
-              <IconButton size="small" disabled={!!done}
-                onClick={() => onAdd(symbol, lt)}
-                sx={{ p: '2px', bgcolor: done ? '#e8f5e9' : (isST ? '#e3f2fd' : '#fff3e0'),
-                  color: done ? '#2e7d32' : (isST ? '#1565c0' : '#e65100'), fontSize: 13 }}>
-                {done ? <MdCheck /> : <MdPlaylistAdd />}
-              </IconButton>
-            </span>
-          </Tooltip>
-        );
-      })}
-    </Box>
-  );
 }
 
 function trendLabel(trend, recommendation) {
@@ -62,6 +42,20 @@ function normalizeReco(value) {
   if (v === 'strongbuy') return 'strong_buy';
   if (v === 'strongsell') return 'strong_sell';
   return v;
+}
+
+function deriveStrategyTags(row) {
+  const tags = [];
+  if (row?.monthly_setup_rule || row?.monthly_psar_macd_rule || row?.monthly_qualified) {
+    tags.push({ label: 'Monthly MACD+PSAR', tone: 'bull' });
+  }
+  if (row?.vwap_cross_quarter_above) {
+    tags.push({ label: 'VWAP > QVWAP Cross', tone: 'bull' });
+  }
+  if (row?.vwap_cross_quarter_below) {
+    tags.push({ label: 'VWAP < QVWAP Cross', tone: 'bear' });
+  }
+  return tags;
 }
 
 function dedupeSignalsBySymbol(rows) {
@@ -83,19 +77,26 @@ function dedupeSignalsBySymbol(rows) {
   return Array.from(bySymbol.values());
 }
 
+function getTrailingState(row) {
+  const cmp = parseNumber(row?.cmp ?? row?.price);
+  const entry = parseNumber(row?.entry_price);
+  const stopLoss = parseNumber(row?.stop_loss);
+  const t1 = parseNumber(row?.target_1 ?? row?.target_short_term ?? row?.target_long_term);
+  if (cmp == null || entry == null || stopLoss == null || t1 == null) {
+    return { t1Hit: false, costExit: false, effectiveStopLoss: stopLoss };
+  }
+  const t1Hit = cmp >= t1;
+  const effectiveStopLoss = t1Hit ? entry : stopLoss;
+  const costExit = t1Hit && cmp <= entry;
+  return { t1Hit, costExit, effectiveStopLoss };
+}
+
 function FinancialAdvisorPage() {
   const [tab, setTab] = useState(0);
-  const [marketMode, setMarketMode] = useState({ mode: 'unknown', isMarketHours: null });
 
   useEffect(() => {
     apiGet('/system/status')
-      .then((res) => {
-        const orch = res?.orchestrator || {};
-        setMarketMode({
-          mode: orch.mode || 'unknown',
-          isMarketHours: orch.is_market_hours,
-        });
-      })
+      .then(() => {})
       .catch(() => {});
   }, []);
 
@@ -126,6 +127,7 @@ const SIG_COLS = [
   { key: 'status', label: 'Status' },
   { key: 'buy_sell_tier', label: 'Tier' },
   { key: 'trend', label: 'Trend' },
+  { key: 'strategies', label: 'Strategies' },
   { key: 'weekly_trend', label: 'Wk Trend' },
   { key: 'cmp', label: 'CMP', numeric: true },
   { key: 'entry_price', label: 'Entry', numeric: true },
@@ -135,7 +137,6 @@ const SIG_COLS = [
   { key: 'target_2', label: 'T2', numeric: true },
   { key: 'next_scope_target', label: 'Scope', numeric: true },
   { key: 'sector', label: 'Sector' },
-  { key: '_actions', label: '+' },
 ];
 
 const ALERT_COLS = [
@@ -146,7 +147,6 @@ const ALERT_COLS = [
   { key: 'target_1', label: 'T1', numeric: true },
   { key: 'target_2', label: 'T2', numeric: true },
   { key: 'signal_score', label: 'Score', numeric: true },
-  { key: '_actions', label: '+' },
   { key: '_read', label: '' },
 ];
 
@@ -156,19 +156,22 @@ function SignalsAlertsTab() {
   const [signalPayload, setSignalPayload] = useState(null);
   const [monthlySetupData, setMonthlySetupData] = useState([]);
   const [alertData, setAlertData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [signalsLoading, setSignalsLoading] = useState(true);
+  const [alertsLoading, setAlertsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('');
   const [symbolFilter, setSymbolFilter] = useState('');
   const [page, setPage] = useState(1);
   const [added, setAdded] = useState({});
   const [sortCol, setSortCol] = useState('conviction_score');
   const [sortDir, setSortDir] = useState('desc');
-  const [convFilter, setConvFilter] = useState('all');
+  const [convFilters, setConvFilters] = useState([]);
   const [recoFilter, setRecoFilter] = useState('all');
+  const [strategyFilter, setStrategyFilter] = useState('all');
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const rowsPerPage = showAll ? 9999 : 25;
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
 
   const handleSort = (col) => {
     if (col === '_actions' || col === '_read') return;
@@ -190,48 +193,127 @@ function SignalsAlertsTab() {
       : <FaSortDown style={{ color: '#fff', marginLeft: 3, fontSize: 10 }} />;
   };
 
-  useEffect(() => {
-    setLoading(true);
-    const p1 = fetchLatestSignalsPayload(250).then((payload) => {
+  const loadMonthlySetup = useCallback(() => {
+    const monthlyCacheKey = 'advisor_monthly_setup_v1';
+    setMonthlyLoading(true);
+    return fetchMonthlyMacdSetup(300)
+      .then((rows) => {
+        setMonthlySetupData(rows);
+        try { sessionStorage.setItem(monthlyCacheKey, JSON.stringify(rows || [])); } catch (_) {}
+      })
+      .catch(() => {})
+      .finally(() => setMonthlyLoading(false));
+  }, []);
+
+  const loadSignals = useCallback(() => {
+    const cacheKey = 'advisor_signals_payload_v1';
+    const monthlyCacheKey = 'advisor_monthly_setup_v1';
+    let hasCachedSignals = false;
+    try {
+      const cachedPayload = sessionStorage.getItem(cacheKey);
+      if (cachedPayload) {
+        const parsed = JSON.parse(cachedPayload);
+        setSignalPayload(parsed || null);
+        setSignalData(parsed?.data || []);
+        hasCachedSignals = true;
+        setSignalsLoading(false);
+      }
+      const cachedMonthly = sessionStorage.getItem(monthlyCacheKey);
+      if (cachedMonthly) {
+        const parsedMonthly = JSON.parse(cachedMonthly);
+        if (Array.isArray(parsedMonthly)) setMonthlySetupData(parsedMonthly);
+      }
+    } catch (_) {}
+
+    if (!hasCachedSignals) setSignalsLoading(true);
+    fetchLatestSignalsPayload(250).then((payload) => {
       setSignalPayload(payload || null);
       setSignalData(payload?.data || []);
-    }).catch(() => {});
-    const pMonthly = fetchMonthlyMacdSetup(300).then(setMonthlySetupData).catch(() => {});
-    const p2 = fetchAlerts({ limit: 200, ...(sourceFilter ? { source: sourceFilter } : {}), ...(symbolFilter ? { symbol: symbolFilter } : {}) }).then(setAlertData).catch(() => {});
-    Promise.all([p1, pMonthly, p2]).finally(() => setLoading(false));
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(payload || null)); } catch (_) {}
+    }).catch(() => {}).finally(() => setSignalsLoading(false));
+
+    // Keep monthly strategy refresh non-blocking for first paint.
+    setTimeout(() => {
+      loadMonthlySetup();
+    }, 0);
+  }, [loadMonthlySetup]);
+
+  const loadAlerts = useCallback(() => {
+    setAlertsLoading(true);
+    return fetchAlerts({
+      limit: 200,
+      ...(sourceFilter ? { source: sourceFilter } : {}),
+      ...(symbolFilter ? { symbol: symbolFilter } : {}),
+    })
+      .then(setAlertData)
+      .catch(() => {})
+      .finally(() => setAlertsLoading(false));
   }, [sourceFilter, symbolFilter]);
 
+  useEffect(() => {
+    loadSignals();
+  }, [loadSignals]);
+
+  useEffect(() => {
+    if (view !== 'alerts') return;
+    loadAlerts();
+  }, [view, loadAlerts]);
+
+  useEffect(() => {
+    if (!convFilters.includes('monthly_setup')) return;
+    if (monthlySetupData.length > 0 || monthlyLoading) return;
+    loadMonthlySetup();
+  }, [convFilters, monthlySetupData.length, monthlyLoading, loadMonthlySetup]);
+
   const filteredSignals = useMemo(() => {
-    let rows = convFilter === 'monthly_setup'
-      ? monthlySetupData
-      : signalData.filter(s => s.cmp && s.entry_price && (convFilter === 'done' ? true : !s.hit_target));
+    const activeFilters = convFilters.filter((f) => f && f !== 'all');
+    const hasMonthlyFilter = activeFilters.includes('monthly_setup');
+    const hasDoneFilter = activeFilters.includes('done');
+    let rows = hasMonthlyFilter
+      ? dedupeSignalsBySymbol([...(signalData || []), ...(monthlySetupData || [])])
+      : signalData;
+    rows = rows.filter((s) => {
+      if (!hasMonthlyFilter && !(s.cmp && s.entry_price)) return false;
+      return hasDoneFilter ? true : !s.hit_target;
+    });
     if (symbolFilter) {
       const q = symbolFilter.toUpperCase();
       rows = rows.filter(s => s.symbol?.includes(q));
     }
-    if (convFilter === 'high') {
-      rows = rows.filter(s => s.high_conviction);
-    } else if (convFilter === 'high_bull') {
-      rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish');
-    } else if (convFilter === 'high_bear') {
-      rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish');
-    } else if (convFilter === 'weekly') {
-      rows = rows.filter(s => s.weekly_aligned);
-    } else if (convFilter === 'actionable') {
-      rows = rows.filter(s => s.actionable);
-    } else if (convFilter === 'entry_ready') {
-      rows = rows.filter(s => s.status === 'entry_ready');
-    } else if (convFilter === 'done') {
-      rows = rows.filter(s => s.target_done || s.status === 'done');
-    }
+    activeFilters.forEach((filterKey) => {
+      if (filterKey === 'high') {
+        rows = rows.filter(s => s.high_conviction);
+      } else if (filterKey === 'high_bull') {
+        rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish');
+      } else if (filterKey === 'high_bear') {
+        rows = rows.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish');
+      } else if (filterKey === 'weekly') {
+        rows = rows.filter(s => s.weekly_aligned);
+      } else if (filterKey === 'actionable') {
+        rows = rows.filter(s => s.actionable);
+      } else if (filterKey === 'entry_ready') {
+        rows = rows.filter(s => s.status === 'entry_ready');
+      } else if (filterKey === 'done') {
+        rows = rows.filter(s => s.target_done || s.status === 'done');
+      } else if (filterKey === 'monthly_setup') {
+        rows = rows.filter(s => s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
+      }
+    });
     if (recoFilter !== 'all') {
       rows = rows.filter(s => {
         const rec = normalizeReco(s.signal_type || s.recommendation);
         return rec === recoFilter;
       });
     }
+    if (strategyFilter === 'monthly_psar_macd') {
+      rows = rows.filter(s => s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
+    } else if (strategyFilter === 'vwap_cross_above') {
+      rows = rows.filter(s => s.vwap_cross_quarter_above);
+    } else if (strategyFilter === 'vwap_cross_below') {
+      rows = rows.filter(s => s.vwap_cross_quarter_below);
+    }
     return dedupeSignalsBySymbol(rows);
-  }, [signalData, monthlySetupData, symbolFilter, convFilter, recoFilter]);
+  }, [signalData, monthlySetupData, symbolFilter, convFilters, recoFilter, strategyFilter]);
 
   const uniqueSignalData = useMemo(
     () => dedupeSignalsBySymbol(signalData.filter(s => s.cmp && s.entry_price)),
@@ -281,12 +363,21 @@ function SignalsAlertsTab() {
     } catch (_) { /* ignore */ }
   };
 
+  const handleAddSelected = async (listType) => {
+    const syms = [...checkedSymbols].filter(Boolean);
+    if (!syms.length) return;
+    for (const symbol of syms) {
+      // Reuse single-add flow so existing dedupe/disable state stays consistent.
+      // eslint-disable-next-line no-await-in-loop
+      await handleAdd(symbol, listType);
+    }
+  };
+
   const handleMarkRead = async (id) => {
     await markAlertRead(id);
-    const f = { limit: 200 };
-    if (sourceFilter) f.source = sourceFilter;
-    if (symbolFilter) f.symbol = symbolFilter;
-    fetchAlerts(f).then(setAlertData);
+    if (view === 'alerts') {
+      loadAlerts();
+    }
   };
 
   return (
@@ -317,6 +408,17 @@ function SignalsAlertsTab() {
               <MenuItem value="sell">Sell</MenuItem>
               <MenuItem value="strong_sell">Strong Sell</MenuItem>
             </Select>
+            <Select
+              size="small"
+              value={strategyFilter}
+              onChange={e => { setStrategyFilter(e.target.value); setPage(1); }}
+              sx={{ minWidth: 180, fontSize: 12 }}
+            >
+              <MenuItem value="all">All Strategies</MenuItem>
+              <MenuItem value="monthly_psar_macd">Monthly MACD+PSAR</MenuItem>
+              <MenuItem value="vwap_cross_above">VWAP Cross Above</MenuItem>
+              <MenuItem value="vwap_cross_below">VWAP Cross Below</MenuItem>
+            </Select>
             <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
               {[
                 { val: 'all', label: `All` },
@@ -330,16 +432,39 @@ function SignalsAlertsTab() {
                 { val: 'monthly_setup', label: `Monthly Setup (${monthlySetupCount})`, color: '#0d47a1', bg: '#e3f2fd' },
               ].map(opt => (
                 <Button key={opt.val} size="small"
-                  onClick={() => { setConvFilter(opt.val); setPage(1); }}
+                  onClick={() => {
+                    setPage(1);
+                    if (opt.val === 'all') {
+                      setConvFilters([]);
+                      return;
+                    }
+                    setConvFilters((prev) =>
+                      prev.includes(opt.val)
+                        ? prev.filter((v) => v !== opt.val)
+                        : [...prev, opt.val]
+                    );
+                  }}
                   sx={{ textTransform: 'none', px: 1.5, borderRadius: 0, fontSize: 11,
-                    fontWeight: convFilter === opt.val ? 700 : 400,
-                    bgcolor: convFilter === opt.val ? '#1a3c5e' : 'transparent',
-                    color: convFilter === opt.val ? '#fff' : '#333',
-                    '&:hover': { bgcolor: convFilter === opt.val ? '#1a3c5e' : '#f5f5f5' } }}>
+                    fontWeight: (opt.val === 'all' ? convFilters.length === 0 : convFilters.includes(opt.val)) ? 700 : 400,
+                    bgcolor: (opt.val === 'all' ? convFilters.length === 0 : convFilters.includes(opt.val)) ? '#1a3c5e' : 'transparent',
+                    color: (opt.val === 'all' ? convFilters.length === 0 : convFilters.includes(opt.val)) ? '#fff' : '#333',
+                    '&:hover': {
+                      bgcolor: (opt.val === 'all' ? convFilters.length === 0 : convFilters.includes(opt.val))
+                        ? '#1a3c5e'
+                        : '#f5f5f5'
+                    } }}>
                   {opt.label}
                 </Button>
               ))}
             </Box>
+            {convFilters.length > 0 && (
+              <Chip
+                size="small"
+                label={`AND: ${convFilters.join(' + ')}`}
+                onDelete={() => { setConvFilters([]); setPage(1); }}
+                sx={{ fontSize: 10, bgcolor: '#e3f2fd', color: '#0d47a1' }}
+              />
+            )}
             <Button size="small" variant={showAll ? 'contained' : 'outlined'}
               onClick={() => { setShowAll(p => !p); setPage(1); }}
               sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
@@ -388,6 +513,24 @@ function SignalsAlertsTab() {
                 {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : filteredSignals.length})`}
               </Button>
             </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('short_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#1565c0' }}
+            >
+              {`Add ST (${checkedSymbols.size})`}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('long_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#2e7d32' }}
+            >
+              {`Add LT (${checkedSymbols.size})`}
+            </Button>
             {checkedSymbols.size > 0 && (
               <Button size="small" onClick={() => setCheckedSymbols(new Set())}
                 sx={{ textTransform: 'none', fontSize: 11, px: 1, color: '#888', minWidth: 0 }}>
@@ -416,7 +559,7 @@ function SignalsAlertsTab() {
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
       </Box>
 
-      {loading ? (
+      {(view === 'signals' ? signalsLoading : alertsLoading) ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
       ) : view === 'signals' ? (
         <TableWrapper>
@@ -463,6 +606,7 @@ function SignalsAlertsTab() {
                 const tierColor = tier?.startsWith('B') ? '#1b5e20' : tier?.startsWith('S') ? '#c62828' : '#666';
                 const tierBg = tier?.startsWith('B') ? '#e8f5e9' : tier?.startsWith('S') ? '#ffebee' : '#f5f5f5';
                 const wkColor = s.weekly_trend === 'bullish' ? '#1b5e20' : s.weekly_trend === 'bearish' ? '#c62828' : '#888';
+                const strategyTags = deriveStrategyTags(s);
                 return (
                 <tr key={`sig-${s.symbol}-${i}`} style={{ background: rowBg }}>
                   <td style={{ padding: '4px', textAlign: 'center' }}>
@@ -523,6 +667,28 @@ function SignalsAlertsTab() {
                     ) : <span style={{ color: '#ccc', fontSize: 10 }}>—</span>}
                   </td>
                   <td style={{ ...compact, color: tColor, fontWeight: 600 }}>{trendLabel(s.trend, s.signal_type)}</td>
+                  <td style={{ ...compact, minWidth: 190 }}>
+                    {strategyTags.length ? (
+                      <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
+                        {strategyTags.map((tag) => (
+                          <Chip
+                            key={`${s.symbol}-${tag.label}`}
+                            label={tag.label}
+                            size="small"
+                            sx={{
+                              fontSize: 9,
+                              height: 17,
+                              fontWeight: 700,
+                              bgcolor: tag.tone === 'bear' ? '#ffebee' : '#e8f5e9',
+                              color: tag.tone === 'bear' ? '#b71c1c' : '#1b5e20',
+                            }}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#bbb', fontSize: 10 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ ...compact, color: wkColor, fontWeight: 600 }}>
                     {s.weekly_trend ? (s.weekly_trend.charAt(0).toUpperCase() + s.weekly_trend.slice(1)) : '—'}
                     {s.weekly_aligned && <span style={{ fontSize: 8, marginLeft: 2, color: '#1b5e20' }}>✓</span>}
@@ -536,7 +702,18 @@ function SignalsAlertsTab() {
                     )}
                   </td>
                   <td style={{ ...compact, fontWeight: 600, color: '#1565c0' }}>{fmt(s.entry_price)}</td>
-                  <td style={{ ...compact, color: slColor }}>{fmt(s.stop_loss)}</td>
+                  <td style={{ ...compact }}>
+                    {(() => {
+                      const trail = getTrailingState(s);
+                      if (trail.effectiveStopLoss == null) return '—';
+                      return (
+                        <span style={{ color: trail.costExit ? '#c62828' : trail.t1Hit ? '#1565c0' : slColor, fontWeight: trail.t1Hit ? 700 : 400 }}>
+                          ₹{trail.effectiveStopLoss.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {trail.costExit ? ' (C2C Exit)' : trail.t1Hit ? ' (Trail @ Cost)' : ''}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td style={{ ...compact, color: slColor, fontSize: 10 }}>{s.sl_pct != null ? `${s.sl_pct}%` : '—'}</td>
                   <td style={{ ...compact, fontWeight: 600, color: tgtColor }}>{fmt(s.target_1)}</td>
                   <td style={compact}>{fmt(s.target_2)}</td>
@@ -544,7 +721,6 @@ function SignalsAlertsTab() {
                     {s.further_scope ? fmt(s.next_scope_target) : (s.target_done ? 'Done' : '—')}
                   </td>
                   <td style={{ ...compact, fontSize: 10, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sector || '—'}</td>
-                  <td style={compact}><WatchlistButtons symbol={s.symbol} added={added} onAdd={handleAdd} /></td>
                 </tr>
                 );
               })}
@@ -575,7 +751,6 @@ function SignalsAlertsTab() {
                   <td style={{ ...compact, fontWeight: 600, color: '#2e7d32' }}>{fmt(a.target_1)}</td>
                   <td style={compact}>{fmt(a.target_2)}</td>
                   <td style={{ ...compact, textAlign: 'center' }}>{a.signal_score != null ? a.signal_score : '—'}</td>
-                  <td style={compact}><WatchlistButtons symbol={a.symbol} added={added} onAdd={handleAdd} /></td>
                   <td style={compact}>
                     {!a.is_read && (
                       <Button size="small" onClick={() => handleMarkRead(a.id)}
@@ -585,7 +760,7 @@ function SignalsAlertsTab() {
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No alerts matching filters.</td></tr>
+                <tr><td colSpan={ALERT_COLS.length} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No alerts matching filters.</td></tr>
               )}
             </tbody>
           </Table>

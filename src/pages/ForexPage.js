@@ -3,7 +3,6 @@ import styled from 'styled-components';
 import { MdRefresh, MdCurrencyExchange } from 'react-icons/md';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend,
 } from 'recharts';
 import { fetchForexRates, fetchForexHistory, fetchCurrencyFutures } from '../api/forex';
 

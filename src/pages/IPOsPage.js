@@ -1,8 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button, CircularProgress, IconButton, Tooltip } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, CircularProgress, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
-import { MdPlaylistAdd, MdCheck } from 'react-icons/md';
 import { fetchIPOs } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
 
@@ -42,6 +41,7 @@ function IPOsPage() {
   const [page, setPage] = useState(1);
   const rowsPerPage = 15;
   const [added, setAdded] = useState({});
+  const [checkedSymbols, setCheckedSymbols] = useState(new Set());
 
   const handleAdd = async (symbol, listType) => {
     if (!symbol || symbol === '—') return;
@@ -51,6 +51,14 @@ function IPOsPage() {
       await addToWatchlist(symbol.toUpperCase(), listType, '');
       setAdded(prev => ({ ...prev, [key]: true }));
     } catch (_) { /* ignore */ }
+  };
+
+  const handleAddSelected = async (listType) => {
+    const syms = [...checkedSymbols].filter((s) => s && s !== '—');
+    for (const symbol of syms) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleAdd(symbol, listType);
+    }
   };
 
   useEffect(() => {
@@ -163,7 +171,6 @@ function IPOsPage() {
     { key: 'listingPrice', label: 'List Price' },
     { key: 'listingGain', label: 'List Gain' },
     { key: 'currentPrice', label: 'CMP' },
-    { key: 'actions', label: '+' },
   ];
 
   return (
@@ -177,29 +184,31 @@ function IPOsPage() {
         <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>{loadError}</div>
       )}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <ButtonGroup size="small" variant="outlined">
-          {[
-            { label: 'All', value: null },
-            { label: 'Active', value: 'Active' },
-            { label: 'Listed', value: 'Listed' },
-            { label: 'Closed', value: 'Closed' },
-          ].map((btn) => (
-            <Button
-              key={btn.label}
-              variant={statusFilter === btn.value ? 'contained' : 'outlined'}
-              onClick={() => setStatusFilter(btn.value)}
-            >
-              {btn.label}
-            </Button>
-          ))}
-        </ButtonGroup>
-        <TextField
-          size="small"
-          variant="outlined"
-          placeholder="Search..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ButtonGroup size="small" variant="outlined">
+            {[
+              { label: 'All', value: null },
+              { label: 'Active', value: 'Active' },
+              { label: 'Listed', value: 'Listed' },
+              { label: 'Closed', value: 'Closed' },
+            ].map((btn) => (
+              <Button
+                key={btn.label}
+                variant={statusFilter === btn.value ? 'contained' : 'outlined'}
+                onClick={() => setStatusFilter(btn.value)}
+              >
+                {btn.label}
+              </Button>
+            ))}
+          </ButtonGroup>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
+            {`Add ST (${checkedSymbols.size})`}
+          </Button>
+          <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('long_term')} sx={{ textTransform: 'none', bgcolor: '#2e7d32' }}>
+            {`Add LT (${checkedSymbols.size})`}
+          </Button>
+        </Box>
+        <TextField size="small" variant="outlined" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </Box>
       <TableSection>
         <TableTitle>IPOs ({sortedData.length})</TableTitle>
@@ -207,6 +216,23 @@ function IPOsPage() {
           <Table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <Checkbox
+                    size="small"
+                    checked={paginatedData.filter((r) => r.symbol && r.symbol !== '—').length > 0 && paginatedData.filter((r) => r.symbol && r.symbol !== '—').every((r) => checkedSymbols.has(r.symbol))}
+                    indeterminate={paginatedData.some((r) => r.symbol && r.symbol !== '—' && checkedSymbols.has(r.symbol)) && !paginatedData.filter((r) => r.symbol && r.symbol !== '—').every((r) => checkedSymbols.has(r.symbol))}
+                    onChange={() => {
+                      const pageSyms = paginatedData.map((r) => r.symbol).filter((s) => s && s !== '—');
+                      const allSelected = pageSyms.length > 0 && pageSyms.every((s) => checkedSymbols.has(s));
+                      setCheckedSymbols((prev) => {
+                        const next = new Set(prev);
+                        if (allSelected) pageSyms.forEach((s) => next.delete(s));
+                        else pageSyms.forEach((s) => next.add(s));
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 {columnConfig.map((col) => (
                   <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
                     {col.label}{getSortArrow(col.key)}
@@ -224,6 +250,22 @@ function IPOsPage() {
               )}
               {paginatedData.map((row) => (
                 <tr key={row.id + row.symbol}>
+                  <td>
+                    <Checkbox
+                      size="small"
+                      disabled={!row.symbol || row.symbol === '—'}
+                      checked={!!row.symbol && row.symbol !== '—' && checkedSymbols.has(row.symbol)}
+                      onChange={() => {
+                        if (!row.symbol || row.symbol === '—') return;
+                        setCheckedSymbols((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.symbol)) next.delete(row.symbol);
+                          else next.add(row.symbol);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   <td className="index">{row.id}</td>
                   <td>{row.symbol}</td>
                   <td>{row.companyName}</td>
@@ -271,26 +313,6 @@ function IPOsPage() {
                     {row.listingGain}
                   </td>
                   <td>{row.currentPrice}</td>
-                  <td>
-                    <Box sx={{ display: 'flex', gap: 0.3 }}>
-                      <Tooltip title={added[`${row.symbol}_short_term`] ? 'Added' : 'Short Term'}>
-                        <span>
-                          <IconButton size="small" disabled={row.symbol === '—' || !!added[`${row.symbol}_short_term`]} onClick={() => handleAdd(row.symbol, 'short_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_short_term`] ? '#e8f5e9' : '#e3f2fd', color: added[`${row.symbol}_short_term`] ? '#2e7d32' : '#1565c0', fontSize: 14 }}>
-                            {added[`${row.symbol}_short_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={added[`${row.symbol}_long_term`] ? 'Added' : 'Long Term'}>
-                        <span>
-                          <IconButton size="small" disabled={row.symbol === '—' || !!added[`${row.symbol}_long_term`]} onClick={() => handleAdd(row.symbol, 'long_term')}
-                            sx={{ p: '2px', bgcolor: added[`${row.symbol}_long_term`] ? '#e8f5e9' : '#fff3e0', color: added[`${row.symbol}_long_term`] ? '#2e7d32' : '#e65100', fontSize: 14 }}>
-                            {added[`${row.symbol}_long_term`] ? <MdCheck /> : <MdPlaylistAdd />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  </td>
                 </tr>
               ))}
             </tbody>
