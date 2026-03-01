@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { configureAuthHandlers } from '../api/apiClient';
 import { fetchMe, logoutSession, refreshSession } from '../api/auth';
+import { clearBrokerSession } from '../api/brokers';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
@@ -16,6 +17,21 @@ const ADMIN_EMAILS = new Set(
     .map((v) => String(v).trim().toLowerCase())
     .filter(Boolean)
 );
+
+const clearLocalBrokerSessionMarkers = () => {
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('broker_session_auth_')) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (_) {
+    // ignore localStorage access failures
+  }
+};
 
 export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(localStorage.getItem(ACCESS_KEY) || '');
@@ -37,6 +53,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
+    clearLocalBrokerSessionMarkers();
   }, []);
 
   const persistAuth = useCallback((nextAccess, nextRefresh, nextUser = null) => {
@@ -111,6 +128,7 @@ export function AuthProvider({ children }) {
   }, [accessToken, refreshToken, hydrateMe, tryRefresh]);
 
   const logout = useCallback(async () => {
+    const userId = String(user?.id || user?.user_id || user?.email || '');
     try {
       if (refreshToken) {
         await logoutSession(refreshToken);
@@ -118,8 +136,15 @@ export function AuthProvider({ children }) {
     } catch (_) {
       // noop
     }
+    try {
+      if (userId) {
+        await clearBrokerSession({ user_id: userId });
+      }
+    } catch (_) {
+      // noop
+    }
     clearAuth();
-  }, [clearAuth, refreshToken]);
+  }, [clearAuth, refreshToken, user]);
 
   const value = useMemo(
     () => ({

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,11 +20,12 @@ from app.db.models import (
     OrderStatus,
     OrderType,
     PortfolioPosition,
+    BrokerSetup,
     SymbolLeverage,
     TradeOrder,
 )
 from app.db.session import get_db
-from app.services.brokers.dhan_execution import cancel_dhan_order, execute_dhan_order
+from app.api.dhan import _SESSION_TOKEN_BY_USER
 from app.services.charges import calculate_charges
 from app.services.portfolio_manager import apply_order_fill_to_portfolio
 
@@ -34,6 +37,36 @@ BROKER_LEVERAGE = {
     "samco": {"INTRADAY": 5.0, "MARGIN": 4.0, "DELIVERY": 1.0},
     "upstox": {"INTRADAY": 5.0, "MARGIN": 4.0, "DELIVERY": 1.0},
 }
+
+
+def _normalize_exchange_status(raw_status: str | None) -> OrderStatus | None:
+    if not raw_status:
+        return None
+    status = str(raw_status).strip().upper()
+    mapping = {
+        "NEW": OrderStatus.NEW,
+        "OPEN": OrderStatus.PLACED,
+        "PLACED": OrderStatus.PLACED,
+        "PENDING": OrderStatus.PLACED,
+        "TRIGGER_PENDING": OrderStatus.PLACED,
+        "PARTIAL": OrderStatus.PARTIAL,
+        "PARTIALLY_FILLED": OrderStatus.PARTIAL,
+        "FILLED": OrderStatus.FILLED,
+        "COMPLETE": OrderStatus.FILLED,
+        "CANCELED": OrderStatus.CANCELED,
+        "CANCELLED": OrderStatus.CANCELED,
+        "REJECTED": OrderStatus.REJECTED,
+    }
+    return mapping.get(status)
+
+
+def _is_exchange_acknowledged(order: TradeOrder) -> bool:
+    if order.execution_mode != ExecutionMode.LIVE:
+        return False
+    return bool(
+        (order.broker_order_id or "").strip()
+        and order.status in {OrderStatus.PLACED, OrderStatus.PARTIAL, OrderStatus.FILLED}
+    )
 
 
 class PlaceOrderRequest(BaseModel):
@@ -80,6 +113,7 @@ def _serialize_order(order: TradeOrder) -> dict:
         "strategy_payload": json.loads(order.strategy_payload) if order.strategy_payload else None,
         "created_at": order.created_at.isoformat(),
         "updated_at": order.updated_at.isoformat(),
+        "exchange_order_acknowledged": _is_exchange_acknowledged(order),
         "charge_breakup": {
             "brokerage": breakup.brokerage,
             "stt": breakup.stt,
@@ -211,11 +245,97 @@ def _requires_funds_check(side: OrderSide, product_type: OrderProductType) -> bo
     return side == OrderSide.SELL and product_type == OrderProductType.INTRADAY
 
 
+def _map_dhan_product(product_type: str) -> str:
+    p = (product_type or "").upper()
+    if p == "INTRADAY":
+        return "INTRA"
+    if p == "MARGIN":
+        return "MARGIN"
+    return "CNC"
+
+
+def _map_dhan_order_type(order_type: str) -> str:
+    o = (order_type or "").upper()
+    return "LIMIT" if o == "LIMIT" else "MARKET"
+
+
+def _place_live_order_via_dhan_api(
+    *,
+    db: Session,
+    user_id: str,
+    symbol: str,
+    side: str,
+    product_type: str,
+    qty: int,
+    price: float,
+    order_type: str,
+    correlation_id: str,
+) -> dict:
+    token = str(_SESSION_TOKEN_BY_USER.get(user_id) or "").strip()
+    if not token or token.startswith("dhan_"):
+        raise HTTPException(status_code=400, detail="Dhan live session token not available. Connect Dhan first.")
+
+    setup = db.query(BrokerSetup).filter(BrokerSetup.user_id == user_id, BrokerSetup.broker == "dhan").first()
+    if not setup or not setup.client_id or not setup.has_session:
+        raise HTTPException(status_code=400, detail="Dhan broker setup is incomplete for this user.")
+
+    payload = {
+        "securityId": symbol,
+        "exchangeSegment": "NSE_EQ",
+        "transactionType": (side or "").upper(),
+        "quantity": int(qty),
+        "orderType": _map_dhan_order_type(order_type),
+        "productType": _map_dhan_product(product_type),
+        "price": float(price or 0.0),
+        "triggerPrice": 0.0,
+        "validity": "DAY",
+        "correlationId": correlation_id,
+    }
+    req = Request(
+        "https://api.dhan.co/v2/orders",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "access-token": token,
+            "dhanClientId": setup.client_id,
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            data = json.loads(raw) if raw else {}
+    except HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
+        raise HTTPException(status_code=502, detail=f"Dhan place order failed ({e.code}): {body or e.reason}") from e
+    except URLError as e:
+        raise HTTPException(status_code=502, detail=f"Dhan order API unreachable: {e.reason}") from e
+
+    broker_order_id = (
+        data.get("orderId")
+        or data.get("order_id")
+        or data.get("oms_order_id")
+        or data.get("id")
+    )
+    status = str(data.get("orderStatus") or data.get("status") or "PLACED").upper()
+    if not broker_order_id:
+        raise HTTPException(status_code=502, detail=f"Dhan order response missing order id: {data}")
+    return {
+        "broker_order_id": str(broker_order_id),
+        "status": status,
+        "filled_qty": int(data.get("filledQty") or data.get("filled_qty") or 0),
+        "average_fill_price": float(data.get("averagePrice") or data.get("average_fill_price") or 0.0),
+        "raw_payload": data,
+    }
+
+
 @router.post("/place")
 def place_order(payload: PlaceOrderRequest, db: Session = Depends(get_db)):
     broker = (payload.broker or "dhan").lower()
     live_mode = is_live_enabled(db, payload.user_id, broker=broker)
-    execution_mode = ExecutionMode.LIVE if live_mode else ExecutionMode.PAPER
+    if not live_mode:
+        raise HTTPException(status_code=400, detail="Live broker session is required. Paper/simulated mode is disabled.")
+    execution_mode = ExecutionMode.LIVE
     turnover = float(payload.qty) * float(payload.price or 0.0)
     starting_capital = float(os.getenv("PAPER_STARTING_CAPITAL", "100000"))
 
@@ -273,31 +393,44 @@ def place_order(payload: PlaceOrderRequest, db: Session = Depends(get_db)):
 
     db.add(OrderChargeBreakup(trade_order_id=order.id, **estimated_charges, tax_payload=json.dumps(estimated_charges)))
 
-    if execution_mode == ExecutionMode.PAPER:
-        order.status = OrderStatus.FILLED
-        order.broker_order_id = f"PAPER-{uuid4().hex[:12].upper()}"
-        order.average_fill_price = payload.price
-        order.filled_qty = payload.qty
-        order.remaining_qty = 0
-        order.raw_broker_payload = json.dumps({"mode": "paper"})
+    broker_result = _place_live_order_via_dhan_api(
+        db=db,
+        user_id=payload.user_id,
+        symbol=payload.symbol.upper(),
+        side=payload.side.value,
+        product_type=payload.product_type.value,
+        qty=payload.qty,
+        price=payload.price,
+        order_type=payload.order_type.value,
+        correlation_id=order.client_order_ref,
+    )
+    broker_order_id = str(broker_result.get("broker_order_id") or "").strip()
+    normalized_status = _normalize_exchange_status(broker_result.get("status"))
+    raw_payload = broker_result.get("raw_payload") or {}
+
+    order.broker_order_id = broker_order_id or None
+    order.raw_broker_payload = json.dumps(raw_payload)
+
+    if not broker_order_id:
+        order.status = OrderStatus.REJECTED
+        order.rejection_reason = "Exchange placement not acknowledged (missing broker order ID)."
+        order.average_fill_price = 0.0
+        order.filled_qty = 0
+        order.remaining_qty = payload.qty
+    elif normalized_status is None:
+        order.status = OrderStatus.REJECTED
+        order.rejection_reason = f"Unknown exchange status: {broker_result.get('status')}"
+        order.average_fill_price = 0.0
+        order.filled_qty = 0
+        order.remaining_qty = payload.qty
     else:
-        broker_result = execute_dhan_order(
-            symbol=payload.symbol.upper(),
-            side=payload.side.value,
-            product_type=payload.product_type.value,
-            qty=payload.qty,
-            price=payload.price,
-            order_type=payload.order_type.value,
-            client_order_ref=order.client_order_ref,
-        )
-        order.broker_order_id = broker_result["broker_order_id"]
-        order.status = OrderStatus(broker_result["status"])
+        order.status = normalized_status
         order.average_fill_price = float(broker_result.get("average_fill_price") or 0.0)
-        order.filled_qty = int(broker_result.get("filled_qty") or 0)
+        filled = int(broker_result.get("filled_qty") or 0)
+        order.filled_qty = min(max(filled, 0), payload.qty)
         order.remaining_qty = max(payload.qty - order.filled_qty, 0)
-        order.raw_broker_payload = json.dumps(broker_result.get("raw_payload") or {})
         if order.status == OrderStatus.REJECTED:
-            order.rejection_reason = broker_result.get("rejection_reason")
+            order.rejection_reason = broker_result.get("rejection_reason") or "Exchange rejected order."
 
     order.updated_at = datetime.utcnow()
     apply_order_fill_to_portfolio(db, order)
@@ -306,6 +439,13 @@ def place_order(payload: PlaceOrderRequest, db: Session = Depends(get_db)):
     return {
         "ok": True,
         "data": _serialize_order(order),
+        "exchange": {
+            "mode": order.execution_mode.value,
+            "broker_order_id": order.broker_order_id,
+            "status": order.status.value,
+            "placed": _is_exchange_acknowledged(order),
+            "reason": order.rejection_reason,
+        },
         "funds_check": {
             "checked": funds_check_applies,
             "leverage_used": leverage,
@@ -349,9 +489,6 @@ def cancel_order(order_id: int, user_id: str, db: Session = Depends(get_db)):
         return {"ok": True, "data": _serialize_order(row)}
     if row.status == OrderStatus.FILLED:
         raise HTTPException(status_code=400, detail="Filled orders cannot be canceled")
-
-    if row.execution_mode == ExecutionMode.LIVE and row.broker_order_id:
-        cancel_dhan_order(broker_order_id=row.broker_order_id)
 
     row.status = OrderStatus.CANCELED
     row.updated_at = datetime.utcnow()

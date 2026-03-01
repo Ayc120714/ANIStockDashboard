@@ -1,4 +1,4 @@
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010/api';
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 const defaultHeaders = {
   'Content-Type': 'application/json'

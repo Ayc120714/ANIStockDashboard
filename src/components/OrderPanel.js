@@ -8,11 +8,10 @@ import {
   MenuItem,
   Paper,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from '@mui/material';
-import { approveTrailSlToCost, placeOrder, setBrokerExecutionMode, updateSuperTargetWithOco } from '../api/orders';
+import { approveTrailSlToCost, placeOrder, updateSuperTargetWithOco } from '../api/orders';
 import { useAuth } from '../auth/AuthContext';
 
 const PRODUCT_OPTIONS = [
@@ -103,7 +102,6 @@ function OrderPanel({
   const [stopLoss, setStopLoss] = useState('');
   const [target1, setTarget1] = useState('');
   const [target2, setTarget2] = useState('');
-  const [liveEnabled, setLiveEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -329,13 +327,18 @@ function OrderPanel({
       };
       const res = await placeOrder(payload);
       const funds = res?.funds_check;
+      const exchange = res?.exchange || {};
+      const orderId = res?.data?.id || '—';
+      const brokerOrderId = exchange?.broker_order_id || res?.data?.broker_order_id || '—';
+      const exchangePlacementLabel = exchange?.placed ? 'Placed at exchange' : 'Not placed at exchange';
       const fundsSuffix = funds?.checked
         ? ` | Funds OK (Need ₹${Number(funds.required_amount || 0).toFixed(2)}, Available ₹${Number(funds.available_amount_before || 0).toFixed(2)}, Lev ${Number(funds.leverage_used || 1).toFixed(1)}x)`
         : '';
+      const placementSuffix = ` | Order#${orderId} | ExchID:${brokerOrderId} | ${exchangePlacementLabel}`;
       setMessage(
         orderType === 'SUPER'
-          ? `Super order requested (submitted as ${effectiveOrderType}) - ${res?.data?.status || 'OK'}${fundsSuffix}`
-          : `Order placed (${res?.data?.status || 'OK'})${fundsSuffix}`
+          ? `Super order requested (submitted as ${effectiveOrderType}) - ${res?.data?.status || 'OK'}${placementSuffix}${fundsSuffix}`
+          : `Order placed (${res?.data?.status || 'OK'})${placementSuffix}${fundsSuffix}`
       );
       if (typeof onOrderPlaced === 'function') onOrderPlaced(res?.data ?? null);
       if (orderType === 'SUPER' && res?.data?.id) {
@@ -436,22 +439,6 @@ function OrderPanel({
     onSetAlert({ symbol: cleanSymbol, side, productType });
   };
 
-  const onToggleLive = async (checked) => {
-    setBusy(true);
-    setError('');
-    setMessage('');
-    try {
-      if (!userId) throw new Error('Missing user context');
-      await setBrokerExecutionMode({ user_id: userId, broker, live_enabled: checked });
-      setLiveEnabled(checked);
-      setMessage(checked ? 'Live execution enabled for broker.' : 'Paper execution enabled.');
-    } catch (e) {
-      setError(e?.message || 'Failed to update execution mode');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const clearForm = () => {
     setSide('BUY');
     setProductType('INTRADAY');
@@ -478,18 +465,7 @@ function OrderPanel({
         <Typography variant="h6" sx={{ fontSize: 16, fontWeight: 700 }}>
           Trade Action Panel
         </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography sx={{ fontSize: 12, color: '#666' }}>Paper</Typography>
-          <Switch
-            size="small"
-            checked={liveEnabled}
-            onChange={(e) => onToggleLive(e.target.checked)}
-            disabled={busy || !isAdmin}
-          />
-          <Typography sx={{ fontSize: 12, color: liveEnabled ? '#1b5e20' : '#666', fontWeight: 600 }}>
-            {liveEnabled ? 'Live' : 'Paper'}
-          </Typography>
-        </Stack>
+        <Chip size="small" color="success" variant="outlined" label={isAdmin ? 'Live execution mode' : 'Live'} />
       </Stack>
 
       {hideBrokerSelector ? (

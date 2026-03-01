@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminPasswordlessLogin, loginStart, loginWithEmailOtpStart } from '../api/auth';
+import { fetchBrokerSetup } from '../api/brokers';
 import { useAuth } from '../auth/AuthContext';
 
 const DEFAULT_ADMIN_EMAIL = 'gvc1990@gmail.com';
@@ -26,6 +27,25 @@ function LoginPage() {
   );
   const showPasswordField = !canPasswordlessAdminLogin;
 
+  const postLoginNavigate = async (nextUser, fallbackPath) => {
+    const userId = String(nextUser?.id || nextUser?.user_id || nextUser?.email || '');
+    if (!userId) {
+      navigate(fallbackPath, { replace: true });
+      return;
+    }
+    try {
+      const rows = await fetchBrokerSetup({ userId });
+      const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
+      if (!hasSession) {
+        navigate('/profile', { replace: true, state: { openBrokerSetup: true, from: fallbackPath } });
+        return;
+      }
+    } catch (_) {
+      // If setup check fails, continue to app and let user setup from profile.
+    }
+    navigate(fallbackPath, { replace: true });
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -35,7 +55,7 @@ function LoginPage() {
       const res = await loginStart(email.trim(), password);
       if (res?.mfa_required === false && res?.access_token && res?.refresh_token) {
         persistAuth(res.access_token, res.refresh_token, res?.user || null);
-        navigate(location.state?.from?.pathname || '/', { replace: true });
+        await postLoginNavigate(res?.user || null, location.state?.from?.pathname || '/');
         return;
       }
       navigate('/verify-otp', {
@@ -61,7 +81,7 @@ function LoginPage() {
     try {
       const res = await adminPasswordlessLogin(email.trim());
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-      navigate(location.state?.from?.pathname || '/', { replace: true });
+      await postLoginNavigate(res?.user || null, location.state?.from?.pathname || '/');
     } catch (err) {
       setError(err?.message || 'Admin passwordless login failed.');
     } finally {

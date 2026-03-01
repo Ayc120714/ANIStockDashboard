@@ -20,10 +20,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
 import {
+  fetchDhanHoldings,
+  connectDhan,
   fetchDhanOrders,
   fetchDhanPositions,
 } from '../api/dhan';
@@ -37,36 +39,73 @@ const pickArray = (payload) => {
   return [];
 };
 
+const deriveOpenPositionsFromOrders = (orders) => {
+  const rows = Array.isArray(orders) ? orders : [];
+  const bySymbol = new Map();
+  rows.forEach((row) => {
+    const status = String(row?.orderStatus || row?.status || '').toUpperCase();
+    if (!['FILLED', 'PARTIAL', 'COMPLETE'].includes(status)) return;
+    const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
+    if (!symbol) return;
+    const side = String(row?.transactionType || row?.side || '').toUpperCase();
+    const qty = Number(row?.filledQty ?? row?.quantity ?? row?.qty ?? 0);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    const price = Number(row?.averagePrice ?? row?.avgPrice ?? row?.price ?? 0);
+    const current = bySymbol.get(symbol) || { tradingSymbol: symbol, netQty: 0, buyValue: 0 };
+    if (side === 'BUY') {
+      current.netQty += qty;
+      if (Number.isFinite(price) && price > 0) current.buyValue += qty * price;
+    } else if (side === 'SELL') {
+      current.netQty -= qty;
+      if (Number.isFinite(price) && price > 0) current.buyValue -= qty * price;
+    }
+    bySymbol.set(symbol, current);
+  });
+  return [...bySymbol.values()]
+    .filter((r) => Number(r.netQty) !== 0)
+    .map((r) => ({
+      ...r,
+      productType: 'DELIVERY',
+      buyAvg: r.netQty !== 0 ? Math.abs((r.buyValue || 0) / r.netQty) : 0,
+      pnl: 0,
+      ltp: 0,
+    }));
+};
+
 function ProfilePage() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const userId = String(user?.id || user?.user_id || user?.email || '');
+  const brokerSessionKey = (broker) => `broker_session_auth_${userId}_${String(broker || '').toLowerCase()}`;
+  const onboardingBrokerSetup = Boolean(location.state?.openBrokerSetup);
+  const onboardingTargetPath = location.state?.from || '/';
   const [activeTab, setActiveTab] = useState('account');
   const [rows, setRows] = useState([]);
   const [selectedBroker, setSelectedBroker] = useState('dhan');
-  const [integrationEnabled, setIntegrationEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [positions, setPositions] = useState([]);
   const [orders, setOrders] = useState([]);
+  const isLiveExecution = (row) => Boolean(row?.is_enabled && row?.has_session) || Boolean(row?.live_enabled);
 
-  const adminDhanClientId = '1106536389';
   const connectedDhan = rows.find((r) => r.broker === 'dhan')?.is_enabled;
-  const liveEnabledCount = rows.filter((r) => Boolean(r.live_enabled)).length;
+  const liveEnabledCount = rows.filter((r) => isLiveExecution(r)).length;
   const displayName = user?.name || user?.full_name || '—';
   const displayEmail = user?.email || '—';
   const displayMobile = user?.mobile || user?.phone || '—';
 
   const emptyCredentials = (broker) => {
-    if (broker === 'dhan') return { pin: '', totp: '' };
-    if (broker === 'angelone') return { api_key: '', pin: '', totp: '' };
+    if (broker === 'dhan') return { pin: '', totp: '', access_token: '' };
+    if (broker === 'angelone') return { api_key: '', pin: '', totp: '', access_token: '' };
     if (broker === 'upstox') return { access_token: '', auth_code: '', client_secret: '', redirect_uri: '' };
-    return { pin: '' }; // samco
+    return { pin: '', access_token: '' }; // samco
   };
 
   const loadBrokerRows = useCallback(async () => {
     try {
-      const data = await fetchBrokerSetup();
+      const data = await fetchBrokerSetup({ userId });
       setRows(
         (Array.isArray(data) ? data : []).map((row) => ({
           ...row,
@@ -76,14 +115,35 @@ function ProfilePage() {
     } catch (_) {
       setRows([]);
     }
-  }, []);
+  }, [userId]);
 
   const loadLiveData = async () => {
     setError('');
     try {
-      const [pos, ord] = await Promise.all([fetchDhanPositions(), fetchDhanOrders()]);
-      setPositions(pickArray(pos));
-      setOrders(pickArray(ord));
+      const [posResult, holdResult, ordResult] = await Promise.allSettled([
+        fetchDhanPositions({ userId }),
+        fetchDhanHoldings({ userId }),
+        fetchDhanOrders({ userId }),
+      ]);
+      const parsedPositions = posResult.status === 'fulfilled' ? pickArray(posResult.value) : [];
+      const parsedHoldings = holdResult.status === 'fulfilled' ? pickArray(holdResult.value) : [];
+      const parsedOrders = ordResult.status === 'fulfilled' ? pickArray(ordResult.value) : [];
+      const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
+      const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
+      setPositions(mergedPositions);
+      setOrders(parsedOrders);
+      try {
+        localStorage.setItem(`dhan_live_positions_${userId}`, JSON.stringify(mergedPositions));
+        localStorage.setItem(`dhan_live_orders_${userId}`, JSON.stringify(parsedOrders));
+        localStorage.setItem(`dhan_live_sync_${userId}`, String(Date.now()));
+      } catch (_) {
+        // ignore localStorage failures
+      }
+      if (!mergedPositions.length && !parsedOrders.length) {
+        setMessage('Session active. No open positions/holdings found for this account.');
+      } else if (!mergedPositionsRaw.length && mergedPositions.length) {
+        setMessage(`Session active. Positions reconstructed from ${parsedOrders.length} Dhan orders.`);
+      }
     } catch (e) {
       setError(e?.message || 'Failed to fetch Dhan live data');
     }
@@ -94,24 +154,54 @@ function ProfilePage() {
   }, [loadBrokerRows]);
 
   useEffect(() => {
-    const row = rows.find((r) => r.broker === selectedBroker);
-    if (row) setIntegrationEnabled(Boolean(row.is_enabled));
-  }, [rows, selectedBroker]);
+    if (!onboardingBrokerSetup) return;
+    setActiveTab('broker');
+    setMessage('Complete broker validation to activate session and show holdings on dashboard.');
+  }, [onboardingBrokerSetup]);
 
   const updateRow = (broker, patch) => {
-    setRows((prev) =>
-      prev.map((r) => (r.broker === broker ? { ...r, ...patch } : r))
-    );
+    setRows((prev) => {
+      const index = prev.findIndex((r) => r.broker === broker);
+      if (index >= 0) {
+        return prev.map((r) => (r.broker === broker ? { ...r, ...patch } : r));
+      }
+      return [
+        ...prev,
+        {
+          broker,
+          client_id: '',
+          is_enabled: true,
+          has_session: false,
+          live_enabled: false,
+          credentials: emptyCredentials(broker),
+          ...patch,
+        },
+      ];
+    });
   };
 
   const updateRowCredential = (broker, key, value) => {
-    setRows((prev) =>
-      prev.map((r) => (
-        r.broker === broker
-          ? { ...r, credentials: { ...(r.credentials || {}), [key]: value } }
-          : r
-      ))
-    );
+    setRows((prev) => {
+      const index = prev.findIndex((r) => r.broker === broker);
+      if (index >= 0) {
+        return prev.map((r) => (
+          r.broker === broker
+            ? { ...r, credentials: { ...(r.credentials || {}), [key]: value } }
+            : r
+        ));
+      }
+      return [
+        ...prev,
+        {
+          broker,
+          client_id: '',
+          is_enabled: true,
+          has_session: false,
+          live_enabled: false,
+          credentials: { ...emptyCredentials(broker), [key]: value },
+        },
+      ];
+    });
   };
 
   const onSaveBroker = async (row) => {
@@ -120,12 +210,11 @@ function ProfilePage() {
     setMessage('');
     try {
       const payload = {
+        user_id: userId,
         broker: row.broker,
-        client_id:
-          row.broker === 'dhan' && isAdmin
-            ? (row.client_id || adminDhanClientId)
-            : (row.client_id || ''),
-        is_enabled: Boolean(integrationEnabled),
+        client_id: (row.client_id || ''),
+        is_enabled: Boolean(row?.is_enabled),
+        has_session: Boolean(row?.has_session),
       };
       await saveBrokerSetup(payload);
       setMessage(`${row.broker.toUpperCase()} setup saved.`);
@@ -142,37 +231,115 @@ function ProfilePage() {
     setError('');
     setMessage('');
     try {
+      const rawClientId = row.client_id || '';
+      const sanitizedDhanClientId = row.broker === 'dhan'
+        ? String(rawClientId).replace(/\s/g, '').replace(/^\+/, '')
+        : String(rawClientId);
       const payload = {
+        user_id: userId,
         broker: row.broker,
-        client_id:
-          row.broker === 'dhan' && isAdmin
-            ? (row.client_id || adminDhanClientId)
-            : (row.client_id || ''),
+        client_id: sanitizedDhanClientId,
         pin: (row.credentials?.pin || '').trim(),
-        totp: (row.credentials?.totp || '').trim(),
+        totp: (row.credentials?.totp || '').replace(/\s/g, '').trim(),
         api_key: (row.credentials?.api_key || '').trim(),
         client_secret: (row.credentials?.client_secret || '').trim(),
         redirect_uri: (row.credentials?.redirect_uri || '').trim(),
         auth_code: (row.credentials?.auth_code || '').trim(),
         access_token: (row.credentials?.access_token || '').trim(),
       };
-      if (!integrationEnabled) {
+      if (!Boolean(row?.is_enabled)) {
         await onSaveBroker({ ...row, is_enabled: false });
         setMessage(`${row.broker.toUpperCase()} saved for later. Enable integration when ready.`);
         return;
       }
-      const res = await validateBrokerSetup(payload);
-      setMessage(
-        res?.validated
-          ? `${row.broker.toUpperCase()} validation successful.`
-          : `${row.broker.toUpperCase()} setup checked and saved.`
-      );
-      await loadBrokerRows();
+      let res = null;
+      let validated = false;
+      let effectiveToken = payload.access_token;
       if (row.broker === 'dhan') {
+        const connectRes = await connectDhan({
+          user_id: userId,
+          client_id: payload.client_id,
+          pin: payload.pin,
+          totp: payload.totp,
+          access_token: payload.access_token,
+        });
+        effectiveToken = String(connectRes?.session_token || effectiveToken || '').trim();
+        if (!effectiveToken) {
+          throw new Error('Unable to create Dhan session token. Check Client ID/PIN/TOTP or JWT token.');
+        }
+        payload.access_token = effectiveToken;
+      }
+      res = await validateBrokerSetup(payload);
+      validated = Boolean(res?.validated);
+      if (row.broker === 'dhan' && effectiveToken) {
+        updateRowCredential(row.broker, 'access_token', effectiveToken);
+      }
+
+      if (validated) {
+        setMessage(`${row.broker.toUpperCase()} validation successful.`);
+        if (row.broker === 'dhan') {
+          setRows((prev) => prev.map((r) => (
+            r.broker === row.broker
+              ? { ...r, has_session: true, is_enabled: true, last_auth_at: new Date().toISOString() }
+              : r
+          )));
+        }
+        try {
+          localStorage.setItem(brokerSessionKey(row.broker), String(Date.now()));
+        } catch (_) {
+          // ignore localStorage failures
+        }
+      } else {
+        setError(res?.reason || `${row.broker.toUpperCase()} setup saved. Complete required credentials to activate session.`);
+        if (row.broker === 'dhan') {
+          setRows((prev) => prev.map((r) => (
+            r.broker === row.broker
+              ? { ...r, has_session: false }
+              : r
+          )));
+          try {
+            localStorage.removeItem(brokerSessionKey(row.broker));
+          } catch (_) {
+            // ignore localStorage failures
+          }
+        }
+      }
+
+      await loadBrokerRows();
+      if (validated && row.broker === 'dhan') {
         await loadLiveData();
+      }
+      if (validated && onboardingBrokerSetup) {
+        navigate(onboardingTargetPath, { replace: true, state: { brokerSetupCompleted: true } });
       }
     } catch (e) {
       setError(e?.message || `Validation failed for ${row.broker}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRenewBrokerToken = async (row) => {
+    if (!row || row.broker !== 'dhan') return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await connectDhan({
+        user_id: userId,
+        client_id: String(row.client_id || '').trim(),
+        access_token: String(row.credentials?.access_token || '').trim(),
+        renew_token: true,
+      });
+      const renewedToken = String(res?.session_token || '').trim();
+      if (renewedToken) {
+        updateRowCredential(row.broker, 'access_token', renewedToken);
+      }
+      setMessage('Dhan access token renewed successfully.');
+      await loadBrokerRows();
+      await loadLiveData();
+    } catch (e) {
+      setError(e?.message || 'Failed to renew Dhan token');
     } finally {
       setBusy(false);
     }
@@ -197,7 +364,7 @@ function ProfilePage() {
   const brokerRows = useMemo(() => {
     const fallback = ['dhan', 'samco', 'angelone', 'upstox'].map((broker) => ({
       broker,
-      client_id: broker === 'dhan' && isAdmin ? adminDhanClientId : '',
+      client_id: '',
       is_enabled: false,
       has_session: false,
       live_enabled: false,
@@ -211,14 +378,14 @@ function ProfilePage() {
         ? { ...row, credentials: row.credentials || emptyCredentials(broker) }
         : {
             broker,
-            client_id: broker === 'dhan' && isAdmin ? adminDhanClientId : '',
+            client_id: '',
             is_enabled: false,
             has_session: false,
             live_enabled: false,
             credentials: emptyCredentials(broker),
           };
     });
-  }, [rows, isAdmin]);
+  }, [rows]);
 
   const activeBrokerRow = useMemo(
     () => brokerRows.find((r) => r.broker === selectedBroker) || brokerRows[0] || null,
@@ -266,8 +433,8 @@ function ProfilePage() {
       {activeTab === 'broker' ? (
         <>
       {isAdmin ? (
-        <Alert severity={liveEnabledCount > 0 ? 'warning' : 'info'} sx={{ mb: 2 }}>
-          Execution mode: {liveEnabledCount > 0 ? `${liveEnabledCount} broker(s) in LIVE mode.` : 'All brokers are in PAPER mode.'}
+        <Alert severity={liveEnabledCount > 0 ? 'success' : 'info'} sx={{ mb: 2 }}>
+          Live execution: {liveEnabledCount > 0 ? `${liveEnabledCount} broker session(s) active.` : 'Activate broker session to place live orders.'}
         </Alert>
       ) : null}
 
@@ -299,16 +466,18 @@ function ProfilePage() {
               <TextField
                 size="small"
                 label="Client ID"
-                value={activeBrokerRow.broker === 'dhan' && isAdmin ? (activeBrokerRow.client_id || adminDhanClientId) : (activeBrokerRow.client_id || '')}
-                disabled={activeBrokerRow.broker === 'dhan' && isAdmin}
+                value={activeBrokerRow.client_id || ''}
                 onChange={(e) => updateRow(activeBrokerRow.broker, { client_id: e.target.value })}
                 sx={{ minWidth: 260 }}
               />
               <Stack direction="row" spacing={1} alignItems="center">
                 <Typography sx={{ fontSize: 12, color: '#666' }}>Enable now</Typography>
-                <Switch checked={integrationEnabled} onChange={(e) => setIntegrationEnabled(e.target.checked)} />
-                <Typography sx={{ fontSize: 12, color: integrationEnabled ? '#1b5e20' : '#666', fontWeight: 600 }}>
-                  {integrationEnabled ? 'Enabled' : 'Enable later'}
+                <Switch
+                  checked={Boolean(activeBrokerRow.is_enabled)}
+                  onChange={(e) => updateRow(activeBrokerRow.broker, { is_enabled: e.target.checked })}
+                />
+                <Typography sx={{ fontSize: 12, color: activeBrokerRow.is_enabled ? '#1b5e20' : '#666', fontWeight: 600 }}>
+                  {activeBrokerRow.is_enabled ? 'Enabled' : 'Enable later'}
                 </Typography>
               </Stack>
             </Stack>
@@ -318,13 +487,24 @@ function ProfilePage() {
                 <>
                   <TextField size="small" type="password" label="PIN" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
+                  <TextField
+                    size="small"
+                    label="Access Token (JWT optional)"
+                    value={activeBrokerRow.credentials?.access_token || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
+                    placeholder="Use Dhan JWT token if available"
+                  />
                 </>
               ) : null}
               {activeBrokerRow.broker === 'samco' ? (
-                <TextField size="small" type="password" label="PIN/Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                <>
+                  <TextField size="small" type="password" label="PIN/Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
+                </>
               ) : null}
               {activeBrokerRow.broker === 'angelone' ? (
                 <>
+                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
                   <TextField size="small" label="API Key" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
                   <TextField size="small" type="password" label="PIN/Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
@@ -347,6 +527,11 @@ function ProfilePage() {
               <Button size="small" variant="contained" onClick={() => onValidateBroker(activeBrokerRow)} disabled={busy} sx={{ textTransform: 'none' }}>
                 Validate & Create Session
               </Button>
+              {activeBrokerRow.broker === 'dhan' ? (
+                <Button size="small" variant="outlined" onClick={() => onRenewBrokerToken(activeBrokerRow)} disabled={busy} sx={{ textTransform: 'none' }}>
+                  Renew Token
+                </Button>
+              ) : null}
               {activeBrokerRow.doc_url ? (
                 <Button size="small" component={Link} href={activeBrokerRow.doc_url} target="_blank" rel="noreferrer" sx={{ textTransform: 'none' }}>
                   Open docs
@@ -357,7 +542,7 @@ function ProfilePage() {
             <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
               <Chip size="small" label={activeBrokerRow.has_session ? 'Session active' : 'No session'} color={activeBrokerRow.has_session ? 'success' : 'default'} variant={activeBrokerRow.has_session ? 'filled' : 'outlined'} />
               {isAdmin ? (
-                <Chip size="small" label={activeBrokerRow.live_enabled ? 'LIVE enabled' : 'PAPER mode'} color={activeBrokerRow.live_enabled ? 'error' : 'primary'} variant={activeBrokerRow.live_enabled ? 'filled' : 'outlined'} />
+                <Chip size="small" label={isLiveExecution(activeBrokerRow) ? 'LIVE enabled' : 'Session required'} color={isLiveExecution(activeBrokerRow) ? 'error' : 'primary'} variant={isLiveExecution(activeBrokerRow) ? 'filled' : 'outlined'} />
               ) : null}
               <Typography sx={{ fontSize: 12, color: '#666', ml: 0.5 }}>
                 {activeBrokerRow.last_auth_at ? `Last auth: ${new Date(activeBrokerRow.last_auth_at).toLocaleString()}` : 'Validate to create broker session.'}

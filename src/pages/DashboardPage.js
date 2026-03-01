@@ -8,6 +8,15 @@ import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchPriceShockers } from '../api/stocks';
 import { fetchAlerts, fetchRatings } from '../api/advisor';
 import { apiGet } from '../api/apiClient';
+import {
+  fetchWatchlist,
+  fetchWatchlistSignals,
+  fetchWeeklyIndicators,
+  fetchOrderBlocks,
+} from '../api/watchlist';
+import { fetchBrokerSetup } from '../api/brokers';
+import { fetchPortfolioPositions } from '../api/orders';
+import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 
@@ -18,6 +27,138 @@ const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
 const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
+const hasLocalBrokerSessionMarker = (userId) => {
+  if (!userId) return false;
+  try {
+    const prefixes = ['dhan', 'samco', 'angelone', 'upstox'].map((b) => `broker_session_auth_${userId}_${b}`);
+    return prefixes.some((k) => Boolean(localStorage.getItem(k)));
+  } catch (_) {
+    return false;
+  }
+};
+const hasBrokerSession = (row) => {
+  if (!row || typeof row !== 'object') return false;
+  // Support multiple backend shapes for session/auth flags.
+  return Boolean(
+    row.has_session ||
+    row.hasSession ||
+    row.session_active ||
+    row.sessionActive ||
+    row.session_token ||
+    row.sessionToken ||
+    row.connected ||
+    row.is_authenticated ||
+    row.isAuthenticated ||
+    row.last_auth_at ||
+    row.lastAuthAt
+  );
+};
+const getCachedBrokerRows = (userId) => {
+  if (!userId) return [];
+  try {
+    const raw = localStorage.getItem(`dhan_live_positions_${userId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+};
+const toNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+const pickArrayRows = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.positions)) return payload.positions;
+  if (Array.isArray(payload?.holdings)) return payload.holdings;
+  if (Array.isArray(payload?.result)) return payload.result;
+  if (Array.isArray(payload?.open_positions)) return payload.open_positions;
+  return [];
+};
+const normalizeBrokerRows = (payload) => {
+  const rows = pickArrayRows(payload);
+  const normalized = rows
+    .map((row) => {
+      const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
+      const buyQty = toNumber(row?.buyQty ?? row?.buy_qty ?? row?.buyQuantity);
+      const sellQty = toNumber(row?.sellQty ?? row?.sell_qty ?? row?.sellQuantity);
+      const netQty = toNumber(
+        row?.netQty
+        ?? row?.net_qty
+        ?? row?.netQuantity
+        ?? row?.quantity
+        ?? row?.qty
+        ?? row?.availableQty
+        ?? row?.available_qty
+        ?? row?.holdingQty
+        ?? row?.holding_qty
+        ?? row?.totalQty
+        ?? row?.total_qty
+        ?? (buyQty - sellQty)
+      );
+      if (!symbol || netQty === 0) return null;
+      const avgPrice = toNumber(row?.buyAvg ?? row?.avgPrice ?? row?.averagePrice ?? row?.avg_price ?? row?.costPrice ?? row?.avgCostPrice);
+      const ltp = toNumber(row?.ltp ?? row?.lastPrice ?? row?.lastTradedPrice ?? row?.price);
+      const unrealized = toNumber(row?.pnl ?? row?.unrealizedPnl ?? row?.unrealized_pnl ?? row?.mtm);
+      const fallbackUnrealized = unrealized || (avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0);
+      return {
+        symbol,
+        product_type: String(row?.productType || row?.product_type || row?.product || 'INTRADAY').toUpperCase(),
+        net_qty: netQty,
+        avg_price: avgPrice,
+        ltp,
+        unrealized_pnl: fallbackUnrealized,
+        realized_pnl: toNumber(row?.realizedPnl ?? row?.realized_pnl),
+        state: 'OPEN',
+      };
+    })
+    .filter(Boolean);
+
+  const unique = new Map();
+  normalized.forEach((row) => {
+    unique.set(`${row.symbol}_${row.product_type}`, row);
+  });
+  return [...unique.values()];
+};
+const deriveRowsFromDhanOrders = (payload) => {
+  const rows = pickArrayRows(payload);
+  const bySymbol = new Map();
+  rows.forEach((row) => {
+    const status = String(row?.orderStatus || row?.status || '').toUpperCase();
+    if (!['FILLED', 'PARTIAL', 'COMPLETE'].includes(status)) return;
+    const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
+    if (!symbol) return;
+    const side = String(row?.transactionType || row?.side || '').toUpperCase();
+    const qty = toNumber(row?.filledQty ?? row?.quantity ?? row?.qty);
+    if (qty <= 0) return;
+    const price = toNumber(row?.averagePrice ?? row?.avgPrice ?? row?.price);
+    const current = bySymbol.get(symbol) || { symbol, net_qty: 0, avg_num: 0, avg_den: 0 };
+    if (side === 'BUY') {
+      current.net_qty += qty;
+      if (price > 0) {
+        current.avg_num += qty * price;
+        current.avg_den += qty;
+      }
+    } else if (side === 'SELL') {
+      current.net_qty -= qty;
+    }
+    bySymbol.set(symbol, current);
+  });
+  return [...bySymbol.values()]
+    .filter((r) => Math.abs(r.net_qty) > 0)
+    .map((r) => ({
+      symbol: r.symbol,
+      product_type: 'DELIVERY',
+      net_qty: r.net_qty,
+      avg_price: r.avg_den > 0 ? r.avg_num / r.avg_den : 0,
+      ltp: 0,
+      unrealized_pnl: 0,
+      realized_pnl: 0,
+      state: 'OPEN',
+    }));
+};
 
 const Card = ({ children, sx, ...props }) => (
   <Box sx={{ bgcolor: '#fff', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', p: 2, ...sx }} {...props}>{children}</Box>
@@ -41,7 +182,16 @@ const StatBox = ({ label, value, sub, color }) => (
 // ─── Market Pulse ───────────────────────────────────────────────────────────
 function MarketPulse({ indices }) {
   const allCards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
-  if (!allCards.length) return null;
+  if (!allCards.length) {
+    return (
+      <Card>
+        <SectionTitle>Market Pulse</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Market indices data is not available from current backend source.
+        </Box>
+      </Card>
+    );
+  }
   return (
     <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
       {allCards.map((c, i) => (
@@ -57,7 +207,6 @@ function MarketPulse({ indices }) {
 }
 
 // ─── Portfolio Snapshot ─────────────────────────────────────────────────────
-// eslint-disable-next-line no-unused-vars
 function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
   const navigate = useNavigate();
   const all = watchlist || [];
@@ -267,11 +416,28 @@ function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
 }
 
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
-// eslint-disable-next-line no-unused-vars
 function WeeklyEntries({ weeklyData }) {
-  if (!weeklyData || !weeklyData.length) return null;
+  if (!weeklyData || !weeklyData.length) {
+    return (
+      <Card>
+        <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Weekly setup data is currently unavailable.
+        </Box>
+      </Card>
+    );
+  }
   const nearEntries = weeklyData.filter(w => (w.weekly_entry_gap_pct || 100) <= 10);
-  if (!nearEntries.length) return null;
+  if (!nearEntries.length) {
+    return (
+      <Card>
+        <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          No near-entry weekly setups found right now.
+        </Box>
+      </Card>
+    );
+  }
 
   const dirColor = (d) => d === 'up' ? '#2e7d32' : d === 'down' ? '#c62828' : '#888';
   const dirLabel = (d) => d === 'up' ? 'BULLISH' : d === 'down' ? 'BEARISH' : 'NEUTRAL';
@@ -334,9 +500,17 @@ function WeeklyEntries({ weeklyData }) {
 }
 
 // ─── Order Block Zones (Multi-Timeframe) ────────────────────────────────────
-// eslint-disable-next-line no-unused-vars
 function OrderBlockZones({ obData }) {
-  if (!obData || !obData.length) return null;
+  if (!obData || !obData.length) {
+    return (
+      <Card>
+        <SectionTitle>Order Block Setups (MTF Top-Down)</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Order block data is currently unavailable.
+        </Box>
+      </Card>
+    );
+  }
 
   const gradeColor = { A: '#1b5e20', B: '#43a047', C: '#f57f17', D: '#c62828' };
   const gradeBg = { A: '#e8f5e9', B: '#f1f8e9', C: '#fff8e1', D: '#ffebee' };
@@ -440,9 +614,27 @@ function OrderBlockZones({ obData }) {
 // ─── Sector Heatmap ─────────────────────────────────────────────────────────
 function SectorHeatmap({ sectors }) {
   const navigate = useNavigate();
-  if (!sectors || !sectors.length) return null;
+  if (!sectors || !sectors.length) {
+    return (
+      <Card>
+        <SectionTitle>Sector Performance</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Sector outlook data is not available from current backend source.
+        </Box>
+      </Card>
+    );
+  }
   const data = sectors.filter(s => s.sector && s.avg_day_change != null).sort((a, b) => Math.abs(b.avg_day_change) - Math.abs(a.avg_day_change));
-  if (!data.length) return null;
+  if (!data.length) {
+    return (
+      <Card>
+        <SectionTitle>Sector Performance</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Sector data is available but not in expected format.
+        </Box>
+      </Card>
+    );
+  }
   const maxAbs = Math.max(...data.map(d => Math.abs(d.avg_day_change || 0)), 1);
 
   const heatColor = (v) => {
@@ -504,6 +696,11 @@ function MarketMovers({ gainers, losers }) {
       <SectionTitle action={<Chip label="View All" size="small" sx={{ fontSize: 10, cursor: 'pointer' }} onClick={() => navigate('/screens')} />}>
         Market Movers
       </SectionTitle>
+      {!gainers?.length && !losers?.length ? (
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Market movers data is currently unavailable.
+        </Box>
+      ) : null}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 700px)': { gridTemplateColumns: '1fr' } }}>
         {renderList(gainers, 'Top Gainers', true)}
         {renderList(losers, 'Top Losers', false)}
@@ -515,7 +712,18 @@ function MarketMovers({ gainers, losers }) {
 // ─── Recent Alerts ──────────────────────────────────────────────────────────
 function RecentAlerts({ alerts }) {
   const navigate = useNavigate();
-  if (!alerts || !alerts.length) return null;
+  if (!alerts || !alerts.length) {
+    return (
+      <Card>
+        <SectionTitle action={<Chip label="View All" size="small" sx={{ fontSize: 10, cursor: 'pointer' }} onClick={() => navigate('/alerts')} />}>
+          Recent Alerts
+        </SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          No recent advisor alerts found.
+        </Box>
+      </Card>
+    );
+  }
   const sevColor = { critical: '#c62828', high: '#e65100', medium: '#f57f17', low: '#2e7d32', info: '#1565c0' };
   return (
     <Card>
@@ -538,7 +746,18 @@ function RecentAlerts({ alerts }) {
 // ─── AI Ratings Summary ─────────────────────────────────────────────────────
 function LatestRatings({ ratings }) {
   const navigate = useNavigate();
-  if (!ratings || !ratings.length) return null;
+  if (!ratings || !ratings.length) {
+    return (
+      <Card>
+        <SectionTitle action={<Chip label="View All" size="small" sx={{ fontSize: 10, cursor: 'pointer' }} onClick={() => navigate('/advisor')} />}>
+          Latest AI Ratings
+        </SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          No AI ratings available right now.
+        </Box>
+      </Card>
+    );
+  }
   const recoColors = { 'STRONG BUY': '#1b5e20', 'BUY': '#43a047', 'HOLD': '#f57f17', 'SELL': '#c62828', 'STRONG SELL': '#b71c1c' };
   return (
     <Card>
@@ -558,6 +777,119 @@ function LatestRatings({ ratings }) {
   );
 }
 
+// ─── My Holdings (Broker Session) ───────────────────────────────────────────
+function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false }) {
+  if (!brokerAuthenticated) {
+    return (
+      <Card>
+        <SectionTitle>My Holdings</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          Broker authentication is required. Please complete broker session authentication in Profile to view holdings.
+        </Box>
+      </Card>
+    );
+  }
+
+  if (loading && !holdings.length) {
+    return (
+      <Card>
+        <SectionTitle>My Holdings</SectionTitle>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+          <CircularProgress size={24} />
+        </Box>
+      </Card>
+    );
+  }
+
+  if (!holdings.length) {
+    return (
+      <Card>
+        <SectionTitle>My Holdings</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          No holdings found yet. Create broker session token in Profile and place/execute orders to see holdings here.
+        </Box>
+      </Card>
+    );
+  }
+
+  const totalUnrealized = holdings.reduce((sum, h) => sum + Number(h?.unrealized_pnl || 0), 0);
+  const totalRealized = holdings.reduce((sum, h) => sum + Number(h?.realized_pnl || 0), 0);
+  const totalHoldingsPnl = totalUnrealized + totalRealized;
+  const dayPnl = holdings.reduce(
+    (sum, h) => sum + Number(h?.day_pnl ?? h?.mtm ?? h?.unrealized_pnl ?? 0),
+    0
+  );
+
+  const visibleRows = compact ? holdings.slice(0, 8) : holdings;
+  return (
+    <Card sx={compact ? { p: 1.5 } : undefined}>
+      <SectionTitle
+        action={
+          <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+            <Chip
+              label={`Total Holdings P&L: ${fmtCur(totalHoldingsPnl)}`}
+              size="small"
+              sx={{ bgcolor: '#f5f5f5', color: pctColor(totalHoldingsPnl), fontWeight: 700 }}
+            />
+            <Chip
+              label={`Day P&L: ${fmtCur(dayPnl)}`}
+              size="small"
+              sx={{ bgcolor: '#f5f5f5', color: pctColor(dayPnl), fontWeight: 700 }}
+            />
+          </Box>
+        }
+      >
+        My Holdings ({holdings.length})
+      </SectionTitle>
+      <Box sx={{ overflowX: 'auto', maxHeight: compact ? 360 : 'none', overflowY: compact ? 'auto' : 'visible' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: compact ? 11 : 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Symbol</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Qty</th>
+              {!compact ? <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Avg</th> : null}
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>LTP</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Unrealized P&L</th>
+              {!compact ? <th style={{ textAlign: 'center', padding: '6px 8px', color: '#555', fontWeight: 600 }}>State</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map((h) => (
+              <tr key={`${h.symbol}_${h.product_type}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '6px 8px', fontWeight: 700 }}>{h.symbol}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(h.net_qty, 0)}</td>
+                {!compact ? <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.avg_price)}</td> : null}
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.ltp)}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: pctColor(h.unrealized_pnl) }}>
+                  {fmtCur(h.unrealized_pnl)}
+                </td>
+                {!compact ? (
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <Chip
+                      label={(h.state || 'OPEN').toUpperCase()}
+                      size="small"
+                      sx={{
+                        fontSize: 9,
+                        height: 18,
+                        fontWeight: 700,
+                        bgcolor: (h.state || '').toLowerCase() === 'open' ? '#e8f5e9' : '#f5f5f5',
+                        color: (h.state || '').toLowerCase() === 'open' ? '#1b5e20' : '#555',
+                      }}
+                    />
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Box>
+      {compact && holdings.length > visibleRows.length ? (
+        <Box sx={{ mt: 0.8, fontSize: 11, color: '#777' }}>Showing {visibleRows.length} of {holdings.length} holdings.</Box>
+      ) : null}
+    </Card>
+  );
+}
+
 // ─── Main Dashboard ─────────────────────────────────────────────────────────
 function DashboardPage() {
   const location = useLocation();
@@ -565,6 +897,10 @@ function DashboardPage() {
   const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [indices, setIndices] = useState(null);
+  const [watchlist, setWatchlist] = useState([]);
+  const [signals, setSignals] = useState([]);
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [obData, setObData] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [gainers, setGainers] = useState([]);
   const [losers, setLosers] = useState([]);
@@ -572,32 +908,108 @@ function DashboardPage() {
   const [ratings, setRatings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketMode, setMarketMode] = useState('unknown');
+  const [holdings, setHoldings] = useState([]);
+  const [brokerAuthenticated, setBrokerAuthenticated] = useState(false);
   const [telegramStatusChecked, setTelegramStatusChecked] = useState(false);
   const [hasApprovedTelegramAccess, setHasApprovedTelegramAccess] = useState(false);
+  const userId = String(user?.id || user?.user_id || user?.email || '');
 
   const loadAll = useCallback(async () => {
     try {
-      const [idx, sec, g, l, al, rat, sys] = await Promise.allSettled([
+      const watchlistOptions = isAdmin ? { includeAll: true } : undefined;
+      const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys, brokerRowsResult] = await Promise.allSettled([
         fetchMarketIndices(),
+        fetchWatchlist(null, watchlistOptions),
+        fetchWatchlistSignals(watchlistOptions),
+        fetchWeeklyIndicators(watchlistOptions),
+        fetchOrderBlocks(watchlistOptions),
         fetchSectorOutlook(),
         fetchPriceShockers('gainers', 8, 'day'),
         fetchPriceShockers('losers', 8, 'day'),
         fetchAlerts({ limit: 10 }),
         fetchRatings({ limit: 8 }),
         apiGet('/system/status'),
+        fetchBrokerSetup({ userId }),
       ]);
+      let positions = [];
+      if (userId) {
+        try {
+          positions = await fetchPortfolioPositions({ userId });
+        } catch (_) {
+          // Keep dashboard stable when holdings endpoint is not available.
+          positions = [];
+        }
+      }
       if (idx.status === 'fulfilled') setIndices(idx.value);
+      if (wl.status === 'fulfilled') setWatchlist(Array.isArray(wl.value) ? wl.value : []);
+      if (sigs.status === 'fulfilled') setSignals(Array.isArray(sigs.value) ? sigs.value : []);
+      if (wk.status === 'fulfilled') setWeeklyData(Array.isArray(wk.value) ? wk.value : []);
+      if (ob.status === 'fulfilled') setObData(Array.isArray(ob.value) ? ob.value : []);
       if (sec.status === 'fulfilled') setSectors(sec.value);
       if (g.status === 'fulfilled') setGainers(g.value);
       if (l.status === 'fulfilled') setLosers(l.value);
       if (al.status === 'fulfilled') setAlerts(al.value);
       if (rat.status === 'fulfilled') setRatings(rat.value);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
+      const normalizedPositions = (Array.isArray(positions) ? positions : []).filter((p) => Math.abs(Number(p?.net_qty || 0)) > 0);
+      const localSessionMarker = hasLocalBrokerSessionMarker(userId);
+      let authenticated = false;
+      if (brokerRowsResult.status === 'fulfilled') {
+        const rows = Array.isArray(brokerRowsResult.value) ? brokerRowsResult.value : [];
+        authenticated = rows.some((r) => hasBrokerSession(r));
+        if (authenticated) {
+          try {
+            const preferred = rows.find((r) => hasBrokerSession(r))?.broker || 'dhan';
+            localStorage.setItem(`broker_session_auth_${userId}_${String(preferred).toLowerCase()}`, String(Date.now()));
+          } catch (_) {
+            // ignore localStorage failures
+          }
+        }
+      } else {
+        authenticated = false;
+      }
+      const effectiveAuthenticated = authenticated || localSessionMarker || normalizedPositions.length > 0;
+
+      let liveBrokerPositions = [];
+      if (effectiveAuthenticated) {
+        try {
+          const [livePositionsResult, liveHoldingsResult] = await Promise.allSettled([
+            fetchDhanPositions({ userId }),
+            fetchDhanHoldings({ userId }),
+          ]);
+          const liveOrdersResult = await Promise.allSettled([fetchDhanOrders({ userId })]);
+          const fromPositions = livePositionsResult.status === 'fulfilled'
+            ? normalizeBrokerRows(livePositionsResult.value)
+            : [];
+          const fromHoldings = liveHoldingsResult.status === 'fulfilled'
+            ? normalizeBrokerRows(liveHoldingsResult.value)
+            : [];
+          const fromOrders = liveOrdersResult[0]?.status === 'fulfilled'
+            ? deriveRowsFromDhanOrders(liveOrdersResult[0].value)
+            : [];
+          const merged = new Map();
+          [...fromPositions, ...fromHoldings, ...fromOrders].forEach((row) => {
+            merged.set(`${row.symbol}_${row.product_type}`, row);
+          });
+          liveBrokerPositions = [...merged.values()];
+        } catch (_) {
+          liveBrokerPositions = [];
+        }
+      }
+      if (!liveBrokerPositions.length) {
+        const cachedRows = getCachedBrokerRows(userId);
+        if (cachedRows.length) {
+          liveBrokerPositions = normalizeBrokerRows(cachedRows);
+        }
+      }
+      const finalHoldings = liveBrokerPositions.length ? liveBrokerPositions : normalizedPositions;
+      setBrokerAuthenticated(effectiveAuthenticated || finalHoldings.length > 0);
+      setHoldings(finalHoldings);
       setLastUpdated(new Date());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId, isAdmin]);
 
   useEffect(() => {
     loadAll();
@@ -686,17 +1098,24 @@ function DashboardPage() {
             <MarketPulse indices={indices} />
           </Box>
 
-          {/* Sector Heatmap (full width) */}
-          <Box sx={{ mb: 2 }}>
-            <SectorHeatmap sectors={sectors} />
-          </Box>
-
-          {/* Bottom row: Market Movers + Ratings + Alerts */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 800px)': { gridTemplateColumns: '1fr' } }}>
-            <MarketMovers gainers={gainers} losers={losers} />
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.75fr 1fr' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <LatestRatings ratings={ratings} />
-              <RecentAlerts alerts={alerts} />
+              <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 1000px)': { gridTemplateColumns: '1fr' } }}>
+                <WeeklyEntries weeklyData={weeklyData} />
+                <OrderBlockZones obData={obData} />
+              </Box>
+              <SectorHeatmap sectors={sectors} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 800px)': { gridTemplateColumns: '1fr' } }}>
+                <MarketMovers gainers={gainers} losers={losers} />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <LatestRatings ratings={ratings} />
+                  <RecentAlerts alerts={alerts} />
+                </Box>
+              </Box>
+            </Box>
+            <Box sx={{ position: { lg: 'sticky' }, top: { lg: 16 } }}>
+              <HoldingsList holdings={holdings} loading={loading} brokerAuthenticated={brokerAuthenticated} compact />
             </Box>
           </Box>
         </>
