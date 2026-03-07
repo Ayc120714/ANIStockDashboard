@@ -23,6 +23,8 @@ import {
   Table
 } from './MarketOutlook.styles';
 
+const MIN_FII_DII_DAYS = 20;
+
 function MarketOutlookPage() {
   const defaultIndexCards = [
     { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
@@ -72,7 +74,7 @@ function MarketOutlookPage() {
 
     const loadFiiDii = async () => {
       try {
-        const data = await fetchFiiDiiActivity();
+        const data = await fetchFiiDiiActivity(MIN_FII_DII_DAYS);
         if (isMounted && data) setFiiDiiData(data);
       } catch (err) {
         console.warn('FII/DII fetch failed:', err?.message || err);
@@ -151,9 +153,10 @@ function MarketOutlookPage() {
 
   const fiiCard = useMemo(() => {
     if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
-    const latest = fiiDiiData.daily[0];
+    const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
+    const latest = daily[0];
     const mtdNet = fiiDiiData.mtd?.fii?.net ?? 0;
-    const series = [...fiiDiiData.daily].reverse().map(d => ({ date: d.date, net: d.fii.net }));
+    const series = [...daily].reverse().map((d) => ({ date: d.date, net: d.fii.net }));
     const bars = series.map(d => d.net);
     return {
       value: latest ? fmtCr(latest.fii.net) : '—',
@@ -167,9 +170,10 @@ function MarketOutlookPage() {
 
   const diiCard = useMemo(() => {
     if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
-    const latest = fiiDiiData.daily[0];
+    const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
+    const latest = daily[0];
     const mtdNet = fiiDiiData.mtd?.dii?.net ?? 0;
-    const series = [...fiiDiiData.daily].reverse().map(d => ({ date: d.date, net: d.dii.net }));
+    const series = [...daily].reverse().map((d) => ({ date: d.date, net: d.dii.net }));
     const bars = series.map(d => d.net);
     return {
       value: latest ? fmtCr(latest.dii.net) : '—',

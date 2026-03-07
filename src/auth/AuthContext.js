@@ -91,13 +91,13 @@ export function AuthProvider({ children }) {
         clearAuth();
         return false;
       }
-      persistAuth(data.access_token, data.refresh_token, user);
+      persistAuth(data.access_token, data.refresh_token);
       return true;
     } catch (_) {
       clearAuth();
       return false;
     }
-  }, [clearAuth, persistAuth, refreshToken, user]);
+  }, [clearAuth, persistAuth, refreshToken]);
 
   useEffect(() => {
     configureAuthHandlers({

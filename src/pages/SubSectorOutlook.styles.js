@@ -188,6 +188,20 @@ export const TableCell = styled.td`
   border-radius: ${({ highlight }) => (highlight ? '4px' : '0')};
   white-space: nowrap;
   caret-color: transparent;
+  &.trend-up {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+  &.trend-down {
+    background-color: #ffebee;
+    color: #c62828;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
 `; 
 
 export const HeaderRow = styled.tr`

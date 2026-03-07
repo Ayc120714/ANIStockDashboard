@@ -55,3 +55,22 @@ export const deleteAdminUser = (userId) =>
 
 export const blockAdminUser = (userId, blocked = true) =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/block`, { blocked: Boolean(blocked) });
+
+export const fetchAiApiKeys = () => apiGet('/auth/ai-keys');
+
+export const saveAiApiKey = (provider, apiKey, isActive = true) =>
+  apiPost('/auth/ai-keys', {
+    provider: String(provider || '').toLowerCase(),
+    api_key: String(apiKey || ''),
+    is_active: Boolean(isActive),
+  });
+
+export const setAiApiKeyStatus = (provider, isActive) =>
+  apiPost(`/auth/ai-keys/${encodeURIComponent(String(provider || '').toLowerCase())}/status`, {
+    is_active: Boolean(isActive),
+  });
+
+export const deleteAiApiKey = (provider) =>
+  apiRequest(`/auth/ai-keys/${encodeURIComponent(String(provider || '').toLowerCase())}`, {
+    method: 'DELETE',
+  });

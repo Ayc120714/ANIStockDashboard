@@ -72,13 +72,19 @@ export const Table = styled.table`
         caret-color: transparent;
       }
       .trend-up {
+        background-color: #e8f5e9;
         color: #2e7d32;
         font-weight: 600;
+        border-radius: 4px;
+        padding: 2px 6px;
         caret-color: transparent;
       }
       .trend-down {
+        background-color: #ffebee;
         color: #c62828;
         font-weight: 600;
+        border-radius: 4px;
+        padding: 2px 6px;
         caret-color: transparent;
       }
       .percentage {
