@@ -57,7 +57,9 @@ function TrendingPage() {
     setLoadError(null);
     setPage(1);
     const dateStr = formatDateParam(selectedDate);
-    const cacheKey = `trendingStocksData${dateStr ? '_' + dateStr : ''}`;
+    const searchMode = String(searchTerm || '').trim().length > 0;
+    const fetchLimit = searchMode ? 1000 : 50;
+    const cacheKey = `trendingStocksData_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -66,7 +68,7 @@ function TrendingPage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchTrending(50, dateStr).then((fresh) => {
+    fetchTrending(fetchLimit, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
@@ -79,7 +81,7 @@ function TrendingPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [selectedDate]);
+  }, [selectedDate, searchTerm]);
 
   const dataToFilter = tableData;
 
@@ -158,8 +160,8 @@ function TrendingPage() {
           <CircularProgress />
         </Box>
       )}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Box display="flex" alignItems="center" gap={2}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1.5}>
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <Typography variant="h6">Select Date:</Typography>
           <DatePicker
             value={selectedDate}
@@ -175,8 +177,9 @@ function TrendingPage() {
           placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: { xs: '100%', sm: 220 }, maxWidth: 320, flexGrow: { xs: 1, sm: 0 } }}
         />
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', ml: { xs: 0, md: 'auto' } }}>
           <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
             {`Add ST (${checkedSymbols.size})`}
           </Button>

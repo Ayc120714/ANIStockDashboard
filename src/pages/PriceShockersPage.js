@@ -60,7 +60,9 @@ function PriceShockersPage() {
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const cacheKey = `priceShockersData_${priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
+    const searchQuery = String(searchTerm || '').trim().toLowerCase();
+    const searchMode = searchQuery.length > 0;
+    const cacheKey = `priceShockersData_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -69,7 +71,22 @@ function PriceShockersPage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchPriceShockers(priceType, 50, period, dateStr).then((fresh) => {
+    const loadRows = async () => {
+      if (searchMode) {
+        const [gainers, losers] = await Promise.all([
+          fetchPriceShockers('gainers', 200, period, dateStr),
+          fetchPriceShockers('losers', 200, period, dateStr),
+        ]);
+        const bySymbol = new Map();
+        [...gainers, ...losers].forEach((row) => {
+          const key = String(row?.symbol || '').trim().toUpperCase();
+          if (key && !bySymbol.has(key)) bySymbol.set(key, row);
+        });
+        return Array.from(bySymbol.values());
+      }
+      return fetchPriceShockers(priceType, 200, period, dateStr);
+    };
+    loadRows().then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
@@ -82,7 +99,7 @@ function PriceShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [priceType, timeFrame, selectedDate]);
+  }, [priceType, timeFrame, selectedDate, searchTerm]);
 
   const defaultTableData = [
     { id: '01', symbol: 'MUFIN', sector: 'Financial Services', subSector: 'Finance - Investment', mc: 'Small Cap', cmp: '₹117.73', chg: '19.43%', date: new Date('2026-01-24') },
@@ -170,8 +187,8 @@ function PriceShockersPage() {
           <CircularProgress />
         </Box>
       )}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Box display="flex" alignItems="center" gap={2}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1.5}>
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <DatePicker
             label="Select Date"
             value={selectedDate}
@@ -183,7 +200,7 @@ function PriceShockersPage() {
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
             )}
           />
-          <ButtonGroup size="small" variant="outlined" sx={{ ml: 2 }}>
+          <ButtonGroup size="small" variant="outlined" sx={{ ml: { xs: 0, md: 2 } }}>
             <Button
               variant={priceType === 'gainers' ? 'contained' : 'outlined'}
               onClick={() => setPriceType('gainers')}
@@ -222,8 +239,9 @@ function PriceShockersPage() {
           placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: { xs: '100%', sm: 220 }, maxWidth: 320, flexGrow: { xs: 1, sm: 0 } }}
         />
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', ml: { xs: 0, md: 'auto' } }}>
           <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
             {`Add ST (${checkedSymbols.size})`}
           </Button>

@@ -13,9 +13,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { fetchOrders, fetchPortfolioPositions } from '../api/orders';
+import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
 import { useAuth } from '../auth/AuthContext';
 
 const resolveUserId = (user) => user?.id || user?.user_id || user?.email || '';
@@ -28,6 +30,64 @@ const nextMoveColor = {
   BookPartial: 'secondary',
   ExitSL: 'error',
   ExitTarget: 'success',
+};
+const orderStatusColor = {
+  PLACED: 'primary',
+  FILLED: 'success',
+  REJECTED: 'error',
+  CANCELLED: 'default',
+};
+
+const num = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+const isLiveExecution = (row) => String(row?.execution_mode || 'live').toLowerCase() === 'live';
+
+const mapDhanRowToPortfolioPosition = (row, source = 'position') => {
+  const symbol = String(
+    row?.tradingSymbol
+    || row?.symbol
+    || row?.securityId
+    || row?.scripName
+    || ''
+  ).trim().toUpperCase();
+  const qty = num(
+    row?.netQty
+    ?? row?.net_qty
+    ?? row?.totalQty
+    ?? row?.availableQty
+    ?? row?.quantity
+    ?? row?.qty
+  );
+  const avgPrice = num(row?.buyAvg ?? row?.averagePrice ?? row?.avgPrice ?? row?.avgCostPrice);
+  const ltp = num(row?.ltp ?? row?.lastTradedPrice ?? row?.lastPrice ?? row?.close);
+  const realized = source === 'holding'
+    ? 0
+    : num(row?.realizedProfit ?? row?.realizedPnl ?? row?.realized_pnl);
+  const unrealizedRaw = num(row?.unrealizedProfit ?? row?.unrealizedPnl ?? row?.unrealized_pnl ?? row?.pnl);
+  const unrealized = unrealizedRaw !== 0
+    ? unrealizedRaw
+    : ((qty > 0 && avgPrice > 0 && ltp > 0) ? ((ltp - avgPrice) * qty) : 0);
+  const state = source === 'holding'
+    ? (qty > 0 ? 'OPEN' : 'CLOSED')
+    : (qty === 0 ? 'CLOSED' : String(row?.positionType || row?.state || 'OPEN').toUpperCase());
+
+  return {
+    id: String(row?.securityId || row?.positionId || row?.id || `${symbol}-${source}`),
+    symbol,
+    broker: 'dhan',
+    product_type: String(row?.productType || row?.product || (source === 'holding' ? 'DELIVERY' : 'INTRADAY')).toUpperCase(),
+    net_qty: qty,
+    avg_price: avgPrice,
+    avg_exit_price: num(row?.sellAvg),
+    ltp,
+    realized_pnl: realized,
+    unrealized_pnl: unrealized,
+    state,
+    next_move: 'Hold',
+    updated_at: row?.updatedAt || row?.updated_at || row?.timestamp || new Date().toISOString(),
+  };
 };
 
 function PortfolioManagerPage() {
@@ -52,8 +112,35 @@ function PortfolioManagerPage() {
         fetchPortfolioPositions({ userId }),
         fetchOrders({ userId }),
       ]);
-      setPositions(Array.isArray(posRows) ? posRows : []);
-      setOrders(Array.isArray(orderRows) ? orderRows : []);
+      let resolvedPositions = Array.isArray(posRows) ? posRows : [];
+      let resolvedOrders = (Array.isArray(orderRows) ? orderRows : []).filter(isLiveExecution);
+
+      // Fallback to broker live data when local trade tables are empty.
+      if (!resolvedPositions.length && !resolvedOrders.length) {
+        try {
+          const [dhanPosRows, dhanHoldRows, dhanOrderRows] = await Promise.all([
+            fetchDhanPositions({ userId }),
+            fetchDhanHoldings({ userId }),
+            fetchDhanOrders({ userId }),
+          ]);
+          const mappedLiveRows = [
+            ...(Array.isArray(dhanPosRows) ? dhanPosRows : []).map((row) => mapDhanRowToPortfolioPosition(row, 'position')),
+            ...(Array.isArray(dhanHoldRows) ? dhanHoldRows : []).map((row) => mapDhanRowToPortfolioPosition(row, 'holding')),
+          ].filter((row) => row.symbol);
+          const byKey = new Map();
+          mappedLiveRows.forEach((row) => {
+            const key = `${row.symbol}_${row.product_type}_${row.broker}`;
+            if (!byKey.has(key)) byKey.set(key, row);
+          });
+          resolvedPositions = Array.from(byKey.values());
+          resolvedOrders = (Array.isArray(dhanOrderRows) ? dhanOrderRows : []).filter(isLiveExecution);
+        } catch (_) {
+          // keep primary API result when Dhan fallback is unavailable
+        }
+      }
+
+      setPositions(resolvedPositions);
+      setOrders(resolvedOrders);
     } catch (e) {
       setError(e?.message || 'Failed to load portfolio manager data');
     } finally {
@@ -71,10 +158,12 @@ function PortfolioManagerPage() {
     const open = [];
     const closed = [];
     for (const row of positions) {
-      if (String(row?.state || '').toUpperCase() === 'CLOSED' || Number(row?.net_qty || 0) === 0) {
-        closed.push(row);
+      const qty = num(row?.net_qty);
+      const state = String(row?.state || '').toUpperCase();
+      if (qty <= 0 || state === 'CLOSED') {
+        closed.push({ ...row, state: 'CLOSED', net_qty: qty });
       } else {
-        open.push(row);
+        open.push({ ...row, state: 'OPEN', net_qty: qty });
       }
     }
     return { openPositions: open, closedPositions: closed };
@@ -226,7 +315,9 @@ function PortfolioManagerPage() {
                       <TableCell>Symbol</TableCell>
                       <TableCell>Side</TableCell>
                       <TableCell>Status</TableCell>
+                      <TableCell>Execution</TableCell>
                       <TableCell>Broker Order ID</TableCell>
+                      <TableCell>Broker Response</TableCell>
                       <TableCell align="right">Qty</TableCell>
                       <TableCell align="right">Price</TableCell>
                       <TableCell align="right">Charges</TableCell>
@@ -247,8 +338,31 @@ function PortfolioManagerPage() {
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>{row.status}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={row.status || '—'}
+                            color={orderStatusColor[String(row.status || '').toUpperCase()] || 'default'}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>{String(row.execution_mode || 'live').toUpperCase()}</TableCell>
                         <TableCell>{row.broker_order_id || '—'}</TableCell>
+                        <TableCell sx={{ maxWidth: 260 }}>
+                          {row.rejection_reason ? (
+                            <Tooltip title={String(row.rejection_reason)}>
+                              <span>{String(row.rejection_reason).slice(0, 80)}{String(row.rejection_reason).length > 80 ? '…' : ''}</span>
+                            </Tooltip>
+                          ) : (
+                            row.broker_response
+                              ? (
+                                <Tooltip title={typeof row.broker_response === 'string' ? row.broker_response : JSON.stringify(row.broker_response)}>
+                                  <span>Broker ack received</span>
+                                </Tooltip>
+                              )
+                              : '—'
+                          )}
+                        </TableCell>
                         <TableCell align="right">{row.qty}</TableCell>
                         <TableCell align="right">{toInr(row.price)}</TableCell>
                         <TableCell align="right">{toInr(row?.charge_breakup?.total_charges)}</TableCell>

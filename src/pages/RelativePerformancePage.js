@@ -60,7 +60,9 @@ function RelativePerformancePage() {
     let cacheSet = false;
     const period = timeFrame === 'Short Term' ? '1w' : '6m';
     const dateStr = formatDateParam(selectedDate);
-    const cacheKey = `relativePerformanceData_${period}${dateStr ? '_' + dateStr : ''}`;
+    const searchMode = String(searchTerm || '').trim().length > 0;
+    const fetchLimit = searchMode ? 200 : 50;
+    const cacheKey = `relativePerformanceData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -68,7 +70,7 @@ function RelativePerformancePage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchRelativePerformance(period, 50, dateStr).then((fresh) => {
+    fetchRelativePerformance(period, fetchLimit, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         const arr = Array.isArray(fresh) ? fresh : [];
@@ -82,7 +84,7 @@ function RelativePerformancePage() {
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame, selectedDate]);
+  }, [timeFrame, selectedDate, searchTerm]);
 
   const defaultTableData = [
     { id: '01', symbol: 'NACLIND', sector: 'Chemicals', subSector: 'Agri Inputs', mc: 'Small Cap', cmp: '₹269.60', chg: '-2.97%', rs: '327.58%', date: new Date('2026-01-24') },
@@ -172,8 +174,8 @@ function RelativePerformancePage() {
           <CircularProgress />
         </Box>
       )}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Box display="flex" alignItems="center" gap={2}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1.5}>
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <DatePicker
             label="Select Date"
             value={selectedDate}
@@ -185,7 +187,7 @@ function RelativePerformancePage() {
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
             )}
           />
-          <ButtonGroup size="small" variant="outlined" sx={{ ml: 2 }}>
+          <ButtonGroup size="small" variant="outlined" sx={{ ml: { xs: 0, md: 2 } }}>
             <Button
               variant={timeFrame === 'Short Term' ? 'contained' : 'outlined'}
               onClick={() => setTimeFrame('Short Term')}
@@ -206,8 +208,9 @@ function RelativePerformancePage() {
           placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: { xs: '100%', sm: 220 }, maxWidth: 320, flexGrow: { xs: 1, sm: 0 } }}
         />
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', ml: { xs: 0, md: 'auto' } }}>
           <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>
             {`Add ST (${checkedSymbols.size})`}
           </Button>

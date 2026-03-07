@@ -59,7 +59,9 @@ function VolumeShockersPage() {
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const cacheKey = `volumeShockersData_${period}${dateStr ? '_' + dateStr : ''}`;
+    const searchMode = String(searchTerm || '').trim().length > 0;
+    const fetchLimit = searchMode ? 200 : 50;
+    const cacheKey = `volumeShockersData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -68,7 +70,7 @@ function VolumeShockersPage() {
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchVolumeShockers(50, period, dateStr).then((fresh) => {
+    fetchVolumeShockers(fetchLimit, period, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
@@ -81,7 +83,7 @@ function VolumeShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame, selectedDate]);
+  }, [timeFrame, selectedDate, searchTerm]);
 
   const defaultTableData = [
     { id: '01', symbol: 'TATACHEM', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Mid Cap', volume: '2,100,000', avgVolume: '1,200,000', cmp: '₹1,050.00', chg: '8.50%', date: '2026-01-24' },
@@ -203,6 +205,7 @@ function VolumeShockersPage() {
           placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: { xs: '100%', sm: 220 }, maxWidth: 320, flexGrow: { xs: 1, sm: 0 } }}
         />
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>

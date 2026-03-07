@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -23,6 +23,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
+import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';
 import {
   fetchDhanHoldings,
   connectDhan,
@@ -72,12 +73,19 @@ const deriveOpenPositionsFromOrders = (orders) => {
     }));
 };
 
+const AI_KEY_PROVIDERS = ['groq', 'gemini', 'cerebras', 'perplexity'];
+const DHAN_DAILY_CONSENT_LIMIT = 25;
+const consentBlockKeyForToday = (userId) => `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
+
 function ProfilePage() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const userId = String(user?.id || user?.user_id || user?.email || '');
-  const brokerSessionKey = (broker) => `broker_session_auth_${userId}_${String(broker || '').toLowerCase()}`;
+  const brokerSessionKey = useCallback(
+    (broker) => `broker_session_auth_${userId}_${String(broker || '').toLowerCase()}`,
+    [userId]
+  );
   const onboardingBrokerSetup = Boolean(location.state?.openBrokerSetup);
   const onboardingTargetPath = location.state?.from || '/';
   const [activeTab, setActiveTab] = useState('account');
@@ -88,32 +96,86 @@ function ProfilePage() {
   const [error, setError] = useState('');
   const [positions, setPositions] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [aiKeys, setAiKeys] = useState([]);
+  const [aiKeyDrafts, setAiKeyDrafts] = useState({});
+  const [aiBusy, setAiBusy] = useState(false);
+  const autoBrokerConnectAttemptedRef = useRef(false);
+  const onValidateBrokerRef = useRef(null);
   const isLiveExecution = (row) => Boolean(row?.is_enabled && row?.has_session) || Boolean(row?.live_enabled);
+  const brokerDraftKey = useCallback(
+    (broker) => `broker_integration_draft_${userId}_${String(broker || '').toLowerCase()}`,
+    [userId]
+  );
 
   const connectedDhan = rows.find((r) => r.broker === 'dhan')?.is_enabled;
   const liveEnabledCount = rows.filter((r) => isLiveExecution(r)).length;
   const displayName = user?.name || user?.full_name || '—';
   const displayEmail = user?.email || '—';
   const displayMobile = user?.mobile || user?.phone || '—';
+  const aiRows = useMemo(() => {
+    const byProvider = new Map((Array.isArray(aiKeys) ? aiKeys : []).map((r) => [String(r.provider || '').toLowerCase(), r]));
+    return AI_KEY_PROVIDERS.map((provider) => {
+      const row = byProvider.get(provider);
+      return row || { provider, has_key: false, is_active: false, masked_key: '', updated_at: null };
+    });
+  }, [aiKeys]);
 
   const emptyCredentials = (broker) => {
-    if (broker === 'dhan') return { pin: '', totp: '', access_token: '' };
+    if (broker === 'dhan') return { mobile: '', pin: '', totp: '', access_token: '', api_key: '', api_secret: '', token_id: '' };
     if (broker === 'angelone') return { api_key: '', pin: '', totp: '', access_token: '' };
     if (broker === 'upstox') return { access_token: '', auth_code: '', client_secret: '', redirect_uri: '' };
     return { pin: '', access_token: '' }; // samco
   };
 
+  const readBrokerDraft = useCallback((broker) => {
+    if (!userId) return {};
+    try {
+      const raw = localStorage.getItem(brokerDraftKey(broker));
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }, [userId, brokerDraftKey]);
+
+  const applyDraftToRow = useCallback((row) => {
+    const broker = String(row?.broker || '').toLowerCase();
+    const draft = readBrokerDraft(broker);
+    const draftCred = draft?.credentials && typeof draft.credentials === 'object' ? draft.credentials : {};
+    const baseCred = { ...emptyCredentials(broker), ...(row?.credentials || {}) };
+    return {
+      ...row,
+      client_id: String(row?.client_id || draft?.client_id || '').trim(),
+      credentials: {
+        ...baseCred,
+        mobile: String(baseCred.mobile || draftCred.mobile || '').trim(),
+        api_key: String(baseCred.api_key || draftCred.api_key || '').trim(),
+        api_secret: String(baseCred.api_secret || draftCred.api_secret || '').trim(),
+      },
+    };
+  }, [readBrokerDraft]);
+
   const loadBrokerRows = useCallback(async () => {
     try {
       const data = await fetchBrokerSetup({ userId });
       setRows(
-        (Array.isArray(data) ? data : []).map((row) => ({
+        (Array.isArray(data) ? data : []).map((row) => applyDraftToRow({
           ...row,
           credentials: emptyCredentials(row.broker),
         }))
       );
     } catch (_) {
       setRows([]);
+    }
+  }, [userId, applyDraftToRow]);
+
+  const loadAiKeys = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetchAiApiKeys();
+      setAiKeys(Array.isArray(res?.data) ? res.data : []);
+    } catch (_) {
+      setAiKeys([]);
     }
   }, [userId]);
 
@@ -154,10 +216,103 @@ function ProfilePage() {
   }, [loadBrokerRows]);
 
   useEffect(() => {
+    loadAiKeys();
+  }, [loadAiKeys]);
+
+  useEffect(() => {
     if (!onboardingBrokerSetup) return;
     setActiveTab('broker');
     setMessage('Complete broker validation to activate session and show holdings on dashboard.');
   }, [onboardingBrokerSetup]);
+
+  useEffect(() => {
+    if (!userId) return;
+    rows.forEach((row) => {
+      const broker = String(row?.broker || '').toLowerCase();
+      if (!broker) return;
+      try {
+        localStorage.setItem(
+          brokerDraftKey(broker),
+          JSON.stringify({
+            client_id: String(row?.client_id || '').trim(),
+            credentials: {
+              mobile: String(row?.credentials?.mobile || '').trim(),
+              api_key: String(row?.credentials?.api_key || '').trim(),
+              api_secret: String(row?.credentials?.api_secret || '').trim(),
+            },
+          })
+        );
+      } catch (_) {
+        // ignore localStorage failures
+      }
+    });
+  }, [rows, userId, brokerDraftKey]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '');
+    const tokenId = String(params.get('tokenId') || '').trim();
+    if (!tokenId || !userId) return;
+
+    let cancelled = false;
+    const finishConsentLogin = async () => {
+      setBusy(true);
+      setActiveTab('broker');
+      setError('');
+      setMessage('Completing Dhan login from callback token...');
+      try {
+        let pending = {};
+        try {
+          pending = JSON.parse(sessionStorage.getItem(`dhan_pending_connect_${userId}`) || '{}');
+        } catch (_) {
+          pending = {};
+        }
+        const clientId = String(pending?.client_id || '').trim();
+        const pendingApiKey = String(pending?.api_key || '').trim();
+        const pendingApiSecret = String(pending?.api_secret || '').trim();
+        const connectRes = await connectDhan({
+          user_id: userId,
+          client_id: clientId,
+          token_id: tokenId,
+          api_key: pendingApiKey,
+          api_secret: pendingApiSecret,
+        });
+        const token = String(connectRes?.session_token || '').trim();
+        if (!token) {
+          throw new Error('Dhan callback completed but no access token was returned.');
+        }
+        if (cancelled) return;
+        setRows((prev) => prev.map((r) => (
+          r.broker === 'dhan'
+            ? { ...r, credentials: { ...(r.credentials || {}), access_token: token } }
+            : r
+        )));
+        try {
+          localStorage.setItem(`broker_session_auth_${userId}_dhan`, String(Date.now()));
+        } catch (_) {
+          // ignore localStorage failures
+        }
+        setMessage('Dhan session token generated successfully.');
+        await loadBrokerRows();
+        try {
+          sessionStorage.removeItem(`dhan_pending_connect_${userId}`);
+        } catch (_) {
+          // ignore storage failures
+        }
+        navigate('/profile', { replace: true });
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message || 'Failed to consume Dhan callback token.');
+        }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    };
+    finishConsentLogin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, navigate, userId, loadBrokerRows]);
 
   const updateRow = (broker, patch) => {
     setRows((prev) => {
@@ -231,7 +386,9 @@ function ProfilePage() {
     setError('');
     setMessage('');
     try {
-      const rawClientId = row.client_id || '';
+      const rawClientId = row.broker === 'dhan'
+        ? (row.client_id || row.credentials?.mobile || '')
+        : (row.client_id || '');
       const sanitizedDhanClientId = row.broker === 'dhan'
         ? String(rawClientId).replace(/\s/g, '').replace(/^\+/, '')
         : String(rawClientId);
@@ -242,6 +399,8 @@ function ProfilePage() {
         pin: (row.credentials?.pin || '').trim(),
         totp: (row.credentials?.totp || '').replace(/\s/g, '').trim(),
         api_key: (row.credentials?.api_key || '').trim(),
+        api_secret: (row.credentials?.api_secret || '').trim(),
+        token_id: (row.credentials?.token_id || '').trim(),
         client_secret: (row.credentials?.client_secret || '').trim(),
         redirect_uri: (row.credentials?.redirect_uri || '').trim(),
         auth_code: (row.credentials?.auth_code || '').trim(),
@@ -256,13 +415,43 @@ function ProfilePage() {
       let validated = false;
       let effectiveToken = payload.access_token;
       if (row.broker === 'dhan') {
+        const tokenFromCallback = String(payload.token_id || '').trim();
+        if (!tokenFromCallback) {
+          const blockedToday = localStorage.getItem(consentBlockKeyForToday(userId)) === '1';
+          if (blockedToday) {
+            throw new Error(
+              `Dhan allows maximum ${DHAN_DAILY_CONSENT_LIMIT} consent logins per day. Limit reached for today; please retry tomorrow.`
+            );
+          }
+        }
         const connectRes = await connectDhan({
           user_id: userId,
           client_id: payload.client_id,
           pin: payload.pin,
           totp: payload.totp,
           access_token: payload.access_token,
+          api_key: payload.api_key,
+          api_secret: payload.api_secret,
+          token_id: payload.token_id,
         });
+        if (connectRes?.requires_token_id && connectRes?.login_url) {
+          try {
+            sessionStorage.setItem(
+              `dhan_pending_connect_${userId}`,
+              JSON.stringify({
+                client_id: String(connectRes?.client_id || payload.client_id || '').trim(),
+                api_key: String(payload.api_key || '').trim(),
+                api_secret: String(payload.api_secret || '').trim(),
+              })
+            );
+          } catch (_) {
+            // ignore storage failures
+          }
+          setMessage(connectRes?.message || `Complete Dhan browser login and return to ${connectRes?.redirect_url || 'the callback URL'} with tokenId.`);
+          window.location.assign(connectRes.login_url);
+          return;
+        }
+        payload.client_id = String(connectRes?.data?.client_id || payload.client_id || '').trim();
         effectiveToken = String(connectRes?.session_token || effectiveToken || '').trim();
         if (!effectiveToken) {
           throw new Error('Unable to create Dhan session token. Check Client ID/PIN/TOTP or JWT token.');
@@ -313,6 +502,16 @@ function ProfilePage() {
         navigate(onboardingTargetPath, { replace: true, state: { brokerSetupCompleted: true } });
       }
     } catch (e) {
+      if (row.broker === 'dhan') {
+        const msg = String(e?.message || '');
+        if (msg.toUpperCase().includes('CONSENT_LIMIT_EXCEED') || msg.toLowerCase().includes('consent limit')) {
+          try {
+            localStorage.setItem(consentBlockKeyForToday(userId), '1');
+          } catch (_) {
+            // ignore storage failures
+          }
+        }
+      }
       setError(e?.message || `Validation failed for ${row.broker}`);
     } finally {
       setBusy(false);
@@ -370,27 +569,109 @@ function ProfilePage() {
       live_enabled: false,
       credentials: emptyCredentials(broker),
     }));
-    if (!rows.length) return fallback;
+    if (!rows.length) return fallback.map((row) => applyDraftToRow(row));
     const byBroker = new Map(rows.map((r) => [r.broker, r]));
     return ['dhan', 'samco', 'angelone', 'upstox'].map((broker) => {
       const row = byBroker.get(broker);
       return row
-        ? { ...row, credentials: row.credentials || emptyCredentials(broker) }
-        : {
+        ? applyDraftToRow({ ...row, credentials: row.credentials || emptyCredentials(broker) })
+        : applyDraftToRow({
             broker,
             client_id: '',
             is_enabled: false,
             has_session: false,
             live_enabled: false,
             credentials: emptyCredentials(broker),
-          };
+          });
     });
-  }, [rows]);
+  }, [rows, applyDraftToRow]);
 
   const activeBrokerRow = useMemo(
     () => brokerRows.find((r) => r.broker === selectedBroker) || brokerRows[0] || null,
     [brokerRows, selectedBroker]
   );
+  onValidateBrokerRef.current = onValidateBroker;
+
+  const setAiDraft = (provider, value) => {
+    setAiKeyDrafts((prev) => ({ ...prev, [provider]: value }));
+  };
+
+  const onSaveAiKey = async (provider, isActive) => {
+    const providerKey = String(provider || '').toLowerCase();
+    const draftValue = String(aiKeyDrafts?.[providerKey] || '').trim();
+    if (!draftValue) {
+      setError(`Enter ${providerKey.toUpperCase()} API key before saving.`);
+      return;
+    }
+    setAiBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await saveAiApiKey(providerKey, draftValue, isActive);
+      setAiDraft(providerKey, '');
+      await loadAiKeys();
+      setMessage(`${providerKey.toUpperCase()} API key saved.`);
+    } catch (e) {
+      setError(e?.message || `Failed to save ${providerKey.toUpperCase()} API key.`);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const onToggleAiStatus = async (provider, nextActive) => {
+    const providerKey = String(provider || '').toLowerCase();
+    setAiBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await setAiApiKeyStatus(providerKey, nextActive);
+      await loadAiKeys();
+      setMessage(`${providerKey.toUpperCase()} key ${nextActive ? 'enabled' : 'disabled'}.`);
+    } catch (e) {
+      setError(e?.message || `Failed to update ${providerKey.toUpperCase()} key status.`);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const onDeleteAiKey = async (provider) => {
+    const providerKey = String(provider || '').toLowerCase();
+    setAiBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await deleteAiApiKey(providerKey);
+      setAiDraft(providerKey, '');
+      await loadAiKeys();
+      setMessage(`${providerKey.toUpperCase()} API key removed.`);
+    } catch (e) {
+      setError(e?.message || `Failed to delete ${providerKey.toUpperCase()} API key.`);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!onboardingBrokerSetup) return;
+    if (autoBrokerConnectAttemptedRef.current) return;
+    const dhanRow = brokerRows.find((r) => r.broker === 'dhan') || null;
+    if (!dhanRow || dhanRow.has_session) return;
+    const hasClient = Boolean(String(dhanRow.client_id || '').trim() || String(dhanRow.credentials?.mobile || '').trim());
+    const hasConsentKeys = Boolean(
+      String(dhanRow.credentials?.api_key || '').trim()
+      && String(dhanRow.credentials?.api_secret || '').trim()
+    );
+    const hasDirectAuth = Boolean(
+      String(dhanRow.credentials?.pin || '').trim()
+      && String(dhanRow.credentials?.totp || '').trim()
+    );
+    if (!(hasClient && (hasConsentKeys || hasDirectAuth))) return;
+    autoBrokerConnectAttemptedRef.current = true;
+    setSelectedBroker('dhan');
+    if (onValidateBrokerRef.current) {
+      onValidateBrokerRef.current(dhanRow);
+    }
+  }, [onboardingBrokerSetup, brokerRows]);
 
   return (
     <Box sx={{ p: 2 }}>
@@ -407,27 +688,112 @@ function ProfilePage() {
       </Tabs>
 
       {activeTab === 'account' ? (
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>User Profile</Typography>
-          <Box sx={{ display: 'grid', gap: 1.2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' } }}>
-            <TextField size="small" label="Name" value={displayName} disabled />
-            <TextField size="small" label="Email ID" value={displayEmail} disabled />
-            <TextField size="small" label="Mobile Number" value={displayMobile} disabled />
-            <TextField size="small" label="Password" value="********" type="password" disabled />
-          </Box>
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-            <Button
-              variant="contained"
-              sx={{ textTransform: 'none' }}
-              onClick={() => navigate('/forgot-password')}
-            >
-              Change Password
-            </Button>
-            <Typography sx={{ fontSize: 12, color: '#666', alignSelf: 'center' }}>
-              Password is never shown directly for security.
+        <>
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 1.5 }}>User Profile</Typography>
+            <Box sx={{ display: 'grid', gap: 1.2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' } }}>
+              <TextField size="small" label="Name" value={displayName} disabled />
+              <TextField size="small" label="Email ID" value={displayEmail} disabled />
+              <TextField size="small" label="Mobile Number" value={displayMobile} disabled />
+              <TextField size="small" label="Password" value="********" type="password" disabled />
+            </Box>
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button
+                variant="contained"
+                sx={{ textTransform: 'none' }}
+                onClick={() => navigate('/forgot-password')}
+              >
+                Change Password
+              </Button>
+              <Typography sx={{ fontSize: 12, color: '#666', alignSelf: 'center' }}>
+                Password is never shown directly for security.
+              </Typography>
+            </Stack>
+          </Paper>
+
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 0.5 }}>AI API Keys</Typography>
+            <Typography sx={{ fontSize: 12, color: '#666', mb: 1.5 }}>
+              Review saved keys in masked form, rotate them, and keep providers enabled or disabled for later use.
             </Typography>
-          </Stack>
-        </Paper>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Provider</TableCell>
+                    <TableCell>Saved Key</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Updated</TableCell>
+                    <TableCell>New / Rotate Key</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {aiRows.map((row) => {
+                    const provider = String(row.provider || '').toLowerCase();
+                    return (
+                      <TableRow key={provider}>
+                        <TableCell sx={{ fontWeight: 700 }}>{provider.toUpperCase()}</TableCell>
+                        <TableCell>{row.has_key ? (row.masked_key || '****') : 'Not configured'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={row.has_key ? (row.is_active ? 'Enabled' : 'Disabled') : 'Not set'}
+                            color={row.has_key ? (row.is_active ? 'success' : 'default') : 'default'}
+                            variant={row.is_active ? 'filled' : 'outlined'}
+                          />
+                        </TableCell>
+                        <TableCell>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '—'}</TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="password"
+                            placeholder={`Enter ${provider.toUpperCase()} key`}
+                            value={aiKeyDrafts?.[provider] || ''}
+                            onChange={(e) => setAiDraft(provider, e.target.value)}
+                            sx={{ minWidth: 260 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={aiBusy}
+                              onClick={() => onSaveAiKey(provider, Boolean(row.is_active || !row.has_key))}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={aiBusy || !row.has_key}
+                              onClick={() => onToggleAiStatus(provider, !Boolean(row.is_active))}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {row.is_active ? 'Disable' : 'Enable'}
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              disabled={aiBusy || !row.has_key}
+                              onClick={() => onDeleteAiKey(provider)}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </>
       ) : null}
 
       {activeTab === 'broker' ? (
@@ -465,7 +831,7 @@ function ProfilePage() {
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ mb: 1.2 }}>
               <TextField
                 size="small"
-                label="Client ID"
+                label={activeBrokerRow.broker === 'dhan' ? 'Client ID / Mobile (optional if backend .env is set)' : 'Client ID'}
                 value={activeBrokerRow.client_id || ''}
                 onChange={(e) => updateRow(activeBrokerRow.broker, { client_id: e.target.value })}
                 sx={{ minWidth: 260 }}
@@ -485,8 +851,12 @@ function ProfilePage() {
             <Box sx={{ display: 'grid', gap: 1.1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, mb: 1.2 }}>
               {activeBrokerRow.broker === 'dhan' ? (
                 <>
-                  <TextField size="small" type="password" label="PIN" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                  <TextField size="small" label="Mobile Number (or Dhan Client ID)" value={activeBrokerRow.credentials?.mobile || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'mobile', e.target.value)} />
+                  <TextField size="small" type="password" label="PIN / Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
+                  <TextField size="small" label="API Key override (optional)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
+                  <TextField size="small" type="password" label="API Secret override (optional)" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} />
+                  <TextField size="small" label="tokenId (after Dhan redirect)" value={activeBrokerRow.credentials?.token_id || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'token_id', e.target.value)} />
                   <TextField
                     size="small"
                     label="Access Token (JWT optional)"
@@ -538,6 +908,16 @@ function ProfilePage() {
                 </Button>
               ) : null}
             </Stack>
+            {activeBrokerRow.broker === 'dhan' ? (
+              <Typography sx={{ fontSize: 12, color: '#666', mb: 1 }}>
+                Enter mobile/client id, PIN and TOTP, then click <b>Validate &amp; Create Session</b>. If consent redirect is needed, complete it and return to <code>https://localhost:3000/callback</code>.
+              </Typography>
+            ) : null}
+            {activeBrokerRow.broker === 'dhan' ? (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                Dhan allows maximum {DHAN_DAILY_CONSENT_LIMIT} consent logins per day. Reuse the existing session whenever possible.
+              </Alert>
+            ) : null}
 
             <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
               <Chip size="small" label={activeBrokerRow.has_session ? 'Session active' : 'No session'} color={activeBrokerRow.has_session ? 'success' : 'default'} variant={activeBrokerRow.has_session ? 'filled' : 'outlined'} />
