@@ -1,5 +1,16 @@
 import { apiGet, apiPost, apiRequest } from './apiClient';
 
+const extractRows = (payload, keys = []) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  if (Array.isArray(payload?.result)) return payload.result;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+};
+
 export const fetchWatchlist = async (listType = null, options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   let url = '/watchlist';
@@ -9,7 +20,7 @@ export const fetchWatchlist = async (listType = null, options = {}) => {
   const qs = params.toString();
   if (qs) url += `?${qs}`;
   const data = await apiGet(url);
-  return data?.data ?? [];
+  return extractRows(data, ['watchlist', 'rows']);
 };
 
 export const addToWatchlist = async (symbol, listType = 'long_term', notes = '') => {
@@ -40,17 +51,17 @@ export const updateWatchlistEntry = async (symbol, data) => {
 export const fetchWatchlistSignals = async (options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const data = await apiGet(`/watchlist/signals${includeAll ? '?include_all=true' : ''}`);
-  return data?.data ?? [];
+  return extractRows(data, ['signals', 'rows']);
 };
 
 export const fetchWeeklyIndicators = async (options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const data = await apiGet(`/watchlist/weekly-indicators${includeAll ? '?include_all=true' : ''}`);
-  return data?.data ?? [];
+  return extractRows(data, ['weekly_indicators', 'weekly_entries', 'rows']);
 };
 
 export const fetchOrderBlocks = async (options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const data = await apiGet(`/watchlist/order-blocks${includeAll ? '?include_all=true' : ''}`);
-  return data?.data ?? [];
+  return extractRows(data, ['order_blocks', 'rows']);
 };

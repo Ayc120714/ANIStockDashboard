@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
@@ -151,6 +151,7 @@ const ALERT_COLS = [
 ];
 
 function SignalsAlertsTab() {
+  const SHOW_ALL_LIMIT = 300;
   const [view, setView] = useState('signals');
   const [signalData, setSignalData] = useState([]);
   const [signalPayload, setSignalPayload] = useState(null);
@@ -170,8 +171,9 @@ function SignalsAlertsTab() {
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
-  const rowsPerPage = showAll ? 9999 : 25;
+  const rowsPerPage = showAll ? SHOW_ALL_LIMIT : 25;
   const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const deferredSymbolFilter = useDeferredValue(symbolFilter);
 
   const handleSort = (col) => {
     if (col === '_actions' || col === '_read') return;
@@ -243,12 +245,12 @@ function SignalsAlertsTab() {
     return fetchAlerts({
       limit: 200,
       ...(sourceFilter ? { source: sourceFilter } : {}),
-      ...(symbolFilter ? { symbol: symbolFilter } : {}),
+      ...(deferredSymbolFilter ? { symbol: deferredSymbolFilter } : {}),
     })
       .then(setAlertData)
       .catch(() => {})
       .finally(() => setAlertsLoading(false));
-  }, [sourceFilter, symbolFilter]);
+  }, [sourceFilter, deferredSymbolFilter]);
 
   useEffect(() => {
     loadSignals();
@@ -276,8 +278,8 @@ function SignalsAlertsTab() {
       if (!hasMonthlyFilter && !(s.cmp && s.entry_price)) return false;
       return hasDoneFilter ? true : !s.hit_target;
     });
-    if (symbolFilter) {
-      const q = symbolFilter.toUpperCase();
+    if (deferredSymbolFilter) {
+      const q = deferredSymbolFilter.toUpperCase();
       rows = rows.filter(s => s.symbol?.includes(q));
     }
     activeFilters.forEach((filterKey) => {
@@ -313,19 +315,21 @@ function SignalsAlertsTab() {
       rows = rows.filter(s => s.vwap_cross_quarter_below);
     }
     return dedupeSignalsBySymbol(rows);
-  }, [signalData, monthlySetupData, symbolFilter, convFilters, recoFilter, strategyFilter]);
+  }, [signalData, monthlySetupData, deferredSymbolFilter, convFilters, recoFilter, strategyFilter]);
 
   const uniqueSignalData = useMemo(
     () => dedupeSignalsBySymbol(signalData.filter(s => s.cmp && s.entry_price)),
     [signalData]
   );
-  const highConvCount = uniqueSignalData.filter(s => s.high_conviction).length;
-  const highConvBullCount = uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish').length;
-  const highConvBearCount = uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish').length;
-  const weeklyAlignedCount = uniqueSignalData.filter(s => s.weekly_aligned).length;
-  const actionableCount = uniqueSignalData.filter(s => s.actionable).length;
-  const doneCount = uniqueSignalData.filter(s => s.target_done || s.status === 'done').length;
-  const entryReadyCount = uniqueSignalData.filter(s => s.status === 'entry_ready').length;
+  const signalStats = useMemo(() => ({
+    highConvCount: uniqueSignalData.filter(s => s.high_conviction).length,
+    highConvBullCount: uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bullish').length,
+    highConvBearCount: uniqueSignalData.filter(s => s.high_conviction && String(s.trend || '').toLowerCase() === 'bearish').length,
+    weeklyAlignedCount: uniqueSignalData.filter(s => s.weekly_aligned).length,
+    actionableCount: uniqueSignalData.filter(s => s.actionable).length,
+    doneCount: uniqueSignalData.filter(s => s.target_done || s.status === 'done').length,
+    entryReadyCount: uniqueSignalData.filter(s => s.status === 'entry_ready').length,
+  }), [uniqueSignalData]);
   const monthlySetupCount = useMemo(() => dedupeSignalsBySymbol(monthlySetupData).length, [monthlySetupData]);
 
   const sortedData = useMemo(() => {
@@ -364,13 +368,11 @@ function SignalsAlertsTab() {
   };
 
   const handleAddSelected = async (listType) => {
-    const syms = [...checkedSymbols].filter(Boolean);
+    const syms = [...checkedSymbols]
+      .filter(Boolean)
+      .filter((symbol) => !added[`${symbol}_${listType}`]);
     if (!syms.length) return;
-    for (const symbol of syms) {
-      // Reuse single-add flow so existing dedupe/disable state stays consistent.
-      // eslint-disable-next-line no-await-in-loop
-      await handleAdd(symbol, listType);
-    }
+    await Promise.allSettled(syms.map((symbol) => handleAdd(symbol, listType)));
   };
 
   const handleMarkRead = async (id) => {
@@ -422,13 +424,13 @@ function SignalsAlertsTab() {
             <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
               {[
                 { val: 'all', label: `All` },
-                { val: 'high', label: `High Conv (${highConvCount})`, color: '#1b5e20', bg: '#e8f5e9' },
-                { val: 'high_bull', label: `HC Bull (${highConvBullCount})`, color: '#1b5e20', bg: '#e8f5e9' },
-                { val: 'high_bear', label: `HC Bear (${highConvBearCount})`, color: '#c62828', bg: '#ffebee' },
-                { val: 'weekly', label: `Wk Aligned (${weeklyAlignedCount})` },
-                { val: 'entry_ready', label: `Entry Ready (${entryReadyCount})`, color: '#1565c0', bg: '#e3f2fd' },
-                { val: 'done', label: `Done (${doneCount})`, color: '#6d4c41', bg: '#efebe9' },
-                { val: 'actionable', label: `Actionable (${actionableCount})` },
+                { val: 'high', label: `High Conv (${signalStats.highConvCount})`, color: '#1b5e20', bg: '#e8f5e9' },
+                { val: 'high_bull', label: `HC Bull (${signalStats.highConvBullCount})`, color: '#1b5e20', bg: '#e8f5e9' },
+                { val: 'high_bear', label: `HC Bear (${signalStats.highConvBearCount})`, color: '#c62828', bg: '#ffebee' },
+                { val: 'weekly', label: `Wk Aligned (${signalStats.weeklyAlignedCount})` },
+                { val: 'entry_ready', label: `Entry Ready (${signalStats.entryReadyCount})`, color: '#1565c0', bg: '#e3f2fd' },
+                { val: 'done', label: `Done (${signalStats.doneCount})`, color: '#6d4c41', bg: '#efebe9' },
+                { val: 'actionable', label: `Actionable (${signalStats.actionableCount})` },
                 { val: 'monthly_setup', label: `Monthly Setup (${monthlySetupCount})`, color: '#0d47a1', bg: '#e3f2fd' },
               ].map(opt => (
                 <Button key={opt.val} size="small"
@@ -471,7 +473,7 @@ function SignalsAlertsTab() {
                 bgcolor: showAll ? '#1a3c5e' : 'transparent',
                 color: showAll ? '#fff' : '#1a3c5e', borderColor: '#1a3c5e',
                 '&:hover': { bgcolor: showAll ? '#0b3d91' : '#e3f2fd' } }}>
-              {showAll ? 'Paged' : `Show All (${filteredSignals.length})`}
+              {showAll ? 'Paged' : `Show Top ${SHOW_ALL_LIMIT}`}
             </Button>
             <Tooltip title="Select all visible symbols">
               <Button size="small" variant="outlined" startIcon={<MdSelectAll />}

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminPasswordlessLogin, loginStart, loginWithEmailOtpStart } from '../api/auth';
-import { fetchBrokerSetup } from '../api/brokers';
+import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
 const DEFAULT_ADMIN_EMAIL = 'gvc1990@gmail.com';
@@ -15,6 +15,9 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showConsentInfo, setShowConsentInfo] = useState(() =>
+    hasAnyConsentLimitMarkerToday() || Boolean(location.state?.brokerConsentLimited)
+  );
 
   const canSubmit = useMemo(
     () => email.trim().length > 0 && password.length >= 8,
@@ -27,25 +30,6 @@ function LoginPage() {
   );
   const showPasswordField = !canPasswordlessAdminLogin;
 
-  const postLoginNavigate = async (nextUser, fallbackPath) => {
-    const userId = String(nextUser?.id || nextUser?.user_id || nextUser?.email || '');
-    if (!userId) {
-      navigate(fallbackPath, { replace: true });
-      return;
-    }
-    try {
-      const rows = await fetchBrokerSetup({ userId });
-      const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
-      if (!hasSession) {
-        navigate('/profile', { replace: true, state: { openBrokerSetup: true, from: fallbackPath } });
-        return;
-      }
-    } catch (_) {
-      // If setup check fails, continue to app and let user setup from profile.
-    }
-    navigate(fallbackPath, { replace: true });
-  };
-
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -55,7 +39,11 @@ function LoginPage() {
       const res = await loginStart(email.trim(), password);
       if (res?.mfa_required === false && res?.access_token && res?.refresh_token) {
         persistAuth(res.access_token, res.refresh_token, res?.user || null);
-        await postLoginNavigate(res?.user || null, location.state?.from?.pathname || '/');
+        await routeAfterLogin({
+          nextUser: res?.user || null,
+          fallbackPath: location.state?.from?.pathname || '/',
+          navigate,
+        });
         return;
       }
       navigate('/verify-otp', {
@@ -81,7 +69,11 @@ function LoginPage() {
     try {
       const res = await adminPasswordlessLogin(email.trim());
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-      await postLoginNavigate(res?.user || null, location.state?.from?.pathname || '/');
+      await routeAfterLogin({
+        nextUser: res?.user || null,
+        fallbackPath: location.state?.from?.pathname || '/',
+        navigate,
+      });
     } catch (err) {
       setError(err?.message || 'Admin passwordless login failed.');
     } finally {
@@ -116,6 +108,23 @@ function LoginPage() {
       <Card sx={{ width: '100%', maxWidth: 440 }}>
         <CardContent>
           <Typography variant="h5" sx={{ mb: 2 }}>Login</Typography>
+          {showConsentInfo ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Broker consent was skipped today due to daily limit. You can continue login to access dashboard normally.
+              <Box sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    clearConsentLimitMarkersToday();
+                    setShowConsentInfo(false);
+                  }}
+                >
+                  Retry Broker Login Today
+                </Button>
+              </Box>
+            </Alert>
+          ) : null}
           {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
           <Box component="form" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
             <TextField

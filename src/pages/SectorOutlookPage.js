@@ -58,6 +58,12 @@ const extractNumeric = (value) => {
     return match ? parseFloat(match[0]) : 0;
   };
 
+  const getDailySignClass = (value) => {
+    const n = extractNumeric(value);
+    if (!Number.isFinite(n) || n === 0) return '';
+    return n > 0 ? 'up' : 'down';
+  };
+
   // sort after filtering
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
@@ -137,14 +143,14 @@ const extractNumeric = (value) => {
               {paginatedData.map((row) => ( 
                 <tr
                   key={row.id}
-                  className={row.trend === '↗' ? 'row-up' : row.trend === '↘' ? 'row-down' : ''}
+                  className={getDailySignClass(row.day1d) === 'up' ? 'row-up' : getDailySignClass(row.day1d) === 'down' ? 'row-down' : ''}
                 >
                   <td className="index">{row.id}</td>
                   <td
                     style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
                     onClick={() => onSectorClick && onSectorClick(row.name)}
                   >{row.name}</td>
-                  <td className={row.trend === '↗' ? 'trend-up' : 'trend-down'}>{row.trend}</td>
+                  <td className={getDailySignClass(row.day1d) === 'up' ? 'trend-up' : getDailySignClass(row.day1d) === 'down' ? 'trend-down' : ''}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
                   <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>

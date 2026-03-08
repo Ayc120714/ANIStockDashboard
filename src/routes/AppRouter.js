@@ -21,6 +21,7 @@ import SignupPage from '../pages/SignupPage';
 import OtpVerifyPage from '../pages/OtpVerifyPage';
 import ForgotUserIdPage from '../pages/ForgotUserIdPage';
 import ForgotPasswordPage from '../pages/ForgotPasswordPage';
+import DhanCallbackPage from '../pages/DhanCallbackPage';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 
@@ -44,6 +45,8 @@ function AppRouter() {
           <Route path="/portfolio-manager" element={<PortfolioManagerPage />} />
           <Route path="/alerts" element={<StockAlertsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/callback" element={<DhanCallbackPage />} />
+          <Route path="/dhan-callback" element={<DhanCallbackPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/fno" element={<FnOPage />} />
           <Route path="/commodities" element={<CommoditiesPage />} />

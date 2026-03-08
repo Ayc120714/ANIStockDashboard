@@ -3,6 +3,7 @@ import { Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, Text
 import { useLocation, useNavigate } from 'react-router-dom';
 import { completeEmailOtpLogin, completeLogin, completeSignup, resendOtp, verifyOtp } from '../api/auth';
 import { fetchBrokerSetup } from '../api/brokers';
+import { routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
 const onlyDigits = (value) => (value || '').replace(/\D/g, '').slice(0, 8);
@@ -32,25 +33,6 @@ function OtpVerifyPage() {
   const canSubmitEmail = useMemo(() => flowId && purpose && emailOtp.length >= 4, [flowId, purpose, emailOtp]);
   const canSubmitMobile = useMemo(() => flowId && purpose && mobileOtp.length >= 4, [flowId, purpose, mobileOtp]);
   const verificationReady = emailVerified && (!requiresMobile || mobileVerified);
-
-  const postLoginNavigate = async (nextUser, fallbackPath) => {
-    const userId = String(nextUser?.id || nextUser?.user_id || nextUser?.email || '');
-    if (!userId) {
-      navigate(fallbackPath, { replace: true });
-      return;
-    }
-    try {
-      const rows = await fetchBrokerSetup({ userId });
-      const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
-      if (!hasSession) {
-        navigate('/profile', { replace: true, state: { openBrokerSetup: true, from: fallbackPath } });
-        return;
-      }
-    } catch (_) {
-      // If setup check fails, continue to app and let user setup from profile.
-    }
-    navigate(fallbackPath, { replace: true });
-  };
 
   const onVerify = async (channel) => {
     const otpCode = channel === 'email' ? emailOtp : mobileOtp;
@@ -117,12 +99,20 @@ function OtpVerifyPage() {
       if (purpose === 'login_email') {
         const res = await completeEmailOtpLogin(flowId, trustDevice);
         persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-        await postLoginNavigate(res?.user || null, from || '/');
+        await routeAfterLogin({
+          nextUser: res?.user || null,
+          fallbackPath: from || '/',
+          navigate,
+        });
         return;
       }
       const res = await completeLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-      await postLoginNavigate(res?.user || null, from || '/');
+      await routeAfterLogin({
+        nextUser: res?.user || null,
+        fallbackPath: from || '/',
+        navigate,
+      });
     } catch (err) {
       setError(err?.message || 'Unable to complete login.');
     } finally {

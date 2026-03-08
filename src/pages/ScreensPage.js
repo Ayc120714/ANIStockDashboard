@@ -35,27 +35,27 @@ function ScreensPage() {
       </TabContainer>
 
       <TabContent active={activeTab === 'AI Picks'}>
-        <AiPicksPage />
+        {activeTab === 'AI Picks' ? <AiPicksPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Trending'}>
-          <TrendingPage />
+        {activeTab === 'Trending' ? <TrendingPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Price Shockers'}>
-        <PriceShockersPage />
+        {activeTab === 'Price Shockers' ? <PriceShockersPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Volume Shockers'}>
-        <VolumeShockersPage />
+        {activeTab === 'Volume Shockers' ? <VolumeShockersPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Relative Performance'}>
-        <RelativePerformancePage />
+        {activeTab === 'Relative Performance' ? <RelativePerformancePage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>
-        <IPOsPage />
+        {activeTab === 'IPOs' ? <IPOsPage /> : null}
       </TabContent>
     </PageContainer>
   );

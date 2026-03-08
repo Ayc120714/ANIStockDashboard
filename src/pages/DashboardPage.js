@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import { MdRefresh, MdTrendingUp, MdTrendingDown, MdRemoveRedEye } from 'react-icons/md';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
@@ -26,6 +26,7 @@ const fmtPct = (v) => { if (v == null) return '—'; const n = +v; return isNaN(
 const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
 const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
 const hasLocalBrokerSessionMarker = (userId) => {
   if (!userId) return false;
@@ -207,44 +208,85 @@ function MarketPulse({ indices }) {
 }
 
 // ─── Portfolio Snapshot ─────────────────────────────────────────────────────
-function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
+function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
   const navigate = useNavigate();
-  const all = watchlist || [];
-  const weekly = weeklyData || [];
-  const stCount = all.filter(w => w.list_type === 'short_term').length;
-  const ltCount = all.filter(w => w.list_type === 'long_term').length;
-
-  const gainers = all.filter(w => w.day1d > 0);
-  const losers = all.filter(w => w.day1d < 0);
-  const avg1d = all.length ? all.reduce((s, w) => s + (w.day1d || 0), 0) / all.length : 0;
-
-  const best = all.reduce((b, w) => (!b || (w.day1d || 0) > (b.day1d || 0)) ? w : b, null);
-  const worst = all.reduce((w2, w) => (!w2 || (w.day1d || 0) < (w2.day1d || 0)) ? w : w2, null);
-
-  const sectorMap = {};
-  all.forEach(w => { const s = w.sector || 'Other'; sectorMap[s] = (sectorMap[s] || 0) + 1; });
-  const sectorData = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-
-  const recoMap = {};
-  all.forEach(w => { if (w.recommendation) { const k = w.recommendation.toUpperCase(); recoMap[k] = (recoMap[k] || 0) + 1; } });
-  const recoOrder = ['STRONG BUY', 'BUY', 'HOLD', 'SELL', 'STRONG SELL'];
-  const recoData = recoOrder.filter(k => recoMap[k]).map(name => ({ name, value: recoMap[name] }));
-  Object.keys(recoMap).filter(k => !recoOrder.includes(k)).forEach(k => recoData.push({ name: k, value: recoMap[k] }));
+  const all = watchlist;
+  const weekly = weeklyData;
+  const sigArr = signals;
   const recoColors = { 'STRONG BUY': '#1b5e20', 'BUY': '#43a047', 'HOLD': '#f57f17', 'SELL': '#c62828', 'STRONG SELL': '#b71c1c', 'NEAR ENTRY': '#1565c0' };
+  const {
+    stCount,
+    ltCount,
+    gainers,
+    losers,
+    avg1d,
+    best,
+    worst,
+    sectorData,
+    recoData,
+    bullish,
+    bearish,
+    overbought,
+    oversold,
+    avgScore,
+    nearTarget,
+    nearSL,
+    nearEntry,
+    inEntryZone,
+    topMovers,
+  } = useMemo(() => {
+    const stCountMemo = all.filter((w) => w.list_type === 'short_term').length;
+    const ltCountMemo = all.filter((w) => w.list_type === 'long_term').length;
+    const gainersMemo = all.filter((w) => w.day1d > 0);
+    const losersMemo = all.filter((w) => w.day1d < 0);
+    const avg1dMemo = all.length ? all.reduce((s, w) => s + (w.day1d || 0), 0) / all.length : 0;
+    const bestMemo = all.reduce((b, w) => (!b || (w.day1d || 0) > (b.day1d || 0)) ? w : b, null);
+    const worstMemo = all.reduce((w2, w) => (!w2 || (w.day1d || 0) < (w2.day1d || 0)) ? w : w2, null);
 
-  const sigArr = signals || [];
-  const bullish = sigArr.filter(s => s.signal_score > 25).length;
-  const bearish = sigArr.filter(s => s.signal_score < -25).length;
-  const overbought = sigArr.filter(s => s.rsi > 70).length;
-  const oversold = sigArr.filter(s => s.rsi < 30).length;
-  const avgScore = all.length ? all.reduce((s, w) => s + (w.composite_score || 0), 0) / all.filter(w => w.composite_score).length : 0;
+    const sectorMap = {};
+    all.forEach((w) => { const s = w.sector || 'Other'; sectorMap[s] = (sectorMap[s] || 0) + 1; });
+    const sectorDataMemo = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
 
-  const nearTarget = all.filter(w => w.price && w.target_short_term && Math.abs(w.price - w.target_short_term) / w.target_short_term < 0.05);
-  const nearSL = all.filter(w => w.price && w.stop_loss && Math.abs(w.price - w.stop_loss) / w.stop_loss < 0.05);
-  const nearEntry = weekly.filter(w => w.near_entry && (w.weekly_entry_gap_pct || 100) <= 10);
-  const inEntryZone = weekly.filter(w => (w.weekly_entry_gap_pct || 100) <= 5);
+    const recoMap = {};
+    all.forEach((w) => { if (w.recommendation) { const k = w.recommendation.toUpperCase(); recoMap[k] = (recoMap[k] || 0) + 1; } });
+    const recoOrder = ['STRONG BUY', 'BUY', 'HOLD', 'SELL', 'STRONG SELL'];
+    const recoDataMemo = recoOrder.filter((k) => recoMap[k]).map((name) => ({ name, value: recoMap[name] }));
+    Object.keys(recoMap).filter((k) => !recoOrder.includes(k)).forEach((k) => recoDataMemo.push({ name: k, value: recoMap[k] }));
 
-  const topMovers = [...all].sort((a, b) => Math.abs(b.day1d || 0) - Math.abs(a.day1d || 0)).slice(0, 6);
+    const bullishMemo = sigArr.filter((s) => s.signal_score > 25).length;
+    const bearishMemo = sigArr.filter((s) => s.signal_score < -25).length;
+    const overboughtMemo = sigArr.filter((s) => s.rsi > 70).length;
+    const oversoldMemo = sigArr.filter((s) => s.rsi < 30).length;
+    const scoredRows = all.filter((w) => Number.isFinite(Number(w.composite_score)));
+    const avgScoreMemo = scoredRows.length ? scoredRows.reduce((s, w) => s + Number(w.composite_score || 0), 0) / scoredRows.length : 0;
+
+    const nearTargetMemo = all.filter((w) => w.price && w.target_short_term && Math.abs(w.price - w.target_short_term) / w.target_short_term < 0.05);
+    const nearSLMemo = all.filter((w) => w.price && w.stop_loss && Math.abs(w.price - w.stop_loss) / w.stop_loss < 0.05);
+    const nearEntryMemo = weekly.filter((w) => w.near_entry && (w.weekly_entry_gap_pct || 100) <= 10);
+    const inEntryZoneMemo = weekly.filter((w) => (w.weekly_entry_gap_pct || 100) <= 5);
+    const topMoversMemo = [...all].sort((a, b) => Math.abs(b.day1d || 0) - Math.abs(a.day1d || 0)).slice(0, 6);
+    return {
+      stCount: stCountMemo,
+      ltCount: ltCountMemo,
+      gainers: gainersMemo,
+      losers: losersMemo,
+      avg1d: avg1dMemo,
+      best: bestMemo,
+      worst: worstMemo,
+      sectorData: sectorDataMemo,
+      recoData: recoDataMemo,
+      bullish: bullishMemo,
+      bearish: bearishMemo,
+      overbought: overboughtMemo,
+      oversold: oversoldMemo,
+      avgScore: avgScoreMemo,
+      nearTarget: nearTargetMemo,
+      nearSL: nearSLMemo,
+      nearEntry: nearEntryMemo,
+      inEntryZone: inEntryZoneMemo,
+      topMovers: topMoversMemo,
+    };
+  }, [all, weekly, sigArr]);
 
   if (!all.length) return (
     <Card sx={{ textAlign: 'center', py: 4, color: '#888' }}>
@@ -416,8 +458,17 @@ function PortfolioSnapshot({ watchlist, signals, weeklyData }) {
 }
 
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
-function WeeklyEntries({ weeklyData }) {
-  if (!weeklyData || !weeklyData.length) {
+function WeeklyEntries({ weeklyData = [] }) {
+  const rows = weeklyData;
+  const nearEntries = useMemo(
+    () => rows
+      .filter((w) => (w.weekly_entry_gap_pct || 100) <= 10)
+      .sort((a, b) => (a.weekly_entry_gap_pct || 100) - (b.weekly_entry_gap_pct || 100)),
+    [rows]
+  );
+  const visibleRows = nearEntries.slice(0, 25);
+
+  if (!rows.length) {
     return (
       <Card>
         <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
@@ -427,7 +478,6 @@ function WeeklyEntries({ weeklyData }) {
       </Card>
     );
   }
-  const nearEntries = weeklyData.filter(w => (w.weekly_entry_gap_pct || 100) <= 10);
   if (!nearEntries.length) {
     return (
       <Card>
@@ -465,7 +515,7 @@ function WeeklyEntries({ weeklyData }) {
             </tr>
           </thead>
           <tbody>
-            {nearEntries.map(w => {
+            {visibleRows.map(w => {
               const gap = w.weekly_entry_gap_pct || 0;
               const gapColor = gap <= 5 ? '#283593' : '#1565c0';
               return (
@@ -490,6 +540,9 @@ function WeeklyEntries({ weeklyData }) {
         </table>
       </Box>
       <Box sx={{ mt: 1, fontSize: 10, color: '#999', display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        {nearEntries.length > visibleRows.length && (
+          <span>Showing top {visibleRows.length} nearest setups ({nearEntries.length} found)</span>
+        )}
         <span><b style={{ color: '#283593' }}>Dark Blue</b> = ≤5% from entry</span>
         <span><b style={{ color: '#1565c0' }}>Blue</b> = 5-10% from entry</span>
         <span>Entry = max(W.PSAR, W.SuperTrend) for bullish / min for bearish</span>
@@ -661,7 +714,9 @@ function SectorHeatmap({ sectors }) {
             >
               <Box sx={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sector}</Box>
               <Box sx={{ fontSize: 15, fontWeight: 700 }}>{fmtPct(s.avg_day_change)}</Box>
-              <Box sx={{ fontSize: 10, opacity: 0.8 }}>{s.stock_count || ''} stocks</Box>
+              <Box sx={{ fontSize: 10, opacity: 0.8 }}>
+                {Number.isFinite(Number(s.stock_count)) ? `${Number(s.stock_count)} stocks` : '—'}
+              </Box>
             </Box>
           </Tooltip>
         ))}
@@ -916,8 +971,28 @@ function DashboardPage() {
 
   const loadAll = useCallback(async () => {
     try {
+      let cached = null;
+      try {
+        const raw = sessionStorage.getItem(DASHBOARD_CACHE_KEY);
+        cached = raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        cached = null;
+      }
+      if (cached) {
+        setIndices(cached.indices || null);
+        setWatchlist(Array.isArray(cached.watchlist) ? cached.watchlist : []);
+        setSignals(Array.isArray(cached.signals) ? cached.signals : []);
+        setWeeklyData(Array.isArray(cached.weeklyData) ? cached.weeklyData : []);
+        setObData(Array.isArray(cached.obData) ? cached.obData : []);
+        setSectors(Array.isArray(cached.sectors) ? cached.sectors : []);
+        setGainers(Array.isArray(cached.gainers) ? cached.gainers : []);
+        setLosers(Array.isArray(cached.losers) ? cached.losers : []);
+        setAlerts(Array.isArray(cached.alerts) ? cached.alerts : []);
+        setRatings(Array.isArray(cached.ratings) ? cached.ratings : []);
+      }
+
       const watchlistOptions = isAdmin ? { includeAll: true } : undefined;
-      const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys, brokerRowsResult] = await Promise.allSettled([
+      const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys] = await Promise.allSettled([
         fetchMarketIndices(),
         fetchWatchlist(null, watchlistOptions),
         fetchWatchlistSignals(watchlistOptions),
@@ -929,31 +1004,72 @@ function DashboardPage() {
         fetchAlerts({ limit: 10 }),
         fetchRatings({ limit: 8 }),
         apiGet('/system/status'),
-        fetchBrokerSetup({ userId }),
       ]);
+
+      const nextIndices = idx.status === 'fulfilled' ? (idx.value || null) : (cached?.indices || null);
+      const nextWatchlist = wl.status === 'fulfilled' ? (Array.isArray(wl.value) ? wl.value : []) : (Array.isArray(cached?.watchlist) ? cached.watchlist : []);
+      const nextSignals = sigs.status === 'fulfilled' ? (Array.isArray(sigs.value) ? sigs.value : []) : (Array.isArray(cached?.signals) ? cached.signals : []);
+      const nextWeekly = wk.status === 'fulfilled' ? (Array.isArray(wk.value) ? wk.value : []) : (Array.isArray(cached?.weeklyData) ? cached.weeklyData : []);
+      const nextOrderBlocks = ob.status === 'fulfilled' ? (Array.isArray(ob.value) ? ob.value : []) : (Array.isArray(cached?.obData) ? cached.obData : []);
+      const nextSectors = sec.status === 'fulfilled' ? (Array.isArray(sec.value) ? sec.value : []) : (Array.isArray(cached?.sectors) ? cached.sectors : []);
+      const nextGainers = g.status === 'fulfilled' ? (Array.isArray(g.value) ? g.value : []) : (Array.isArray(cached?.gainers) ? cached.gainers : []);
+      const nextLosers = l.status === 'fulfilled' ? (Array.isArray(l.value) ? l.value : []) : (Array.isArray(cached?.losers) ? cached.losers : []);
+      const nextAlerts = al.status === 'fulfilled' ? (Array.isArray(al.value) ? al.value : []) : (Array.isArray(cached?.alerts) ? cached.alerts : []);
+      const nextRatings = rat.status === 'fulfilled' ? (Array.isArray(rat.value) ? rat.value : []) : (Array.isArray(cached?.ratings) ? cached.ratings : []);
+
+      setIndices(nextIndices);
+      setWatchlist(nextWatchlist);
+      setSignals(nextSignals);
+      setWeeklyData(nextWeekly);
+      setObData(nextOrderBlocks);
+      setSectors(nextSectors);
+      setGainers(nextGainers);
+      setLosers(nextLosers);
+      setAlerts(nextAlerts);
+      setRatings(nextRatings);
+      if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
+      const localSessionMarker = hasLocalBrokerSessionMarker(userId);
+      setBrokerAuthenticated(localSessionMarker);
+      setLastUpdated(new Date());
+      try {
+        sessionStorage.setItem(
+          DASHBOARD_CACHE_KEY,
+          JSON.stringify({
+            indices: nextIndices,
+            watchlist: nextWatchlist,
+            signals: nextSignals,
+            weeklyData: nextWeekly,
+            obData: nextOrderBlocks,
+            sectors: nextSectors,
+            gainers: nextGainers,
+            losers: nextLosers,
+            alerts: nextAlerts,
+            ratings: nextRatings,
+            updatedAt: Date.now(),
+          })
+        );
+      } catch (_) {
+        // ignore cache failures
+      }
+      setLoading(false);
+
       let positions = [];
       if (userId) {
         try {
           positions = await fetchPortfolioPositions({ userId });
         } catch (_) {
-          // Keep dashboard stable when holdings endpoint is not available.
           positions = [];
         }
       }
-      if (idx.status === 'fulfilled') setIndices(idx.value);
-      if (wl.status === 'fulfilled') setWatchlist(Array.isArray(wl.value) ? wl.value : []);
-      if (sigs.status === 'fulfilled') setSignals(Array.isArray(sigs.value) ? sigs.value : []);
-      if (wk.status === 'fulfilled') setWeeklyData(Array.isArray(wk.value) ? wk.value : []);
-      if (ob.status === 'fulfilled') setObData(Array.isArray(ob.value) ? ob.value : []);
-      if (sec.status === 'fulfilled') setSectors(sec.value);
-      if (g.status === 'fulfilled') setGainers(g.value);
-      if (l.status === 'fulfilled') setLosers(l.value);
-      if (al.status === 'fulfilled') setAlerts(al.value);
-      if (rat.status === 'fulfilled') setRatings(rat.value);
-      if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       const normalizedPositions = (Array.isArray(positions) ? positions : []).filter((p) => Math.abs(Number(p?.net_qty || 0)) > 0);
-      const localSessionMarker = hasLocalBrokerSessionMarker(userId);
       let authenticated = false;
+      let brokerRowsResult = { status: 'rejected' };
+      try {
+        const rows = await fetchBrokerSetup({ userId });
+        brokerRowsResult = { status: 'fulfilled', value: rows };
+      } catch (_) {
+        brokerRowsResult = { status: 'rejected' };
+      }
       if (brokerRowsResult.status === 'fulfilled') {
         const rows = Array.isArray(brokerRowsResult.value) ? brokerRowsResult.value : [];
         authenticated = rows.some((r) => hasBrokerSession(r));
@@ -1005,7 +1121,6 @@ function DashboardPage() {
       const finalHoldings = liveBrokerPositions.length ? liveBrokerPositions : normalizedPositions;
       setBrokerAuthenticated(effectiveAuthenticated || finalHoldings.length > 0);
       setHoldings(finalHoldings);
-      setLastUpdated(new Date());
     } finally {
       setLoading(false);
     }
@@ -1018,7 +1133,7 @@ function DashboardPage() {
   }, [loadAll, marketMode]);
 
   useEffect(() => {
-    if (location.state?.showTelegramBotInfo) {
+    if (location.state?.showTelegramBotInfo || location.state?.brokerConsentLimited) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.pathname, location.state, navigate]);
@@ -1071,6 +1186,11 @@ function DashboardPage() {
               Registration completed. To receive Telegram updates, open{' '}
               <a href="https://t.me/ani_120714_bot" target="_blank" rel="noreferrer">t.me/ani_120714_bot</a>{' '}
               and send <b>/start</b>.
+            </Alert>
+          ) : null}
+          {location.state?.brokerConsentLimited ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Broker consent login limit reached for today. Dashboard loaded in normal mode; broker reconnect will be attempted on next login day.
             </Alert>
           ) : null}
           {!isAdmin && telegramStatusChecked && !hasApprovedTelegramAccess ? (

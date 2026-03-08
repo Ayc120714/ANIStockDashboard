@@ -228,6 +228,23 @@ function MarketOutlookPage() {
     return 'sideways';
   };
 
+  const extractSignedNumber = (value) => {
+    if (value == null) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const text = String(value).trim();
+    if (!text) return null;
+    const match = text.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const getDailySignClass = (value) => {
+    const n = extractSignedNumber(value);
+    if (n == null || n === 0) return '';
+    return n > 0 ? 'up' : 'down';
+  };
+
   // Sort arrow helper similar to SectorOutlookPage.js
   const getSortArrow = (columnKey) => {
     if (sortConfig.key !== columnKey) return ' ⬍';
@@ -253,7 +270,7 @@ function MarketOutlookPage() {
             <CardHeader>
               <div>
                 <h3>{card.title}</h3>
-                <span className={`trend-badge ${card.trendDirection || getTrendClass(card.trend)}`}>{card.trend}</span>
+                <span className={`trend-badge ${getDailySignClass(card.change) || card.trendDirection || getTrendClass(card.trend)}`}>{card.trend}</span>
               </div>
             </CardHeader>
             <CardValue>{card.value}</CardValue>
@@ -276,7 +293,7 @@ function MarketOutlookPage() {
             <CashCard>
               <CashTitle>FII Cash</CashTitle>
               <CashSubtitle>Foreign Institutional Investors</CashSubtitle>
-              <CashValue style={{ color: fiiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
+              <CashValue style={{ color: (fiiShownPoint.net ?? 0) >= 0 ? '#28a745' : '#dc3545' }}>
                 {fmtCr(fiiShownPoint.net)}
               </CashValue>
               {fiiShownPoint.date && (
@@ -332,7 +349,7 @@ function MarketOutlookPage() {
             <CashCard>
               <CashTitle>DII Cash</CashTitle>
               <CashSubtitle>Domestic Institutional Investors</CashSubtitle>
-              <CashValue style={{ color: diiCard.latestNet >= 0 ? '#28a745' : '#dc3545' }}>
+              <CashValue style={{ color: (diiShownPoint.net ?? 0) >= 0 ? '#28a745' : '#dc3545' }}>
                 {fmtCr(diiShownPoint.net)}
               </CashValue>
               {diiShownPoint.date && (
@@ -387,7 +404,7 @@ function MarketOutlookPage() {
             <CardHeader>
               <div>
                 <h3>{smallcapCards[0].title}</h3>
-                <span className={`trend-badge ${smallcapCards[0].trendDirection || getTrendClass(smallcapCards[0].trend)}`}>{smallcapCards[0].trend}</span>
+                    <span className={`trend-badge ${getDailySignClass(smallcapCards[0].change) || smallcapCards[0].trendDirection || getTrendClass(smallcapCards[0].trend)}`}>{smallcapCards[0].trend}</span>
               </div>
             </CardHeader>
             <CardValue>{smallcapCards[0].value}</CardValue>
@@ -406,7 +423,7 @@ function MarketOutlookPage() {
                 <CardHeader>
                   <div>
                     <h3>{sc.title}</h3>
-                    <span className={`trend-badge ${sc.trendDirection || getTrendClass(sc.trend)}`}>{sc.trend}</span>
+                    <span className={`trend-badge ${getDailySignClass(sc.change) || sc.trendDirection || getTrendClass(sc.trend)}`}>{sc.trend}</span>
                   </div>
                 </CardHeader>
                 <CardValue>{sc.value}</CardValue>
@@ -438,10 +455,10 @@ function MarketOutlookPage() {
             </thead>
             <tbody>
               {sortedTableData.map((row) => (
-                <tr key={row.id} className={row.trendDirection === 'up' ? 'row-up' : row.trendDirection === 'down' ? 'row-down' : ''}>
+                <tr key={row.id} className={getDailySignClass(row.day1d) === 'up' ? 'row-up' : getDailySignClass(row.day1d) === 'down' ? 'row-down' : ''}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
-                  <td className={row.trendDirection === 'up' ? 'trend-up' : row.trendDirection === 'down' ? 'trend-down' : ''}>{row.trend}</td>
+                  <td className={getDailySignClass(row.day1d) === 'up' ? 'trend-up' : getDailySignClass(row.day1d) === 'down' ? 'trend-down' : ''}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
                   <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>

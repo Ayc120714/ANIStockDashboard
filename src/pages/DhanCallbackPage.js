@@ -3,8 +3,8 @@ import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/ma
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { connectDhan, ensureDhanSession } from '../api/dhan';
+import { markConsentLimitForToday, shouldSkipBrokerConsentToday } from '../auth/postLoginRouting';
 
-const consentBlockKeyForToday = (userId) => `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
 const DHAN_DAILY_CONSENT_LIMIT = 25;
 
 function DhanCallbackPage() {
@@ -37,7 +37,7 @@ function DhanCallbackPage() {
 
       const userId = String(user?.id || user?.user_id || user?.email || '');
       const tokenId = String(searchParams.get('tokenId') || searchParams.get('tokenid') || '').trim();
-      const targetPath = decodeURIComponent(String(searchParams.get('from') || '').trim() || '/dashboard');
+      const targetPath = decodeURIComponent(String(searchParams.get('from') || '').trim() || '/');
       if (!userId) {
         if (mounted) {
           setError('Session missing. Please login again and retry broker connect.');
@@ -54,6 +54,10 @@ function DhanCallbackPage() {
         const draftApiSecret = String(draft?.credentials?.api_secret || '').trim();
 
         if (!tokenId) {
+          if (shouldSkipBrokerConsentToday(userId)) {
+            navigate(targetPath || '/', { replace: true, state: { brokerConsentLimited: true } });
+            return;
+          }
           // Prefer existing valid broker session to avoid unnecessary consent churn.
           try {
             const ensured = await withTimeout(
@@ -64,7 +68,7 @@ function DhanCallbackPage() {
             if (ensured?.connected) {
               localStorage.setItem(`broker_session_auth_${userId}_dhan`, String(Date.now()));
               sessionStorage.removeItem(`dhan_pending_connect_${userId}`);
-              navigate(targetPath || '/dashboard', { replace: true });
+              navigate(targetPath || '/', { replace: true });
               return;
             }
           } catch (_) {
@@ -93,7 +97,7 @@ function DhanCallbackPage() {
                 client_id: draftClientId,
                 api_key: draftApiKey,
                 api_secret: draftApiSecret,
-                from: targetPath || '/dashboard',
+                from: targetPath || '/',
               })
             );
             window.location.assign(connectRes.login_url);
@@ -104,7 +108,7 @@ function DhanCallbackPage() {
 
         const pendingRaw = sessionStorage.getItem(`dhan_pending_connect_${userId}`) || '{}';
         const pending = JSON.parse(pendingRaw);
-        const pendingTargetPath = String(pending?.from || targetPath || '/dashboard').trim() || '/dashboard';
+        const pendingTargetPath = String(pending?.from || targetPath || '/').trim() || '/';
         const pendingClientId = String(pending?.client_id || draftClientId || '').trim();
         const pendingApiKey = String(pending?.api_key || draftApiKey || '').trim();
         const pendingApiSecret = String(pending?.api_secret || draftApiSecret || '').trim();
@@ -129,11 +133,11 @@ function DhanCallbackPage() {
         if (mounted) {
           const msg = String(e?.message || '');
           if (msg.toUpperCase().includes('CONSENT_LIMIT_EXCEED') || msg.toLowerCase().includes('consent limit')) {
-            try {
-              localStorage.setItem(consentBlockKeyForToday(userId), '1');
-            } catch (_) {
-              // ignore storage failures
-            }
+            markConsentLimitForToday(userId);
+          }
+          if (msg.toUpperCase().includes('CONSENT_LIMIT_EXCEED') || msg.toLowerCase().includes('consent limit')) {
+            navigate(targetPath || '/', { replace: true, state: { brokerConsentLimited: true } });
+            return;
           }
           setError(e?.message || 'Failed to complete Dhan login (Step 3 token exchange).');
           setLoading(false);
