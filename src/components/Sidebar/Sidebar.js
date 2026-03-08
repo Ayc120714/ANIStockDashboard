@@ -14,7 +14,13 @@ function Sidebar() {
         {collapsed ? <MdMenu size={22} /> : <MdClose size={18} />}
       </ToggleButton>
 
-      <h2>Stock Dashboard</h2>
+      <div className="brand-wrap">
+        {!collapsed ? (
+          <img src="/ayc-logo.png" alt="AYC Industries" className="brand-logo" />
+        ) : (
+          <div className="brand-mini">AYC</div>
+        )}
+      </div>
 
       <nav>
         <NavLink to="/" collapsed={collapsed} title={collapsed ? 'Dashboard' : undefined}>

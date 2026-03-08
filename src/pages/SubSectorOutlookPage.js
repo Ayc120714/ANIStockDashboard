@@ -30,6 +30,7 @@ import {
   LegendLabelGroup,
   HeaderRow,
   HeaderCell,
+  TableScroll,
 } from './SubSectorOutlook.styles';
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
 import { fetchTrending, fetchStocksBySubsector } from '../api/stocks'; 
@@ -391,70 +392,72 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
 
         </HeaderBar>
 
-        <Table>
-          <thead>
-            <HeaderRow>
-              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('name')}>
-                Sub Sector{getTableSortArrow('name')}
-              </HeaderCell>
-              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('all')}>
-                ALL{getTableSortArrow('all')}
-              </HeaderCell>
-              <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('trend')}>
-                Trend{getTableSortArrow('trend')}
-              </HeaderCell>
-              {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => (
-                <HeaderCell
-                  key={lbl || idx}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => typeof lbl === 'string' && handleTableSort(lbl)}
-                >
-                  {typeof lbl === 'string' ? lbl : 'W—'}{typeof lbl === 'string' ? getTableSortArrow(lbl) : ''}
+        <TableScroll>
+          <Table>
+            <thead>
+              <HeaderRow>
+                <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('name')}>
+                  Sub Sector{getTableSortArrow('name')}
                 </HeaderCell>
-              ))}
-            </HeaderRow>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && !isLoading && !loadError && (
-              <TableRow>
-                <TableCell colSpan={3 + Math.max(weekLabels.length, 4)} style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
-                  No subsector data available.
-                </TableCell>
-              </TableRow>
-            )}
-            {filtered.map(sector => (
-              <React.Fragment key={sector.sector}>
-                <SectorHeader>
-                  <TableCell colSpan={3 + Math.max(weekLabels.length, 4)}>{sector.sector}</TableCell>
-                </SectorHeader>
-                {sector.subsectors.map(sub => (
-                  <TableRow key={sub.name}>
-                    <TableCell 
-                      style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
-                      onClick={() => handleSubsectorClick(sub.name, sector.sector)}
-                    >
-                      {sub.name} 
-                      {(sub.stock_count || sub.all) > 0 && (
-                        <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>
-                          ({sub.stock_count || sub.all})
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{sub.stock_count || sub.all}</TableCell>
-                    <TableCell>{sub.trend}</TableCell>
-                    {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => {
-                      const val = weekLabels.length ? sub[lbl] : null;
-                      const display = val != null ? `${val}%` : '—';
-                      return (
-                        <TableCell key={lbl || idx} highlight={getHighlight(val)}>{display}</TableCell>
-                      );
-                    })}
-                  </TableRow>
+                <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('all')}>
+                  ALL{getTableSortArrow('all')}
+                </HeaderCell>
+                <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('trend')}>
+                  Trend{getTableSortArrow('trend')}
+                </HeaderCell>
+                {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => (
+                  <HeaderCell
+                    key={lbl || idx}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => typeof lbl === 'string' && handleTableSort(lbl)}
+                  >
+                    {typeof lbl === 'string' ? lbl : 'W—'}{typeof lbl === 'string' ? getTableSortArrow(lbl) : ''}
+                  </HeaderCell>
                 ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </Table>
+              </HeaderRow>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && !isLoading && !loadError && (
+                <TableRow>
+                  <TableCell colSpan={3 + Math.max(weekLabels.length, 4)} style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
+                    No subsector data available.
+                  </TableCell>
+                </TableRow>
+              )}
+              {filtered.map(sector => (
+                <React.Fragment key={sector.sector}>
+                  <SectorHeader>
+                    <TableCell colSpan={3 + Math.max(weekLabels.length, 4)}>{sector.sector}</TableCell>
+                  </SectorHeader>
+                  {sector.subsectors.map(sub => (
+                    <TableRow key={sub.name}>
+                      <TableCell 
+                        style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                        onClick={() => handleSubsectorClick(sub.name, sector.sector)}
+                      >
+                        {sub.name} 
+                        {(sub.stock_count || sub.all) > 0 && (
+                          <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>
+                            ({sub.stock_count || sub.all})
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>{sub.stock_count || sub.all}</TableCell>
+                      <TableCell>{sub.trend}</TableCell>
+                      {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => {
+                        const val = weekLabels.length ? sub[lbl] : null;
+                        const display = val != null ? `${val}%` : '—';
+                        return (
+                          <TableCell key={lbl || idx} highlight={getHighlight(val)}>{display}</TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </Table>
+        </TableScroll>
       </LeftContent>
 
       <RightSidebar>

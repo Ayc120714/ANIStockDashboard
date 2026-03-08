@@ -3,7 +3,8 @@ import styled from 'styled-components';
 export const Container = styled.div`
   display: flex;
   flex-direction: row;
-  gap: 24px;
+  gap: 18px;
+  min-width: 0;
   @media (max-width: 1200px) {
     flex-direction: column;
   }
@@ -12,19 +13,30 @@ export const Container = styled.div`
 export const LeftContent = styled.div`
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
 `;
 
 export const HeaderBar = styled.div`
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 18px;
   padding: 4px 6px 10px 6px;
   border-bottom: 1px solid #e5e5e5;
+  min-width: 0;
+
+  @media (max-width: 1450px) {
+    align-items: flex-start;
+  }
 `; 
 
 export const Spacer = styled.div`
   flex: 1;
+  min-width: 20px;
+  @media (max-width: 1450px) {
+    display: none;
+  }
 `; 
 
 export const Chips = styled.div`
@@ -32,6 +44,11 @@ export const Chips = styled.div`
   gap: 10px;
   align-items: center;
   margin-left: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+  @media (max-width: 1450px) {
+    margin-left: 0;
+  }
 `; 
 
 export const Chip = styled.div`
@@ -53,16 +70,32 @@ export const SearchBar = styled.input`
   border: 1px solid #d5d5d5;
   padding: 7px 14px;
   width: 210px;
+  max-width: 100%;
   font-size: 14px;
   margin-right: 12px;
   outline: none;
   background: #ffffff;
+
+  @media (max-width: 1450px) {
+    width: 180px;
+    margin-right: 6px;
+  }
 `; 
 export const LegendWrapper = styled.div`
   width: 100%;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1 1 320px;
+
+  @media (max-width: 1450px) {
+    order: 4;
+    flex-basis: 100%;
+    min-width: 0;
+    align-items: stretch;
+    margin-top: 4px;
+  }
 `;
 
 export const LegendRow = styled.div`
@@ -73,6 +106,10 @@ export const LegendRow = styled.div`
   align-items: center;
   margin-bottom: 4px;
   caret-color: transparent;
+
+  @media (max-width: 1450px) {
+    max-width: none;
+  }
 `;
 
 export const LegendBar = styled.div`
@@ -132,6 +169,7 @@ export const UpdatedOnDate = styled.span`
 
 export const Table = styled.table`
   width: 100%;
+  min-width: 920px;
   border-collapse: collapse;
   overflow: hidden;
   font-size: 12px;
@@ -170,6 +208,12 @@ export const Table = styled.table`
       font-size: 11px;
     }
   }
+`;
+
+export const TableScroll = styled.div`
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 `;
 
 export const TableRow = styled.tr`
@@ -243,7 +287,7 @@ export const SectorHeader = styled.tr`
 `; 
 
 export const RightSidebar = styled.div`
-  width: 320px;
+  width: 300px;
   min-width: 280px;
   background: #ffffff;
   border-radius: 8px;
@@ -260,6 +304,12 @@ export const RightSidebar = styled.div`
     padding: 12px 8px;
     box-shadow: none;
   }
+
+  @media (max-width: 1450px) and (min-width: 1201px) {
+    width: 280px;
+    min-width: 260px;
+    padding: 12px 12px 16px 12px;
+  }
 `;
 
 export const TopPerformerTabs = styled.div`
@@ -269,10 +319,10 @@ export const TopPerformerTabs = styled.div`
 
 export const TopPerformerHeader = styled.div`
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   margin: 6px 0 4px;
   border-radius: 18px;
-  padding: 8px 22px;
+  padding: 8px 16px;
   display: inline-flex;
   align-items: center;
   cursor: pointer;

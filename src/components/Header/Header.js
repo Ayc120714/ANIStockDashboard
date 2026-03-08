@@ -8,7 +8,36 @@ function Header() {
 
   return (
     <HeaderContainer>
-      <h1>Welcome to Stock Dashboard</h1>
+      <Box
+        aria-label="AYC Industries logo"
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          height: { xs: 48, md: 62 },
+          borderRadius: 1.2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          px: { xs: 0.8, md: 1.4 },
+          border: '1px solid rgba(249, 115, 22, 0.2)',
+          background: 'linear-gradient(100deg, rgba(255,255,255,0.75), rgba(255,247,237,0.78))',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.5)',
+          opacity: 0.98,
+        }}
+      >
+        <Box
+          component="img"
+          src="/ayc-logo.png"
+          alt="AYC Industries"
+          sx={{
+            width: '100%',
+            maxWidth: { xs: 280, md: 560 },
+            height: { xs: 34, md: 44 },
+            objectFit: 'contain',
+            objectPosition: 'left center',
+          }}
+        />
+      </Box>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
         <span style={{ color: '#555', fontSize: 13 }}>
           {user?.full_name || user?.email || ''}

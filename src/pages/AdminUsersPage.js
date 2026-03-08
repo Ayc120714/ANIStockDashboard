@@ -17,6 +17,10 @@ import { addAdminUser, blockAdminUser, deleteAdminUser, fetchAdminUsers } from '
 import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.styles';
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
+const isMissingResourceError = (err) => {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('not found') || msg.includes('404');
+};
 
 function AdminUsersPage() {
   const [rows, setRows] = useState([]);
@@ -40,7 +44,11 @@ function AdminUsersPage() {
       const res = await fetchAdminUsers(includeInactive);
       setRows(Array.isArray(res?.data) ? res.data : []);
     } catch (err) {
-      setError(err?.message || 'Failed to load users.');
+      if (isMissingResourceError(err)) {
+        setRows([]);
+      } else {
+        setError(err?.message || 'Failed to load users.');
+      }
     } finally {
       setLoading(false);
     }

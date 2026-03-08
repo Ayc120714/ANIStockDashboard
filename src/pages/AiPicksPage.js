@@ -145,7 +145,7 @@ function AiPicksPage() {
       <TableSection style={{ marginTop: 0 }}>
         <TableTitle style={{ color: headerBg, fontSize: 16 }}>{title}</TableTitle>
         <TableWrapper>
-          <Table style={{ fontSize: 11 }}>
+          <Table style={{ fontSize: 11, minWidth: 1120 }}>
             <thead style={{ backgroundColor: headerBg }}>
               <tr>
                 <th style={compact}>#</th>
@@ -354,7 +354,7 @@ function AiPicksPage() {
 
       {!loading && !error && (
         <>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
             {renderTable(data.bullish, 'bullish')}
             {renderTable(data.bearish, 'bearish')}
           </Box>
@@ -379,7 +379,7 @@ function AiPicksPage() {
                   (Stocks available for derivatives trading on NSE)
                 </span>
               </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 {renderTable(data.fno_bullish, 'bullish', 'F&O Bullish Picks')}
                 {renderTable(data.fno_bearish, 'bearish', 'F&O Bearish Picks')}
               </Box>

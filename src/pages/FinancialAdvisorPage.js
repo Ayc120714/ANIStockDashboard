@@ -44,10 +44,71 @@ function normalizeReco(value) {
   return v;
 }
 
+function parseMaybeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function hasBullishMacdCross(row, timeframe = 'daily') {
+  const tf = String(timeframe || 'daily').toLowerCase();
+  const prefix = tf === 'daily' ? '' : `${tf}_`;
+  const backendFlag = row?.[`${prefix}macd_cross_up`];
+  if (typeof backendFlag === 'boolean') return backendFlag;
+  const crossRaw = String(
+    row?.[`${prefix}macd_cross`]
+    ?? row?.[`${prefix}macd_state`]
+    ?? row?.[`${prefix}macd_signal_state`]
+    ?? ''
+  ).toLowerCase();
+  if (
+    crossRaw.includes('bull')
+    || crossRaw.includes('cross_above')
+    || crossRaw.includes('cross up')
+    || crossRaw.includes('buy')
+  ) {
+    return true;
+  }
+  const macd = parseMaybeNumber(row?.[`${prefix}macd`]);
+  const signal = parseMaybeNumber(row?.[`${prefix}macd_signal`] ?? row?.[`${prefix}macd_signal_line`]);
+  const hist = parseMaybeNumber(row?.[`${prefix}macd_histogram`] ?? row?.[`${prefix}macd_hist`]);
+  if (macd != null && signal != null && macd > signal) return true;
+  if (hist != null && hist > 0) return true;
+  return false;
+}
+
+function hasGreenHistogramBuilding(row, timeframe = 'daily') {
+  const tf = String(timeframe || 'daily').toLowerCase();
+  const prefix = tf === 'daily' ? '' : `${tf}_`;
+  const recentFlipFlag = row?.[`${prefix}hist_red_to_green_recent`];
+  if (typeof recentFlipFlag === 'boolean' && recentFlipFlag) return true;
+  const flipFlag = row?.[`${prefix}hist_red_to_green`];
+  if (typeof flipFlag === 'boolean') return flipFlag;
+  const serverFlag = row?.[`${prefix}green_hist_building`];
+  if (typeof serverFlag === 'boolean') return serverFlag;
+  const hist = parseMaybeNumber(row?.[`${prefix}macd_histogram`] ?? row?.[`${prefix}macd_hist`]);
+  return hist != null && hist > 0;
+}
+
+function hasMonthlyMacdBullCondition(row) {
+  if (typeof row?.monthly_macd_positive === 'boolean' && typeof row?.monthly_macd_bull_signal_condition === 'boolean') {
+    return row.monthly_macd_positive && row.monthly_macd_bull_signal_condition;
+  }
+  const macd = parseMaybeNumber(row?.monthly_macd ?? row?.monthly_macd_value ?? row?.monthly_macd_line);
+  const signal = parseMaybeNumber(row?.monthly_macd_signal ?? row?.monthly_signal ?? row?.monthly_signal_line);
+  const crossUp = hasBullishMacdCross(row, 'monthly');
+  return Boolean(macd != null && macd > 0 && ((signal != null && macd > signal) || crossUp));
+}
+
 function deriveStrategyTags(row) {
   const tags = [];
+  if (hasBullishMacdCross(row, 'weekly') && hasGreenHistogramBuilding(row, 'weekly')) {
+    tags.push({ label: 'Weekly MACD Cross + Red->Green Hist', tone: 'bull' });
+  }
   if (row?.monthly_setup_rule || row?.monthly_psar_macd_rule || row?.monthly_qualified) {
     tags.push({ label: 'Monthly MACD+PSAR', tone: 'bull' });
+  }
+  if (hasBullishMacdCross(row, 'monthly') && hasGreenHistogramBuilding(row, 'monthly') && hasMonthlyMacdBullCondition(row)) {
+    tags.push({ label: 'Monthly MACD Cross + Red->Green Hist', tone: 'bull' });
   }
   if (row?.vwap_cross_quarter_above) {
     tags.push({ label: 'VWAP > QVWAP Cross', tone: 'bull' });
@@ -299,6 +360,14 @@ function SignalsAlertsTab() {
         rows = rows.filter(s => s.target_done || s.status === 'done');
       } else if (filterKey === 'monthly_setup') {
         rows = rows.filter(s => s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
+      } else if (filterKey === 'macd_weekly_cross_up') {
+        rows = rows.filter(s => hasBullishMacdCross(s, 'weekly') && hasGreenHistogramBuilding(s, 'weekly'));
+      } else if (filterKey === 'macd_monthly_cross_up') {
+        rows = rows.filter(s => (
+          hasBullishMacdCross(s, 'monthly')
+          && hasGreenHistogramBuilding(s, 'monthly')
+          && hasMonthlyMacdBullCondition(s)
+        ) || s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
       }
     });
     if (recoFilter !== 'all') {
@@ -309,10 +378,18 @@ function SignalsAlertsTab() {
     }
     if (strategyFilter === 'monthly_psar_macd') {
       rows = rows.filter(s => s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
+    } else if (strategyFilter === 'macd_cross_up_weekly') {
+      rows = rows.filter(s => hasBullishMacdCross(s, 'weekly') && hasGreenHistogramBuilding(s, 'weekly'));
+    } else if (strategyFilter === 'macd_cross_up_monthly') {
+      rows = rows.filter(s => (
+        hasBullishMacdCross(s, 'monthly')
+        && hasGreenHistogramBuilding(s, 'monthly')
+        && hasMonthlyMacdBullCondition(s)
+      ) || s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
     } else if (strategyFilter === 'vwap_cross_above') {
-      rows = rows.filter(s => s.vwap_cross_quarter_above);
+      rows = rows.filter(s => s.vwap_cross_quarter_above || s.vwap_cross_above || s.vwap_above_state);
     } else if (strategyFilter === 'vwap_cross_below') {
-      rows = rows.filter(s => s.vwap_cross_quarter_below);
+      rows = rows.filter(s => s.vwap_cross_quarter_below || s.vwap_cross_below || s.vwap_below_state);
     }
     return dedupeSignalsBySymbol(rows);
   }, [signalData, monthlySetupData, deferredSymbolFilter, convFilters, recoFilter, strategyFilter]);
@@ -329,6 +406,12 @@ function SignalsAlertsTab() {
     actionableCount: uniqueSignalData.filter(s => s.actionable).length,
     doneCount: uniqueSignalData.filter(s => s.target_done || s.status === 'done').length,
     entryReadyCount: uniqueSignalData.filter(s => s.status === 'entry_ready').length,
+    macdWeeklyCrossUpCount: uniqueSignalData.filter(s => hasBullishMacdCross(s, 'weekly') && hasGreenHistogramBuilding(s, 'weekly')).length,
+    macdMonthlyCrossUpCount: uniqueSignalData.filter(s => (
+      hasBullishMacdCross(s, 'monthly')
+      && hasGreenHistogramBuilding(s, 'monthly')
+      && hasMonthlyMacdBullCondition(s)
+    ) || s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified).length,
   }), [uniqueSignalData]);
   const monthlySetupCount = useMemo(() => dedupeSignalsBySymbol(monthlySetupData).length, [monthlySetupData]);
 
@@ -418,6 +501,8 @@ function SignalsAlertsTab() {
             >
               <MenuItem value="all">All Strategies</MenuItem>
               <MenuItem value="monthly_psar_macd">Monthly MACD+PSAR</MenuItem>
+              <MenuItem value="macd_cross_up_weekly">Weekly MACD Cross + Red-&gt;Green Hist</MenuItem>
+              <MenuItem value="macd_cross_up_monthly">Monthly MACD Cross + Red-&gt;Green Hist</MenuItem>
               <MenuItem value="vwap_cross_above">VWAP Cross Above</MenuItem>
               <MenuItem value="vwap_cross_below">VWAP Cross Below</MenuItem>
             </Select>
@@ -432,6 +517,8 @@ function SignalsAlertsTab() {
                 { val: 'done', label: `Done (${signalStats.doneCount})`, color: '#6d4c41', bg: '#efebe9' },
                 { val: 'actionable', label: `Actionable (${signalStats.actionableCount})` },
                 { val: 'monthly_setup', label: `Monthly Setup (${monthlySetupCount})`, color: '#0d47a1', bg: '#e3f2fd' },
+                { val: 'macd_weekly_cross_up', label: `MACD W↑ + Red->Green Hist (${signalStats.macdWeeklyCrossUpCount})`, color: '#2e7d32', bg: '#e8f5e9' },
+                { val: 'macd_monthly_cross_up', label: `MACD M↑ + Red->Green Hist (${signalStats.macdMonthlyCrossUpCount})`, color: '#0d47a1', bg: '#e3f2fd' },
               ].map(opt => (
                 <Button key={opt.val} size="small"
                   onClick={() => {
@@ -565,7 +652,7 @@ function SignalsAlertsTab() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
       ) : view === 'signals' ? (
         <TableWrapper>
-          <Table style={{ fontSize: 12 }}>
+          <Table style={{ fontSize: 12, minWidth: 1500 }}>
             <thead>
               <tr>
                 <th style={{ ...compact, width: 30, padding: '4px' }}>
@@ -732,7 +819,7 @@ function SignalsAlertsTab() {
         </TableWrapper>
       ) : (
         <TableWrapper>
-          <Table style={{ fontSize: 12 }}>
+          <Table style={{ fontSize: 12, minWidth: 980 }}>
             <thead>
               <tr>
                 {ALERT_COLS.map(col => (

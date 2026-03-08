@@ -12,6 +12,10 @@ const fmtRupee = (v) => {
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
+const isMissingResourceError = (err) => {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('not found') || msg.includes('404');
+};
 
 const SORTABLE_COLS = [
   { key: 'triggered_at', label: 'Time' },
@@ -46,7 +50,14 @@ function StockAlertsPage() {
     setErrorMsg('');
     fetchPriceAlertTriggers({ userId, limit: 500 })
       .then((rows) => setData(Array.isArray(rows) ? rows : []))
-      .catch((e) => setErrorMsg(e?.message || 'Failed to load alert history'))
+      .catch((e) => {
+        if (isMissingResourceError(e)) {
+          setData([]);
+          setErrorMsg('');
+          return;
+        }
+        setErrorMsg(e?.message || 'Failed to load alert history');
+      })
       .finally(() => setLoading(false));
   }, [userId]);
 

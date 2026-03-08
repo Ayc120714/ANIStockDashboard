@@ -192,10 +192,10 @@ function MarketPulse({ indices }) {
     );
   }
   return (
-    <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 1.5 }}>
       {allCards.map((c, i) => (
-        <Card key={i} sx={{ minWidth: 150, flex: '1 1 0', p: 1.5, borderLeft: `3px solid ${c.trendDirection === 'up' ? '#2e7d32' : c.trendDirection === 'down' ? '#c62828' : '#888'}` }}>
-          <Box sx={{ fontSize: 11, fontWeight: 600, color: '#555', mb: 0.5, whiteSpace: 'nowrap' }}>{c.title}</Box>
+        <Card key={i} sx={{ p: 1.5, minWidth: 0, borderLeft: `3px solid ${c.trendDirection === 'up' ? '#2e7d32' : c.trendDirection === 'down' ? '#c62828' : '#888'}` }}>
+          <Box sx={{ fontSize: 11, fontWeight: 600, color: '#555', mb: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</Box>
           <Box sx={{ fontSize: 17, fontWeight: 700, color: '#1a3c5e' }}>{c.value}</Box>
           <Box sx={{ fontSize: 12, fontWeight: 600, color: pctColor(c.change?.replace(/[+%]/g, '')) }}>{c.change}</Box>
           {c.pe && <Box sx={{ fontSize: 10, color: '#999', mt: 0.3 }}>{c.pe}</Box>}
@@ -258,10 +258,49 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
     const scoredRows = all.filter((w) => Number.isFinite(Number(w.composite_score)));
     const avgScoreMemo = scoredRows.length ? scoredRows.reduce((s, w) => s + Number(w.composite_score || 0), 0) / scoredRows.length : 0;
 
-    const nearTargetMemo = all.filter((w) => w.price && w.target_short_term && Math.abs(w.price - w.target_short_term) / w.target_short_term < 0.05);
-    const nearSLMemo = all.filter((w) => w.price && w.stop_loss && Math.abs(w.price - w.stop_loss) / w.stop_loss < 0.05);
-    const nearEntryMemo = weekly.filter((w) => w.near_entry && (w.weekly_entry_gap_pct || 100) <= 10);
-    const inEntryZoneMemo = weekly.filter((w) => (w.weekly_entry_gap_pct || 100) <= 5);
+    // Classify each symbol into a single nearest bucket to avoid overlaps like
+    // the same stock appearing in Near Target and Near SL/Entry simultaneously.
+    const nearestBySymbol = new Map();
+    all.forEach((w) => {
+      const symbol = String(w?.symbol || '').toUpperCase();
+      if (!symbol) return;
+      const price = Number(w?.price);
+      if (!Number.isFinite(price) || price <= 0) return;
+      const target = Number(w?.target_short_term);
+      const stop = Number(w?.stop_loss);
+      const targetGap = Number.isFinite(target) && target > 0 ? Math.abs(price - target) / target * 100 : null;
+      const slGap = Number.isFinite(stop) && stop > 0 ? Math.abs(price - stop) / stop * 100 : null;
+
+      let bestType = null;
+      let bestGap = Number.POSITIVE_INFINITY;
+      if (targetGap != null && targetGap <= 5 && targetGap < bestGap) {
+        bestType = 'target';
+        bestGap = targetGap;
+      }
+      if (slGap != null && slGap <= 5 && slGap < bestGap) {
+        bestType = 'sl';
+        bestGap = slGap;
+      }
+      if (!bestType) return;
+      nearestBySymbol.set(symbol, { type: bestType, gap: bestGap, row: w });
+    });
+
+    const nearTargetMemo = Array.from(nearestBySymbol.values())
+      .filter((x) => x.type === 'target')
+      .map((x) => x.row);
+    const nearSLMemo = Array.from(nearestBySymbol.values())
+      .filter((x) => x.type === 'sl')
+      .map((x) => x.row);
+
+    const occupiedSymbols = new Set([
+      ...nearTargetMemo.map((w) => String(w?.symbol || '').toUpperCase()),
+      ...nearSLMemo.map((w) => String(w?.symbol || '').toUpperCase()),
+    ]);
+    const nearEntryMemo = weekly
+      .filter((w) => (w.near_entry || (w.weekly_entry_gap_pct || 100) <= 10))
+      .filter((w) => (w.weekly_entry_gap_pct || 100) <= 10)
+      .filter((w) => !occupiedSymbols.has(String(w?.symbol || '').toUpperCase()));
+    const inEntryZoneMemo = nearEntryMemo.filter((w) => (w.weekly_entry_gap_pct || 100) <= 5);
     const topMoversMemo = [...all].sort((a, b) => Math.abs(b.day1d || 0) - Math.abs(a.day1d || 0)).slice(0, 6);
     return {
       stCount: stCountMemo,
@@ -302,7 +341,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
       }>Portfolio Snapshot ({all.length} stocks)</SectionTitle>
 
       {/* Row 1: Key metrics */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, justifyContent: 'space-around', bgcolor: '#f8f9fa', borderRadius: 1.5, py: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 1.2, mb: 2, bgcolor: '#f8f9fa', borderRadius: 1.5, py: 1.5, px: 1 }}>
         <StatBox label="Avg 1D Return" value={fmtPct(avg1d)} color={pctColor(avg1d)} />
         <StatBox label="Advance" value={gainers.length} color="#2e7d32" sub={`of ${all.length}`} />
         <StatBox label="Decline" value={losers.length} color="#c62828" sub={`of ${all.length}`} />
@@ -458,6 +497,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
 function WeeklyEntries({ weeklyData = [] }) {
   const rows = weeklyData;
+  const MAX_ENTRY_GAP_PCT = 5;
   const deriveWeeklyEntryStop = (w) => {
     const psar = Number(w?.weekly_psar);
     const st = Number(w?.weekly_supertrend);
@@ -482,18 +522,43 @@ function WeeklyEntries({ weeklyData = [] }) {
     () => rows
       .map((w) => {
         const { entry, stopLoss } = deriveWeeklyEntryStop(w);
+        const direction = String(w?.weekly_supertrend_direction || '').toLowerCase();
         const price = Number(w?.price);
+        const sl = Number.isFinite(stopLoss) ? stopLoss : Number(w?.weekly_stop_loss);
         const computedGap = (Number.isFinite(price) && price > 0 && Number.isFinite(entry) && entry > 0)
           ? Math.abs(price - entry) / entry * 100
           : Number(w?.weekly_entry_gap_pct);
+        const riskDistance = (
+          Number.isFinite(entry)
+          && Number.isFinite(sl)
+          && Math.abs(entry - sl) > 0
+        ) ? Math.abs(entry - sl) : null;
+
+        let fib1 = Number(w?.fib_target_1);
+        let fib2 = Number(w?.fib_target_2);
+        const fibInvalid = !Number.isFinite(fib1) || !Number.isFinite(fib2)
+          || (direction === 'up' && (fib1 < entry || fib2 < fib1))
+          || (direction === 'down' && (fib1 > entry || fib2 > fib1));
+        if (fibInvalid && Number.isFinite(entry) && Number.isFinite(riskDistance) && riskDistance > 0) {
+          if (direction === 'up') {
+            fib1 = entry + (riskDistance * 1.272);
+            fib2 = entry + (riskDistance * 1.618);
+          } else if (direction === 'down') {
+            fib1 = entry - (riskDistance * 1.272);
+            fib2 = entry - (riskDistance * 1.618);
+          }
+        }
+
         return {
           ...w,
           weekly_entry: Number.isFinite(entry) ? entry : w?.weekly_entry,
-          weekly_stop_loss: Number.isFinite(stopLoss) ? stopLoss : w?.weekly_stop_loss,
+          weekly_stop_loss: Number.isFinite(stopLoss) ? stopLoss : sl,
           weekly_entry_gap_pct: Number.isFinite(computedGap) ? computedGap : w?.weekly_entry_gap_pct,
+          fib_target_1: Number.isFinite(fib1) ? fib1 : w?.fib_target_1,
+          fib_target_2: Number.isFinite(fib2) ? fib2 : w?.fib_target_2,
         };
       })
-      .filter((w) => (w.weekly_entry_gap_pct || 100) <= 10)
+      .filter((w) => (w.weekly_entry_gap_pct || 100) <= MAX_ENTRY_GAP_PCT)
       .sort((a, b) => (a.weekly_entry_gap_pct || 100) - (b.weekly_entry_gap_pct || 100)),
     [rows]
   );
@@ -527,7 +592,7 @@ function WeeklyEntries({ weeklyData = [] }) {
     <Card>
       <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
       <Box sx={{ fontSize: 11, color: '#888', mb: 1 }}>
-        Stocks within 5-10% of weekly PSAR/SuperTrend entry zone. Targets via Fibonacci extension.
+        Stocks within {MAX_ENTRY_GAP_PCT}% of weekly PSAR/SuperTrend entry zone. Targets are normalized for realistic trend direction.
       </Box>
       <Box sx={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -548,9 +613,9 @@ function WeeklyEntries({ weeklyData = [] }) {
           <tbody>
             {visibleRows.map(w => {
               const gap = w.weekly_entry_gap_pct || 0;
-              const gapColor = gap <= 5 ? '#283593' : '#1565c0';
+              const gapColor = gap <= 3 ? '#283593' : '#1565c0';
               return (
-                <tr key={w.symbol} style={{ borderBottom: '1px solid #f0f0f0', backgroundColor: gap <= 5 ? '#e8eaf6' : 'transparent' }}>
+                <tr key={w.symbol} style={{ borderBottom: '1px solid #f0f0f0', backgroundColor: gap <= 3 ? '#e8eaf6' : 'transparent' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 700 }}>{w.symbol}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(w.price)}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'center' }}>
@@ -574,8 +639,8 @@ function WeeklyEntries({ weeklyData = [] }) {
         {nearEntries.length > visibleRows.length && (
           <span>Showing top {visibleRows.length} nearest setups ({nearEntries.length} found)</span>
         )}
-        <span><b style={{ color: '#283593' }}>Dark Blue</b> = ≤5% from entry</span>
-        <span><b style={{ color: '#1565c0' }}>Blue</b> = 5-10% from entry</span>
+        <span><b style={{ color: '#283593' }}>Dark Blue</b> = ≤3% from entry</span>
+        <span><b style={{ color: '#1565c0' }}>Blue</b> = 3-5% from entry</span>
         <span>Entry = max(W.PSAR, W.SuperTrend) for bullish / min for bearish; SL uses opposite boundary</span>
         <span>Targets = Fibonacci extension (1.272x, 1.618x)</span>
       </Box>
@@ -1227,10 +1292,10 @@ function DashboardPage() {
             <MarketPulse indices={indices} />
           </Box>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.75fr 1fr' }, gap: 2, alignItems: 'start' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) minmax(300px,360px)' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 1000px)': { gridTemplateColumns: '1fr' } }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <WeeklyEntries weeklyData={weeklyData} />
                 <OrderBlockZones obData={obData} />
               </Box>
@@ -1243,7 +1308,7 @@ function DashboardPage() {
                 </Box>
               </Box>
             </Box>
-            <Box sx={{ position: { lg: 'sticky' }, top: { lg: 16 } }}>
+            <Box sx={{ position: { xl: 'sticky' }, top: { xl: 16 }, minWidth: 0 }}>
               <HoldingsList holdings={holdings} loading={loading} brokerAuthenticated={brokerAuthenticated} compact />
             </Box>
           </Box>

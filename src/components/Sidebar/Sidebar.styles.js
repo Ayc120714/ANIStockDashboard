@@ -5,16 +5,34 @@ import { Link } from 'react-router-dom';
 const mobileBreakpoint = '768px';
 
 export const SidebarContainer = styled.div`
-  width: ${(p) => (p.collapsed ? '72px' : '280px')};
-  background-color: #0b3d91; /* dark blue */
+  width: ${(p) => (p.collapsed ? '72px' : '260px')};
+  background:
+    radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.35), rgba(59, 130, 246, 0) 36%),
+    radial-gradient(circle at 80% 12%, rgba(125, 211, 252, 0.18), rgba(125, 211, 252, 0) 28%),
+    linear-gradient(180deg, #0a2f73 0%, #0a295f 52%, #081e46 100%);
   padding: ${(p) => (p.collapsed ? '16px 12px' : '24px 20px')};
-  border-right: 1px solid rgba(0,0,0,0.2);
+  border-right: 1px solid rgba(125, 211, 252, 0.25);
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
   transition: width 200ms ease, padding 200ms ease;
   position: sticky;
   top: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: -30%;
+    right: -30%;
+    width: 80%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(186, 230, 253, 0.2) 0%, rgba(186, 230, 253, 0) 70%);
+    pointer-events: none;
+  }
 
   /* Mobile: always collapsed */
   @media (max-width: ${mobileBreakpoint}) {
@@ -22,16 +40,44 @@ export const SidebarContainer = styled.div`
     padding: 16px 8px;
   }
 
-  h2 {
-    margin: 0 0 28px 0;
-    color: #ffffff;
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    line-height: 1.1;
-    display: ${(p) => (p.collapsed ? 'none' : 'block')};
+  @media (max-width: 1366px) {
+    width: ${(p) => (p.collapsed ? '72px' : '236px')};
+    padding: ${(p) => (p.collapsed ? '14px 10px' : '18px 14px')};
+  }
 
-    @media (max-width: ${mobileBreakpoint}) {
+  .brand-wrap {
+    margin: 0 0 18px 0;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: ${(p) => (p.collapsed ? 'center' : 'flex-start')};
+  }
+
+  .brand-logo {
+    width: 100%;
+    max-width: 230px;
+    height: auto;
+    object-fit: contain;
+    display: ${(p) => (p.collapsed ? 'none' : 'block')};
+  }
+
+  .brand-mini {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  @media (max-width: ${mobileBreakpoint}) {
+    .brand-logo {
       display: none;
     }
   }
@@ -66,12 +112,15 @@ export const Section = styled.div`
 
 export const SectionTitle = styled.h3`
   margin: 18px 0 14px 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
   color: rgba(255,255,255,0.95);
   letter-spacing: 0.8px;
   display: ${(p) => (p.collapsed ? 'none' : 'block')};
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   @media (max-width: ${mobileBreakpoint}) {
     display: none;
   }
@@ -81,14 +130,14 @@ export const NavLink = styled(Link)`
   display: flex;
   align-items: center;
   justify-content: ${(p) => (p.collapsed ? 'center' : 'flex-start')};
-  gap: 18px;
-  padding: ${(p) => (p.collapsed ? '12px' : '18px')} ;
+  gap: 12px;
+  padding: ${(p) => (p.collapsed ? '10px' : '13px')} ;
   margin: 10px 0;
   text-decoration: none;
   color: rgba(255,255,255,0.98);
   border-radius: 10px;
   transition: background-color 0.15s, color 0.15s, transform 0.08s;
-  font-size: ${(p) => (p.collapsed ? '0' : '20px')};
+  font-size: ${(p) => (p.collapsed ? '0' : '14px')};
   font-weight: 700;
   width: 100%;
   box-sizing: border-box;
@@ -100,7 +149,7 @@ export const NavLink = styled(Link)`
   }
 
   svg {
-    font-size: ${(p) => (p.collapsed ? '24px' : '28px')};
+    font-size: ${(p) => (p.collapsed ? '21px' : '21px')};
     color: inherit;
     flex-shrink: 0;
     @media (max-width: ${mobileBreakpoint}) {
@@ -111,19 +160,32 @@ export const NavLink = styled(Link)`
   .label {
     display: ${(p) => (p.collapsed ? 'none' : 'inline')};
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 170px;
     @media (max-width: ${mobileBreakpoint}) {
       display: none;
     }
   }
 
+  @media (max-width: 1366px) {
+    font-size: ${(p) => (p.collapsed ? '0' : '13px')};
+    .label {
+      max-width: 145px;
+    }
+  }
+
   &:hover {
-    background-color: rgba(255,255,255,0.07);
+    background-color: rgba(255,255,255,0.12);
     transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(5, 12, 31, 0.25);
   }
 
   &.active {
-    background-color: rgba(255,255,255,0.12);
+    background: linear-gradient(110deg, rgba(59, 130, 246, 0.32), rgba(56, 189, 248, 0.2));
     color: #ffffff;
+    border: 1px solid rgba(147, 197, 253, 0.35);
+    box-shadow: 0 8px 18px rgba(8, 16, 40, 0.28);
   }
 `;
 // ...existing code...
