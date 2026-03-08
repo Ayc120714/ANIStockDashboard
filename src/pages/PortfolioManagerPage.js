@@ -16,7 +16,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { fetchOrders, fetchPortfolioPositions } from '../api/orders';
+import { fetchPortfolioPositions } from '../api/orders';
 import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
 import { useAuth } from '../auth/AuthContext';
 
@@ -42,6 +42,10 @@ const num = (value) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 };
+const isMissingResourceError = (err) => {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('not found') || msg.includes('404');
+};
 const isLiveExecution = (row) => String(row?.execution_mode || 'live').toLowerCase() === 'live';
 
 const mapDhanRowToPortfolioPosition = (row, source = 'position') => {
@@ -56,7 +60,16 @@ const mapDhanRowToPortfolioPosition = (row, source = 'position') => {
     row?.netQty
     ?? row?.net_qty
     ?? row?.totalQty
+    ?? row?.totalQuantity
     ?? row?.availableQty
+    ?? row?.availableQuantity
+    ?? row?.holdingQty
+    ?? row?.holdingQuantity
+    ?? (
+      num(row?.dpQty ?? row?.dpQuantity)
+      + num(row?.t1Qty ?? row?.t1Quantity)
+      + num(row?.availableQty ?? row?.availableQuantity)
+    )
     ?? row?.quantity
     ?? row?.qty
   );
@@ -108,39 +121,52 @@ function PortfolioManagerPage() {
     setBusy(true);
     setError('');
     try {
-      const [posRows, orderRows] = await Promise.all([
+      const [portfolioPosRes, dhanPosRes, dhanHoldRes, dhanOrderRes] = await Promise.allSettled([
         fetchPortfolioPositions({ userId }),
-        fetchOrders({ userId }),
+        fetchDhanPositions({ userId }),
+        fetchDhanHoldings({ userId }),
+        fetchDhanOrders({ userId }),
       ]);
-      let resolvedPositions = Array.isArray(posRows) ? posRows : [];
-      let resolvedOrders = (Array.isArray(orderRows) ? orderRows : []).filter(isLiveExecution);
+
+      const resolvedPortfolio = portfolioPosRes.status === 'fulfilled'
+        ? (Array.isArray(portfolioPosRes.value) ? portfolioPosRes.value : [])
+        : [];
+      const resolvedDhanPositions = dhanPosRes.status === 'fulfilled'
+        ? (Array.isArray(dhanPosRes.value) ? dhanPosRes.value : [])
+        : [];
+      const resolvedDhanHoldings = dhanHoldRes.status === 'fulfilled'
+        ? (Array.isArray(dhanHoldRes.value) ? dhanHoldRes.value : [])
+        : [];
+      let resolvedOrders = dhanOrderRes.status === 'fulfilled'
+        ? (Array.isArray(dhanOrderRes.value) ? dhanOrderRes.value : [])
+        : [];
+      resolvedOrders = resolvedOrders.filter(isLiveExecution);
+
+      let resolvedPositions = Array.isArray(resolvedPortfolio) ? resolvedPortfolio : [];
 
       // Fallback to broker live data when local trade tables are empty.
-      if (!resolvedPositions.length && !resolvedOrders.length) {
-        try {
-          const [dhanPosRows, dhanHoldRows, dhanOrderRows] = await Promise.all([
-            fetchDhanPositions({ userId }),
-            fetchDhanHoldings({ userId }),
-            fetchDhanOrders({ userId }),
-          ]);
-          const mappedLiveRows = [
-            ...(Array.isArray(dhanPosRows) ? dhanPosRows : []).map((row) => mapDhanRowToPortfolioPosition(row, 'position')),
-            ...(Array.isArray(dhanHoldRows) ? dhanHoldRows : []).map((row) => mapDhanRowToPortfolioPosition(row, 'holding')),
-          ].filter((row) => row.symbol);
-          const byKey = new Map();
-          mappedLiveRows.forEach((row) => {
-            const key = `${row.symbol}_${row.product_type}_${row.broker}`;
-            if (!byKey.has(key)) byKey.set(key, row);
-          });
-          resolvedPositions = Array.from(byKey.values());
-          resolvedOrders = (Array.isArray(dhanOrderRows) ? dhanOrderRows : []).filter(isLiveExecution);
-        } catch (_) {
-          // keep primary API result when Dhan fallback is unavailable
-        }
+      if (!resolvedPositions.length) {
+        const mappedLiveRows = [
+          ...resolvedDhanPositions.map((row) => mapDhanRowToPortfolioPosition(row, 'position')),
+          ...resolvedDhanHoldings.map((row) => mapDhanRowToPortfolioPosition(row, 'holding')),
+        ].filter((row) => row.symbol);
+        const byKey = new Map();
+        mappedLiveRows.forEach((row) => {
+          const key = `${row.symbol}_${row.product_type}_${row.broker}`;
+          if (!byKey.has(key)) byKey.set(key, row);
+        });
+        resolvedPositions = Array.from(byKey.values());
       }
 
       setPositions(resolvedPositions);
       setOrders(resolvedOrders);
+      if (
+        portfolioPosRes.status === 'rejected'
+        && !isMissingResourceError(portfolioPosRes.reason)
+        && !String(portfolioPosRes.reason?.message || '').toLowerCase().includes('dhan is not connected')
+      ) {
+        throw portfolioPosRes.reason;
+      }
     } catch (e) {
       setError(e?.message || 'Failed to load portfolio manager data');
     } finally {
