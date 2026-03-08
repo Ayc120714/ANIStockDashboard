@@ -14,9 +14,7 @@ import {
   fetchWeeklyIndicators,
   fetchOrderBlocks,
 } from '../api/watchlist';
-import { fetchBrokerSetup } from '../api/brokers';
-import { fetchPortfolioPositions } from '../api/orders';
-import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
+import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions, fetchDhanStatus } from '../api/dhan';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 
@@ -36,23 +34,6 @@ const hasLocalBrokerSessionMarker = (userId) => {
   } catch (_) {
     return false;
   }
-};
-const hasBrokerSession = (row) => {
-  if (!row || typeof row !== 'object') return false;
-  // Support multiple backend shapes for session/auth flags.
-  return Boolean(
-    row.has_session ||
-    row.hasSession ||
-    row.session_active ||
-    row.sessionActive ||
-    row.session_token ||
-    row.sessionToken ||
-    row.connected ||
-    row.is_authenticated ||
-    row.isAuthenticated ||
-    row.last_auth_at ||
-    row.lastAuthAt
-  );
 };
 const getCachedBrokerRows = (userId) => {
   if (!userId) return [];
@@ -85,6 +66,11 @@ const normalizeBrokerRows = (payload) => {
       const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
       const buyQty = toNumber(row?.buyQty ?? row?.buy_qty ?? row?.buyQuantity);
       const sellQty = toNumber(row?.sellQty ?? row?.sell_qty ?? row?.sellQuantity);
+      const computedHoldingQty = toNumber(
+        (row?.dpQty ?? row?.dp_qty ?? row?.dpQuantity ?? 0)
+        + (row?.t1Qty ?? row?.t1_qty ?? row?.t1Quantity ?? 0)
+        + (row?.availableQty ?? row?.available_qty ?? row?.availableQuantity ?? 0)
+      );
       const netQty = toNumber(
         row?.netQty
         ?? row?.net_qty
@@ -93,16 +79,28 @@ const normalizeBrokerRows = (payload) => {
         ?? row?.qty
         ?? row?.availableQty
         ?? row?.available_qty
+        ?? row?.availableQuantity
         ?? row?.holdingQty
         ?? row?.holding_qty
+        ?? row?.holdingQuantity
         ?? row?.totalQty
         ?? row?.total_qty
+        ?? row?.totalQuantity
+        ?? row?.netQuantity
+        ?? computedHoldingQty
         ?? (buyQty - sellQty)
       );
       if (!symbol || netQty === 0) return null;
       const avgPrice = toNumber(row?.buyAvg ?? row?.avgPrice ?? row?.averagePrice ?? row?.avg_price ?? row?.costPrice ?? row?.avgCostPrice);
       const ltp = toNumber(row?.ltp ?? row?.lastPrice ?? row?.lastTradedPrice ?? row?.price);
-      const unrealized = toNumber(row?.pnl ?? row?.unrealizedPnl ?? row?.unrealized_pnl ?? row?.mtm);
+      const unrealized = toNumber(
+        row?.pnl
+        ?? row?.unrealizedPnl
+        ?? row?.unrealized_pnl
+        ?? row?.holdingPnl
+        ?? row?.holding_pnl
+        ?? row?.mtm
+      );
       const fallbackUnrealized = unrealized || (avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0);
       return {
         symbol,
@@ -460,8 +458,41 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
 function WeeklyEntries({ weeklyData = [] }) {
   const rows = weeklyData;
+  const deriveWeeklyEntryStop = (w) => {
+    const psar = Number(w?.weekly_psar);
+    const st = Number(w?.weekly_supertrend);
+    const direction = String(w?.weekly_supertrend_direction || '').toLowerCase();
+    const hasPsar = Number.isFinite(psar);
+    const hasSt = Number.isFinite(st);
+    if (hasPsar && hasSt) {
+      if (direction === 'up') {
+        return { entry: Math.max(psar, st), stopLoss: Math.min(psar, st) };
+      }
+      if (direction === 'down') {
+        return { entry: Math.min(psar, st), stopLoss: Math.max(psar, st) };
+      }
+    }
+    return {
+      entry: Number.isFinite(Number(w?.weekly_entry)) ? Number(w.weekly_entry) : null,
+      stopLoss: Number.isFinite(Number(w?.weekly_stop_loss)) ? Number(w.weekly_stop_loss) : null,
+    };
+  };
+
   const nearEntries = useMemo(
     () => rows
+      .map((w) => {
+        const { entry, stopLoss } = deriveWeeklyEntryStop(w);
+        const price = Number(w?.price);
+        const computedGap = (Number.isFinite(price) && price > 0 && Number.isFinite(entry) && entry > 0)
+          ? Math.abs(price - entry) / entry * 100
+          : Number(w?.weekly_entry_gap_pct);
+        return {
+          ...w,
+          weekly_entry: Number.isFinite(entry) ? entry : w?.weekly_entry,
+          weekly_stop_loss: Number.isFinite(stopLoss) ? stopLoss : w?.weekly_stop_loss,
+          weekly_entry_gap_pct: Number.isFinite(computedGap) ? computedGap : w?.weekly_entry_gap_pct,
+        };
+      })
       .filter((w) => (w.weekly_entry_gap_pct || 100) <= 10)
       .sort((a, b) => (a.weekly_entry_gap_pct || 100) - (b.weekly_entry_gap_pct || 100)),
     [rows]
@@ -545,7 +576,7 @@ function WeeklyEntries({ weeklyData = [] }) {
         )}
         <span><b style={{ color: '#283593' }}>Dark Blue</b> = ≤5% from entry</span>
         <span><b style={{ color: '#1565c0' }}>Blue</b> = 5-10% from entry</span>
-        <span>Entry = max(W.PSAR, W.SuperTrend) for bullish / min for bearish</span>
+        <span>Entry = max(W.PSAR, W.SuperTrend) for bullish / min for bearish; SL uses opposite boundary</span>
         <span>Targets = Fibonacci extension (1.272x, 1.618x)</span>
       </Box>
     </Card>
@@ -1053,38 +1084,16 @@ function DashboardPage() {
       }
       setLoading(false);
 
-      let positions = [];
-      if (userId) {
-        try {
-          positions = await fetchPortfolioPositions({ userId });
-        } catch (_) {
-          positions = [];
-        }
-      }
-      const normalizedPositions = (Array.isArray(positions) ? positions : []).filter((p) => Math.abs(Number(p?.net_qty || 0)) > 0);
       let authenticated = false;
-      let brokerRowsResult = { status: 'rejected' };
       try {
-        const rows = await fetchBrokerSetup({ userId });
-        brokerRowsResult = { status: 'fulfilled', value: rows };
+        const status = await fetchDhanStatus({ userId });
+        authenticated = Boolean(status?.connected);
       } catch (_) {
-        brokerRowsResult = { status: 'rejected' };
-      }
-      if (brokerRowsResult.status === 'fulfilled') {
-        const rows = Array.isArray(brokerRowsResult.value) ? brokerRowsResult.value : [];
-        authenticated = rows.some((r) => hasBrokerSession(r));
-        if (authenticated) {
-          try {
-            const preferred = rows.find((r) => hasBrokerSession(r))?.broker || 'dhan';
-            localStorage.setItem(`broker_session_auth_${userId}_${String(preferred).toLowerCase()}`, String(Date.now()));
-          } catch (_) {
-            // ignore localStorage failures
-          }
-        }
-      } else {
         authenticated = false;
       }
-      const effectiveAuthenticated = authenticated || localSessionMarker || normalizedPositions.length > 0;
+      // Keep using local marker as fallback trigger to fetch live data;
+      // backend status remains the source of truth for final auth state.
+      const effectiveAuthenticated = authenticated || hasLocalBrokerSessionMarker(userId);
 
       let liveBrokerPositions = [];
       if (effectiveAuthenticated) {
@@ -1118,8 +1127,8 @@ function DashboardPage() {
           liveBrokerPositions = normalizeBrokerRows(cachedRows);
         }
       }
-      const finalHoldings = liveBrokerPositions.length ? liveBrokerPositions : normalizedPositions;
-      setBrokerAuthenticated(effectiveAuthenticated || finalHoldings.length > 0);
+      const finalHoldings = liveBrokerPositions;
+      setBrokerAuthenticated(authenticated || finalHoldings.length > 0);
       setHoldings(finalHoldings);
     } finally {
       setLoading(false);

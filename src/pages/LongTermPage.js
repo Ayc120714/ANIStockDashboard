@@ -3,7 +3,7 @@ import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.s
 import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox, Typography, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdClose, MdDeleteSweep, MdSelectAll, MdRefresh, MdContentCopy, MdCheck } from 'react-icons/md';
-import { fetchWatchlist, addToWatchlist, bulkDeleteFromWatchlist } from '../api/watchlist';
+import { fetchWatchlist, fetchWatchlistSignals, addToWatchlist, bulkDeleteFromWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
@@ -134,9 +134,23 @@ const buildFibPivots = (row, currentPrice) => {
   };
 };
 
+const deriveMacdLabel = (row) => {
+  const cross = String(row.macd_cross || '').toLowerCase().trim();
+  if (cross === 'buy' || cross === 'bull' || cross === 'bullish') return 'BUY';
+  if (cross === 'sell' || cross === 'bear' || cross === 'bearish') return 'SELL';
+  const macd = parseNumber(row.macd ?? row.macd_value ?? row.macd_line);
+  const signal = parseNumber(row.macd_signal ?? row.macd_signal_line);
+  if (macd != null && signal != null) return macd >= signal ? 'BULL' : 'BEAR';
+  const hist = parseNumber(row.macd_histogram ?? row.macd_hist);
+  if (hist != null) return hist >= 0 ? 'BULL' : 'BEAR';
+  if (macd != null) return macd >= 0 ? 'BULL' : 'BEAR';
+  return '—';
+};
+
 function LongTermPage() {
   const { isAdmin, user } = useAuth();
   const [data, setData] = useState([]);
+  const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allSymbols, setAllSymbols] = useState([]);
   const [selectedStocks, setSelectedStocks] = useState([]);
@@ -166,8 +180,14 @@ function LongTermPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchWatchlist('long_term', { includeAll: isAdmin })
-      .then(setData)
+    Promise.all([
+      fetchWatchlist('long_term', { includeAll: isAdmin }),
+      fetchWatchlistSignals({ includeAll: isAdmin }),
+    ])
+      .then(([wl, sigs]) => {
+        setData(Array.isArray(wl) ? wl : []);
+        setSignals(Array.isArray(sigs) ? sigs : []);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [isAdmin]);
@@ -215,15 +235,46 @@ function LongTermPage() {
     return () => { mounted = false; };
   }, [userId, priceAlertsKey]);
 
+  const sigMap = useMemo(() => {
+    const m = {};
+    signals.forEach((s) => {
+      const sym = normalizeSymbol(s?.symbol);
+      if (!sym) return;
+      m[sym] = s;
+    });
+    return m;
+  }, [signals]);
+
   const serverDedupedData = useMemo(() => {
     const bySymbol = new Map();
+    const mergeSignalIntoRow = (baseRow, signalRow = {}) => {
+      const mergedRow = { ...baseRow };
+      Object.entries(signalRow || {}).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          mergedRow[key] = value;
+        }
+      });
+      return mergedRow;
+    };
+
     for (const row of data) {
       const sym = normalizeSymbol(row?.symbol);
       if (!sym || bySymbol.has(sym)) continue;
-      bySymbol.set(sym, { ...row, symbol: sym });
+      const withSignal = mergeSignalIntoRow({ ...row, symbol: sym }, sigMap[sym] || {});
+      bySymbol.set(sym, {
+        ...withSignal,
+        symbol: sym,
+        rsi: parseNumber(withSignal?.rsi ?? withSignal?.rsi_14),
+        macd: parseNumber(withSignal?.macd ?? withSignal?.macd_value ?? withSignal?.macd_line),
+        macd_signal: parseNumber(withSignal?.macd_signal ?? withSignal?.macd_signal_line),
+        macd_histogram: parseNumber(withSignal?.macd_histogram ?? withSignal?.macd_hist),
+        macd_cross: withSignal?.macd_cross ?? withSignal?.macd_state ?? withSignal?.macd_signal_state ?? null,
+        supertrend_direction: withSignal?.supertrend_direction ?? withSignal?.supertrend ?? withSignal?.ts ?? null,
+        volume_ratio: parseNumber(withSignal?.volume_ratio ?? withSignal?.vol_ratio ?? withSignal?.volumeRatio),
+      });
     }
     return Array.from(bySymbol.values());
-  }, [data]);
+  }, [data, sigMap]);
 
   const dedupedData = useMemo(() => {
     if (isAdmin) return serverDedupedData;
@@ -519,6 +570,9 @@ function LongTermPage() {
     { key: 'composite_score', label: 'Score' },
     { key: 'recommendation', label: 'Rating' },
     { key: 'trend', label: 'Trend' },
+    { key: 'supertrend_direction', label: 'TS' },
+    { key: 'macd_cross', label: 'MACD' },
+    { key: 'volume_ratio', label: 'Vol Ratio' },
     { key: 'entry_price', label: 'Entry' },
     { key: 'stop_loss', label: 'SL' },
     { key: 'target_long_term', label: 'Target' },
@@ -768,6 +822,15 @@ function LongTermPage() {
                     ) : '—'}
                   </td>
                   <td>{row.trend || '—'}</td>
+                  <td style={{ color: row.supertrend_direction === 'up' ? '#2e7d32' : row.supertrend_direction === 'down' ? '#c62828' : undefined, fontWeight: 600 }}>
+                    {row.supertrend_direction ? String(row.supertrend_direction).toUpperCase() : '—'}
+                  </td>
+                  <td style={{ color: deriveMacdLabel(row) === 'BUY' || deriveMacdLabel(row) === 'BULL' ? '#2e7d32' : deriveMacdLabel(row) === 'SELL' || deriveMacdLabel(row) === 'BEAR' ? '#c62828' : undefined, fontWeight: 600 }}>
+                    {deriveMacdLabel(row)}
+                  </td>
+                  <td style={{ fontWeight: 600, color: (row.volume_ratio || 0) >= 2 ? '#c62828' : undefined }}>
+                    {row.volume_ratio != null ? `${row.volume_ratio.toFixed(1)}x` : '—'}
+                  </td>
                   <td>{row.entry_price ? `₹${row.entry_price.toFixed(2)}` : '—'}</td>
                   <td>
                     {(() => {

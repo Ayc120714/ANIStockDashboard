@@ -152,7 +152,7 @@ function MarketOutlookPage() {
   };
 
   const fiiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
+    if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
     const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
     const latest = daily[0];
     const mtdNet = fiiDiiData.mtd?.fii?.net ?? 0;
@@ -169,7 +169,7 @@ function MarketOutlookPage() {
   }, [fiiDiiData]);
 
   const diiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: 0, latestDate: '', mtdNet: 0, bars: [], series: [] };
+    if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
     const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
     const latest = daily[0];
     const mtdNet = fiiDiiData.mtd?.dii?.net ?? 0;

@@ -159,15 +159,17 @@ const deriveTier = (row) => {
 };
 
 const deriveMacdLabel = (row) => {
-  const cross = String(row.macd_cross || '').toLowerCase();
-  if (cross === 'buy') return 'BUY';
-  if (cross === 'sell') return 'SELL';
+  const cross = String(row.macd_cross || '').toLowerCase().trim();
+  if (cross === 'buy' || cross === 'bull' || cross === 'bullish') return 'BUY';
+  if (cross === 'sell' || cross === 'bear' || cross === 'bearish') return 'SELL';
   if (row.macd_state) return String(row.macd_state).toUpperCase();
   const macd = parseNumber(row.macd ?? row.macd_value ?? row.macd_line);
   const signal = parseNumber(row.macd_signal ?? row.macd_signal_line);
   if (macd != null && signal != null) {
     return macd >= signal ? 'BULL' : 'BEAR';
   }
+  const hist = parseNumber(row.macd_histogram ?? row.macd_hist);
+  if (hist != null) return hist >= 0 ? 'BULL' : 'BEAR';
   if (macd != null) return macd >= 0 ? 'BULL' : 'BEAR';
   return '—';
 };
@@ -463,9 +465,26 @@ function ShortTermPage() {
   }, [signals]);
 
   const merged = useMemo(() => {
+    const mergeSignalIntoRow = (baseRow, signalRow = {}) => {
+      const mergedRow = { ...baseRow };
+      Object.entries(signalRow || {}).forEach(([key, value]) => {
+        // Do not overwrite populated watchlist values with empty signal payloads.
+        if (value !== null && value !== undefined && value !== '') {
+          mergedRow[key] = value;
+        }
+      });
+      return {
+        ...mergedRow,
+        rsi: parseNumber(mergedRow.rsi ?? mergedRow.rsi_14),
+        macd_cross: mergedRow.macd_cross ?? mergedRow.macd_signal ?? mergedRow.macd_state ?? null,
+        supertrend_direction: mergedRow.supertrend_direction ?? mergedRow.supertrend ?? mergedRow.ts ?? null,
+        volume_ratio: parseNumber(mergedRow.volume_ratio ?? mergedRow.vol_ratio ?? mergedRow.volumeRatio),
+      };
+    };
+
     const rows = data.map((d) => {
       const sym = normalizeSymbol(d.symbol);
-      return { ...d, symbol: sym || d.symbol, ...(sigMap[sym] || {}) };
+      return mergeSignalIntoRow({ ...d, symbol: sym || d.symbol }, sigMap[sym] || {});
     });
     const bySymbol = new Map();
     for (const row of rows) {

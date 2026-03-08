@@ -42,7 +42,7 @@ export const updateSuperTargetWithOco = async ({ userId, orderId, targetPrice })
 
 export const fetchPortfolioPositions = async ({ userId }) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/orders/portfolio/positions?${withUser(userId)}`);
+  const data = await tradeApiGet(`/dhan/positions?${withUser(userId)}`);
   return data?.data ?? [];
 };
 

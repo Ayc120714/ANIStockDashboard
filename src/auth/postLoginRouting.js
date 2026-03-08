@@ -1,5 +1,3 @@
-import { fetchBrokerSetup } from '../api/brokers';
-
 export const DHAN_DAILY_CONSENT_LIMIT = 25;
 export const consentBlockKeyForToday = (userId) =>
   `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
@@ -59,40 +57,6 @@ export const clearConsentLimitMarkersToday = () => {
   }
 };
 
-const hasAnyBrokerSession = (rows) => (rows || []).some((r) => Boolean(
-  r?.has_session
-  || r?.hasSession
-  || r?.session_active
-  || r?.sessionActive
-  || r?.session_token
-  || r?.last_auth_at
-));
-
-const hasDhanSetup = (rows) => {
-  const dhanRow = (rows || []).find((r) => String(r?.broker || '').toLowerCase() === 'dhan');
-  if (!dhanRow) return false;
-  return Boolean(
-    String(dhanRow?.client_id || '').trim()
-    || dhanRow?.is_enabled
-    || dhanRow?.has_session
-  );
-};
-
-const hasLocalDhanDraft = (userId) => {
-  if (!userId) return false;
-  try {
-    const raw = localStorage.getItem(`broker_integration_draft_${userId}_dhan`);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    const client = String(parsed?.client_id || parsed?.credentials?.mobile || '').trim();
-    const key = String(parsed?.credentials?.api_key || '').trim();
-    const secret = String(parsed?.credentials?.api_secret || '').trim();
-    return Boolean(client || (key && secret));
-  } catch (_) {
-    return false;
-  }
-};
-
 export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }) => {
   const fallback = fallbackPath || '/';
   const userId = String(nextUser?.id || nextUser?.user_id || nextUser?.email || '');
@@ -106,16 +70,8 @@ export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }
     return;
   }
 
-  try {
-    const rows = await fetchBrokerSetup({ userId });
-    const list = Array.isArray(rows) ? rows : [];
-    if (hasAnyBrokerSession(list) || hasDhanSetup(list) || hasLocalDhanDraft(userId)) {
-      navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
-      return;
-    }
-    navigate('/profile', { replace: true, state: { openBrokerSetup: true, from: fallback } });
-  } catch (_) {
-    // Trade API may be temporarily unavailable. Still try callback flow first.
-    navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
-  }
+  // Strict flow: after email login, always enter Dhan callback consent flow.
+  // Callback page will reuse active session, or generate consent URL using
+  // existing backend env credentials (client_id/api_key/api_secret).
+  navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
 };

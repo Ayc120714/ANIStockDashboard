@@ -58,6 +58,23 @@ function DhanCallbackPage() {
             navigate(targetPath || '/', { replace: true, state: { brokerConsentLimited: true } });
             return;
           }
+          // Reuse pending consent URL first to avoid consuming extra daily attempts on retries.
+          try {
+            const existingPendingRaw = sessionStorage.getItem(`dhan_pending_connect_${userId}`) || '{}';
+            const existingPending = JSON.parse(existingPendingRaw);
+            const existingLoginUrl = String(existingPending?.login_url || '').trim();
+            const existingCreatedAt = Number(existingPending?.created_at || 0);
+            const isFreshPending = existingLoginUrl && (
+              !existingCreatedAt || (Date.now() - existingCreatedAt) < (30 * 60 * 1000)
+            );
+            if (isFreshPending) {
+              window.location.assign(existingLoginUrl);
+              return;
+            }
+          } catch (_) {
+            // continue with normal flow
+          }
+
           // Prefer existing valid broker session to avoid unnecessary consent churn.
           try {
             const ensured = await withTimeout(
@@ -98,6 +115,7 @@ function DhanCallbackPage() {
                 api_key: draftApiKey,
                 api_secret: draftApiSecret,
                 from: targetPath || '/',
+                created_at: Date.now(),
               })
             );
             window.location.assign(connectRes.login_url);
