@@ -283,7 +283,7 @@ function PriceShockersPage() {
             </thead>
             <tbody>
               {paginatedData.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={row.chg && row.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>
                     <Checkbox
                       size="small"
@@ -330,7 +330,11 @@ function PriceShockersPage() {
                   <td>{row.subSector}</td>
                   <td>{row.mc}</td>
                   <td>{row.cmp}</td>
-                  <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <span className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>
+                      {row.chg}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

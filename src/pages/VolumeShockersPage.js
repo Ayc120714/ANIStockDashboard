@@ -249,7 +249,7 @@ function VolumeShockersPage() {
             </thead>
             <tbody>
               {paginatedData.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={row.chg && row.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>
                     <Checkbox
                       size="small"
@@ -300,7 +300,11 @@ function VolumeShockersPage() {
                   <td style={{ fontWeight: 600, color: row.volJump && parseFloat(row.volJump) >= 2 ? '#d32f2f' : undefined }}>{row.volJump}</td>
                   <td style={{ fontWeight: 600, color: row.volChgRaw > 0 ? '#1b5e20' : row.volChgRaw < 0 ? '#c62828' : undefined }}>{row.volChgPct || '—'}</td>
                   <td>{row.cmp}</td>
-                  <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <span className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>
+                      {row.chg}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

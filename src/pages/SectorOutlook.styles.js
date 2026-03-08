@@ -27,6 +27,7 @@ export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  font-family: 'Segoe UI', 'Inter', 'Roboto', Arial, sans-serif;
   thead {
     background-color: #1a3c5e;
     color: white;
@@ -59,6 +60,20 @@ export const Table = styled.table`
           background-color: #f0f4f8;
         }
       }
+      &.row-up,
+      &.row-up:nth-child(even) {
+        background-color: #e8f5e9;
+        &:hover {
+          background-color: #dff1e3;
+        }
+      }
+      &.row-down,
+      &.row-down:nth-child(even) {
+        background-color: #ffebee;
+        &:hover {
+          background-color: #fde1e5;
+        }
+      }
       td {
         padding: 6px 10px;
         font-size: 12px;
@@ -72,19 +87,13 @@ export const Table = styled.table`
         caret-color: transparent;
       }
       .trend-up {
-        background-color: #e8f5e9;
         color: #2e7d32;
         font-weight: 600;
-        border-radius: 4px;
-        padding: 2px 6px;
         caret-color: transparent;
       }
       .trend-down {
-        background-color: #ffebee;
         color: #c62828;
         font-weight: 600;
-        border-radius: 4px;
-        padding: 2px 6px;
         caret-color: transparent;
       }
       .percentage {

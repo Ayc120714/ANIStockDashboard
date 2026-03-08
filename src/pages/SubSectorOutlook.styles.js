@@ -135,6 +135,7 @@ export const Table = styled.table`
   border-collapse: collapse;
   overflow: hidden;
   font-size: 12px;
+  font-family: 'Segoe UI', 'Inter', 'Roboto', Arial, sans-serif;
   caret-color: transparent;
   thead {
     background-color: #1a3c5e;
@@ -177,6 +178,18 @@ export const TableRow = styled.tr`
   &:hover {
     background-color: ${({ sector }) => (sector ? '#dce3eb' : '#f5f8fc')};
   }
+  &.row-up {
+    background-color: #e8f5e9;
+    &:hover {
+      background-color: #dff1e3;
+    }
+  }
+  &.row-down {
+    background-color: #ffebee;
+    &:hover {
+      background-color: #fde1e5;
+    }
+  }
 `; 
 
 export const TableCell = styled.td`
@@ -189,18 +202,12 @@ export const TableCell = styled.td`
   white-space: nowrap;
   caret-color: transparent;
   &.trend-up {
-    background-color: #e8f5e9;
     color: #2e7d32;
     font-weight: 600;
-    border-radius: 4px;
-    padding: 2px 6px;
   }
   &.trend-down {
-    background-color: #ffebee;
     color: #c62828;
     font-weight: 600;
-    border-radius: 4px;
-    padding: 2px 6px;
   }
 `; 
 

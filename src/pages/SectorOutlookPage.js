@@ -135,7 +135,10 @@ const extractNumeric = (value) => {
             </thead>
             <tbody>
               {paginatedData.map((row) => ( 
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  className={row.trend === '↗' ? 'row-up' : row.trend === '↘' ? 'row-down' : ''}
+                >
                   <td className="index">{row.id}</td>
                   <td
                     style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}

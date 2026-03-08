@@ -555,7 +555,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
               <tbody>
                 {sortedModalStocks.length > 0 ? (
                   sortedModalStocks.map((stock, idx) => (
-                    <TableRow key={stock.symbol}>
+                    <TableRow key={stock.symbol} className={stock.chg && stock.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                       <TableCell>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           {idx + 1}

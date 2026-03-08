@@ -221,7 +221,7 @@ function TrendingPage() {
             </thead>
             <tbody>
               {paginatedData.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={row.chg && row.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>
                     <Checkbox
                       size="small"
@@ -270,7 +270,11 @@ function TrendingPage() {
                   <td>{row.ema21}</td>
                   <td>{row.ema50}</td>
                   <td>{row.cmp}</td>
-                  <td className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
+                  <td>
+                    <span className={row.chg && row.chg.startsWith('-') ? 'trend-down' : 'trend-up'}>
+                      {row.chg}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

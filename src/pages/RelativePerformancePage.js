@@ -252,7 +252,7 @@ function RelativePerformancePage() {
             </thead>
             <tbody>
               {paginatedData.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={(row.chg || '').toString().startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>
                     <Checkbox
                       size="small"
@@ -299,8 +299,16 @@ function RelativePerformancePage() {
                   <td>{row.subSector}</td>
                   <td>{row.mc}</td>
                   <td>{row.cmp}</td>
-                  <td className={(row.chg || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.chg}</td>
-                  <td className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>{row.rs}</td>
+                  <td>
+                    <span className={(row.chg || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>
+                      {row.chg}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>
+                      {row.rs}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -201,11 +201,12 @@ function MarketOutlookPage() {
     return diiCard.series[diiCard.series.length - 1];
   }, [diiCard, diiHoverIdx]);
 
-  const buildBarChart = (values, activeIndex = null, width = 100, height = 60) => {
+  const buildBarChart = (values, activeIndex = null, height = 68) => {
     if (!values || values.length < 2) return null;
+    const width = Math.max(160, values.length * 12);
     const maxAbs = Math.max(...values.map(Math.abs), 1);
-    const gap = 1;
-    const barW = Math.max(2, (width - gap * (values.length - 1)) / values.length);
+    const gap = 2;
+    const barW = Math.max(4, (width - gap * (values.length - 1)) / values.length);
     const midY = height / 2;
     const maxH = midY - 2;
 
@@ -292,6 +293,7 @@ function MarketOutlookPage() {
                   <svg
                     viewBox={`0 0 ${bars.width} ${bars.height}`}
                     preserveAspectRatio="xMidYMid meet"
+                    width={bars.width}
                     onMouseLeave={() => setFiiHoverIdx(null)}
                   >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
@@ -347,6 +349,7 @@ function MarketOutlookPage() {
                   <svg
                     viewBox={`0 0 ${bars.width} ${bars.height}`}
                     preserveAspectRatio="xMidYMid meet"
+                    width={bars.width}
                     onMouseLeave={() => setDiiHoverIdx(null)}
                   >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
@@ -435,7 +438,7 @@ function MarketOutlookPage() {
             </thead>
             <tbody>
               {sortedTableData.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={row.trendDirection === 'up' ? 'row-up' : row.trendDirection === 'down' ? 'row-down' : ''}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
                   <td className={row.trendDirection === 'up' ? 'trend-up' : row.trendDirection === 'down' ? 'trend-down' : ''}>{row.trend}</td>
