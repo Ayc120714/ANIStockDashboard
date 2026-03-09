@@ -17,7 +17,7 @@ function Header() {
           borderRadius: 1.2,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-start',
+          justifyContent: 'center',
           px: { xs: 0.8, md: 1.4 },
           border: '1px solid rgba(249, 115, 22, 0.2)',
           background: 'linear-gradient(100deg, rgba(255,255,255,0.75), rgba(255,247,237,0.78))',
@@ -31,10 +31,10 @@ function Header() {
           alt="AYC Industries"
           sx={{
             width: '100%',
-            maxWidth: { xs: 280, md: 560 },
-            height: { xs: 34, md: 44 },
+            maxWidth: { xs: 260, md: 520, lg: 640 },
+            height: { xs: 32, md: 42, lg: 48 },
             objectFit: 'contain',
-            objectPosition: 'left center',
+            objectPosition: 'center center',
           }}
         />
       </Box>

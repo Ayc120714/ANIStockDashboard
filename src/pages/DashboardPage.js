@@ -25,6 +25,7 @@ const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
 const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
+const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
 const hasLocalBrokerSessionMarker = (userId) => {
   if (!userId) return false;
@@ -232,14 +233,17 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
     nearEntry,
     inEntryZone,
     topMovers,
+    overboughtSymbols,
+    oversoldSymbols,
   } = useMemo(() => {
     const stCountMemo = all.filter((w) => w.list_type === 'short_term').length;
     const ltCountMemo = all.filter((w) => w.list_type === 'long_term').length;
-    const gainersMemo = all.filter((w) => w.day1d > 0);
-    const losersMemo = all.filter((w) => w.day1d < 0);
-    const avg1dMemo = all.length ? all.reduce((s, w) => s + (w.day1d || 0), 0) / all.length : 0;
-    const bestMemo = all.reduce((b, w) => (!b || (w.day1d || 0) > (b.day1d || 0)) ? w : b, null);
-    const worstMemo = all.reduce((w2, w) => (!w2 || (w.day1d || 0) < (w2.day1d || 0)) ? w : w2, null);
+    const rowsWithDay = all.filter((w) => isFiniteNumber(w?.day1d));
+    const gainersMemo = rowsWithDay.filter((w) => w.day1d > 0);
+    const losersMemo = rowsWithDay.filter((w) => w.day1d < 0);
+    const avg1dMemo = rowsWithDay.length ? rowsWithDay.reduce((s, w) => s + w.day1d, 0) / rowsWithDay.length : 0;
+    const bestMemo = rowsWithDay.reduce((b, w) => (!b || w.day1d > b.day1d) ? w : b, null);
+    const worstMemo = rowsWithDay.reduce((w2, w) => (!w2 || w.day1d < w2.day1d) ? w : w2, null);
 
     const sectorMap = {};
     all.forEach((w) => { const s = w.sector || 'Other'; sectorMap[s] = (sectorMap[s] || 0) + 1; });
@@ -251,10 +255,14 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
     const recoDataMemo = recoOrder.filter((k) => recoMap[k]).map((name) => ({ name, value: recoMap[name] }));
     Object.keys(recoMap).filter((k) => !recoOrder.includes(k)).forEach((k) => recoDataMemo.push({ name: k, value: recoMap[k] }));
 
-    const bullishMemo = sigArr.filter((s) => s.signal_score > 25).length;
-    const bearishMemo = sigArr.filter((s) => s.signal_score < -25).length;
-    const overboughtMemo = sigArr.filter((s) => s.rsi > 70).length;
-    const oversoldMemo = sigArr.filter((s) => s.rsi < 30).length;
+    const bullishMemo = sigArr.filter((s) => isFiniteNumber(s?.signal_score) && s.signal_score > 25).length;
+    const bearishMemo = sigArr.filter((s) => isFiniteNumber(s?.signal_score) && s.signal_score < -25).length;
+    const overboughtRows = sigArr.filter((s) => isFiniteNumber(s?.rsi) && s.rsi > 70);
+    const oversoldRows = sigArr.filter((s) => isFiniteNumber(s?.rsi) && s.rsi < 30);
+    const overboughtMemo = overboughtRows.length;
+    const oversoldMemo = oversoldRows.length;
+    const overboughtSymbolsMemo = [...new Set(overboughtRows.map((s) => s.symbol).filter(Boolean))];
+    const oversoldSymbolsMemo = [...new Set(oversoldRows.map((s) => s.symbol).filter(Boolean))];
     const scoredRows = all.filter((w) => Number.isFinite(Number(w.composite_score)));
     const avgScoreMemo = scoredRows.length ? scoredRows.reduce((s, w) => s + Number(w.composite_score || 0), 0) / scoredRows.length : 0;
 
@@ -322,6 +330,8 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
       nearEntry: nearEntryMemo,
       inEntryZone: inEntryZoneMemo,
       topMovers: topMoversMemo,
+      overboughtSymbols: overboughtSymbolsMemo,
+      oversoldSymbols: oversoldSymbolsMemo,
     };
   }, [all, weekly, sigArr]);
 
@@ -386,13 +396,13 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
         {overbought > 0 && (
           <Box sx={{ bgcolor: '#fff8e1', borderRadius: 1.5, p: 1.5 }}>
             <Box sx={{ fontSize: 11, color: '#f57f17', fontWeight: 600 }}>RSI &gt; 70 ({overbought})</Box>
-            <Box sx={{ fontSize: 12, mt: 0.3 }}>{sigArr.filter(s => s.rsi > 70).map(s => s.symbol).join(', ')}</Box>
+            <Box sx={{ fontSize: 12, mt: 0.3 }}>{overboughtSymbols.join(', ')}</Box>
           </Box>
         )}
         {oversold > 0 && (
           <Box sx={{ bgcolor: '#e0f7fa', borderRadius: 1.5, p: 1.5 }}>
             <Box sx={{ fontSize: 11, color: '#00838f', fontWeight: 600 }}>RSI &lt; 30 ({oversold})</Box>
-            <Box sx={{ fontSize: 12, mt: 0.3 }}>{sigArr.filter(s => s.rsi < 30).map(s => s.symbol).join(', ')}</Box>
+            <Box sx={{ fontSize: 12, mt: 0.3 }}>{oversoldSymbols.join(', ')}</Box>
           </Box>
         )}
         {inEntryZone.length > 0 && (
