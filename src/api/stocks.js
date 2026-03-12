@@ -26,7 +26,7 @@ const rsFieldByPeriod = {
 
 const mapStockToTable = (s, idx, opts = {}) => {
   const rsField = rsFieldByPeriod[opts.period] || 'week1w';
-  const rsVal = s[rsField] ?? s.week1w ?? s.month1m ?? s.day1d;
+  const rsVal = s.relative_strength ?? s[rsField] ?? s.week1w ?? s.month1m ?? s.day1d;
 
   const volJump = (s.volume && s.avg_volume && s.avg_volume > 0)
     ? (s.volume / s.avg_volume).toFixed(1) + 'x'

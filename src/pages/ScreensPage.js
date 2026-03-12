@@ -6,6 +6,7 @@ import VolumeShockersPage from './VolumeShockersPage';
 import RelativePerformancePage from './RelativePerformancePage';
 import IPOsPage from './IPOsPage';
 import AiPicksPage from './AiPicksPage';
+import LiveScreenerPage from './LiveScreenerPage';
 
 function ScreensPage() {
   const [activeTab, setActiveTab] = useState('AI Picks');
@@ -28,6 +29,9 @@ function ScreensPage() {
         </Tab>
         <Tab active={activeTab === 'Relative Performance'} onClick={() => setActiveTab('Relative Performance')}>
           Relative Performance
+        </Tab>
+        <Tab active={activeTab === 'Live Screener'} onClick={() => setActiveTab('Live Screener')}>
+          Live Screener
         </Tab>
         <Tab active={activeTab === 'IPOs'} onClick={() => setActiveTab('IPOs')} last>
           IPOs
@@ -52,6 +56,10 @@ function ScreensPage() {
 
       <TabContent active={activeTab === 'Relative Performance'}>
         {activeTab === 'Relative Performance' ? <RelativePerformancePage /> : null}
+      </TabContent>
+
+      <TabContent active={activeTab === 'Live Screener'}>
+        {activeTab === 'Live Screener' ? <LiveScreenerPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>

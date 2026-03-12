@@ -47,6 +47,39 @@ const isMissingResourceError = (err) => {
   return msg.includes('not found') || msg.includes('404');
 };
 const isLiveExecution = (row) => String(row?.execution_mode || 'live').toLowerCase() === 'live';
+const normUpper = (v, fallback = '') => String(v || fallback).trim().toUpperCase();
+
+const mapOrderRowToTimelineRow = (row, idx = 0) => {
+  const symbol = normUpper(
+    row?.symbol
+    || row?.tradingSymbol
+    || row?.securityId
+    || row?.scripName
+    || ''
+  );
+  const sideRaw = row?.side || row?.transactionType || row?.orderSide || row?.buySell;
+  const statusRaw = row?.status || row?.orderStatus || row?.order_state || row?.state;
+  const qty = num(row?.qty ?? row?.quantity ?? row?.orderQty ?? row?.filledQty ?? row?.tradedQty);
+  const price = num(row?.price ?? row?.orderPrice ?? row?.averagePrice ?? row?.avgPrice ?? row?.tradedPrice);
+  const updatedAt = row?.updated_at || row?.updateTime || row?.exchangeTime || row?.created_at || row?.createTime || row?.timestamp;
+  const rejection = row?.rejection_reason || row?.rejectionReason || row?.omsErrorDescription || row?.rejectReason;
+  const brokerOrderId = row?.broker_order_id || row?.brokerOrderId || row?.orderId;
+
+  return {
+    ...row,
+    id: String(row?.id || brokerOrderId || `${symbol || 'ORDER'}-${idx}`),
+    symbol,
+    side: normUpper(sideRaw),
+    status: normUpper(statusRaw || 'PLACED'),
+    qty,
+    price,
+    execution_mode: String(row?.execution_mode || 'live').toLowerCase(),
+    broker_order_id: brokerOrderId || null,
+    rejection_reason: rejection || null,
+    broker_response: row?.broker_response || row?.brokerResponse || row,
+    updated_at: updatedAt || new Date().toISOString(),
+  };
+};
 
 const mapDhanRowToPortfolioPosition = (row, source = 'position') => {
   const symbol = String(
@@ -140,7 +173,9 @@ function PortfolioManagerPage() {
       let resolvedOrders = dhanOrderRes.status === 'fulfilled'
         ? (Array.isArray(dhanOrderRes.value) ? dhanOrderRes.value : [])
         : [];
-      resolvedOrders = resolvedOrders.filter(isLiveExecution);
+      resolvedOrders = resolvedOrders
+        .map((row, idx) => mapOrderRowToTimelineRow(row, idx))
+        .filter(isLiveExecution);
 
       let resolvedPositions = Array.isArray(resolvedPortfolio) ? resolvedPortfolio : [];
 

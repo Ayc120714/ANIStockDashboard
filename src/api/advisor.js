@@ -28,6 +28,77 @@ export const fetchMonthlyMacdSetup = async (limit = 200) => {
   return data?.data ?? [];
 };
 
+export const fetchLiveScreenerSignals = async ({
+  limit = 150,
+  symbols = '',
+  sendTelegram = false,
+  refresh = false,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (symbols && String(symbols).trim()) params.set('symbols', String(symbols).trim());
+  if (sendTelegram) params.set('send_telegram', 'true');
+  if (refresh) params.set('refresh', 'true');
+  const data = await apiGet(`/advisor/signals/live-screener?${params.toString()}`);
+  return data ?? { count: 0, data: [], cached: false, scan_symbols: 0 };
+};
+
+export const fetchIndicatorScreenerSignals = async ({
+  timeframe = 'monthly',
+  indicator = 'rsi',
+  condition = 'cross_above',
+  value = null,
+  compareIndicator = '',
+  universe = 'all',
+  symbols = '',
+  limit = 200,
+  sendTelegram = false,
+  refresh = true,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'monthly'));
+  params.set('universe', String(universe || 'all'));
+  params.set('indicator', String(indicator || 'rsi'));
+  params.set('condition', String(condition || 'cross_above'));
+  params.set('limit', String(limit));
+  if (value !== null && value !== undefined && String(value).trim() !== '') {
+    params.set('value', String(value));
+  }
+  if (compareIndicator && String(compareIndicator).trim()) {
+    params.set('compare_indicator', String(compareIndicator).trim());
+  }
+  if (symbols && String(symbols).trim()) {
+    params.set('symbols', String(symbols).trim());
+  }
+  if (sendTelegram) params.set('send_telegram', 'true');
+  if (refresh) params.set('refresh', 'true');
+  const data = await apiGet(`/advisor/signals/indicator-screener?${params.toString()}`);
+  return data ?? { count: 0, data: [], cached: false, scan_symbols: 0 };
+};
+
+export const fetchIndicatorScreenerMultiSignals = async ({
+  timeframe = 'monthly',
+  rules = [],
+  universe = 'all',
+  symbols = '',
+  limit = 200,
+  sendTelegram = false,
+  refresh = true,
+  cacheTtlSec = 45,
+} = {}) => {
+  const data = await apiPost('/advisor/signals/indicator-screener/multi', {
+    timeframe,
+    rules,
+    universe,
+    symbols,
+    limit,
+    send_telegram: sendTelegram,
+    refresh,
+    cache_ttl_sec: cacheTtlSec,
+  });
+  return data ?? { count: 0, data: [], cached: false, scan_symbols: 0, rules: [] };
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];
