@@ -99,6 +99,27 @@ export const fetchIndicatorScreenerMultiSignals = async ({
   return data ?? { count: 0, data: [], cached: false, scan_symbols: 0, rules: [] };
 };
 
+export const fetchAgentSupervisorSignals = async ({
+  timeframe = 'daily',
+  universe = 'all',
+  symbols = '',
+  side = 'all',
+  minConfidence = 50,
+  limit = 200,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('universe', String(universe || 'all'));
+  params.set('side', String(side || 'all'));
+  params.set('min_confidence', String(minConfidence));
+  params.set('limit', String(limit));
+  if (symbols && String(symbols).trim()) {
+    params.set('symbols', String(symbols).trim());
+  }
+  const data = await apiGet(`/advisor/signals/agent-supervisor?${params.toString()}`);
+  return data ?? { count: 0, data: [], rule: {} };
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];

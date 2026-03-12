@@ -12,12 +12,12 @@ function Stop-PortProcess {
         Write-Host "No listening process found on port $Port"
         return
     }
-    foreach ($pid in $pids) {
+    foreach ($procId in $pids) {
         try {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-            Write-Host "Stopped process $pid on port $Port"
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+            Write-Host "Stopped process $procId on port $Port"
         } catch {
-            Write-Host "Failed to stop process $pid on port $Port"
+            Write-Host "Failed to stop process $procId on port $Port"
         }
     }
 }

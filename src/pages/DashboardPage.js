@@ -26,6 +26,14 @@ const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; 
 const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+const deriveDirectionFromRow = (row) => {
+  const reco = String(row?.recommendation || '').toLowerCase();
+  if (reco.includes('sell')) return -1;
+  if (reco.includes('buy')) return 1;
+  const signalType = String(row?.signal_type || row?.trend || '').toLowerCase();
+  if (signalType.includes('sell') || signalType.includes('bear')) return -1;
+  return 1;
+};
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
 const hasLocalBrokerSessionMarker = (userId) => {
   if (!userId) return false;
@@ -278,14 +286,18 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
       const stop = Number(w?.stop_loss);
       const targetGap = Number.isFinite(target) && target > 0 ? Math.abs(price - target) / target * 100 : null;
       const slGap = Number.isFinite(stop) && stop > 0 ? Math.abs(price - stop) / stop * 100 : null;
+      const direction = deriveDirectionFromRow(w);
+      const isBull = direction >= 0;
+      const targetValid = targetGap != null && ((isBull && target >= price) || (!isBull && target <= price));
+      const stopValid = slGap != null && ((isBull && stop <= price) || (!isBull && stop >= price));
 
       let bestType = null;
       let bestGap = Number.POSITIVE_INFINITY;
-      if (targetGap != null && targetGap <= 5 && targetGap < bestGap) {
+      if (targetValid && targetGap <= 5 && targetGap < bestGap) {
         bestType = 'target';
         bestGap = targetGap;
       }
-      if (slGap != null && slGap <= 5 && slGap < bestGap) {
+      if (stopValid && slGap <= 5 && slGap < bestGap) {
         bestType = 'sl';
         bestGap = slGap;
       }
@@ -341,6 +353,17 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
     </Card>
   );
 
+  const gotoShortTermFiltered = (rows = [], label = '') => {
+    const symbols = [...new Set((rows || []).map((r) => String(r?.symbol || '').toUpperCase()).filter(Boolean))];
+    if (!symbols.length) return;
+    navigate('/short-term', {
+      state: {
+        prefilterSymbols: symbols,
+        prefilterLabel: label || 'Filtered',
+      },
+    });
+  };
+
   return (
     <Card>
       <SectionTitle icon={<MdRemoveRedEye />} action={
@@ -358,7 +381,9 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
         <StatBox label="Avg Score" value={avgScore ? fmt(avgScore, 0) : '—'} color={avgScore > 60 ? '#2e7d32' : avgScore > 40 ? '#f57f17' : '#c62828'} sub="/100" />
         <StatBox label="Bullish" value={bullish} color="#2e7d32" sub={`/ ${sigArr.length} signals`} />
         <StatBox label="Bearish" value={bearish} color="#c62828" sub={`/ ${sigArr.length} signals`} />
-        <StatBox label="Near Entry" value={nearEntry.length} color="#1565c0" sub={`≤10% gap`} />
+        <Box sx={{ cursor: nearEntry.length ? 'pointer' : 'default' }} onClick={() => gotoShortTermFiltered(nearEntry, 'Near Entry')}>
+          <StatBox label="Near Entry" value={nearEntry.length} color="#1565c0" sub={`≤10% gap`} />
+        </Box>
       </Box>
 
       {/* Row 2: Best/Worst + Alerts */}
@@ -382,13 +407,19 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
           </Box>
         )}
         {nearTarget.length > 0 && (
-          <Box sx={{ bgcolor: '#fff3e0', borderRadius: 1.5, p: 1.5 }}>
+          <Box
+            onClick={() => gotoShortTermFiltered(nearTarget, 'Near Target')}
+            sx={{ bgcolor: '#fff3e0', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+          >
             <Box sx={{ fontSize: 11, color: '#e65100', fontWeight: 600 }}>Near Target ({nearTarget.length})</Box>
             <Box sx={{ fontSize: 12, mt: 0.3 }}>{nearTarget.map(n => n.symbol).join(', ')}</Box>
           </Box>
         )}
         {nearSL.length > 0 && (
-          <Box sx={{ bgcolor: '#fce4ec', borderRadius: 1.5, p: 1.5 }}>
+          <Box
+            onClick={() => gotoShortTermFiltered(nearSL, 'Near Stop Loss')}
+            sx={{ bgcolor: '#fce4ec', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+          >
             <Box sx={{ fontSize: 11, color: '#c62828', fontWeight: 600 }}>Near Stop Loss ({nearSL.length})</Box>
             <Box sx={{ fontSize: 12, mt: 0.3 }}>{nearSL.map(n => n.symbol).join(', ')}</Box>
           </Box>
@@ -406,13 +437,19 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
           </Box>
         )}
         {inEntryZone.length > 0 && (
-          <Box sx={{ bgcolor: '#e8eaf6', borderRadius: 1.5, p: 1.5 }}>
+          <Box
+            onClick={() => gotoShortTermFiltered(inEntryZone, 'In Entry Zone ≤5%')}
+            sx={{ bgcolor: '#e8eaf6', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+          >
             <Box sx={{ fontSize: 11, color: '#283593', fontWeight: 600 }}>In Entry Zone ≤5% ({inEntryZone.length})</Box>
             <Box sx={{ fontSize: 12, mt: 0.3 }}>{inEntryZone.map(w => w.symbol).join(', ')}</Box>
           </Box>
         )}
         {nearEntry.length > inEntryZone.length && (
-          <Box sx={{ bgcolor: '#e3f2fd', borderRadius: 1.5, p: 1.5 }}>
+          <Box
+            onClick={() => gotoShortTermFiltered(nearEntry.filter(w => (w.weekly_entry_gap_pct || 0) > 5), 'Near Entry 5-10%')}
+            sx={{ bgcolor: '#e3f2fd', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+          >
             <Box sx={{ fontSize: 11, color: '#1565c0', fontWeight: 600 }}>Near Entry 5-10% ({nearEntry.length - inEntryZone.length})</Box>
             <Box sx={{ fontSize: 12, mt: 0.3 }}>{nearEntry.filter(w => (w.weekly_entry_gap_pct || 0) > 5).map(w => w.symbol).join(', ')}</Box>
           </Box>
@@ -1101,7 +1138,7 @@ function DashboardPage() {
       const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys] = await Promise.allSettled([
         fetchMarketIndices(),
         fetchWatchlist(null, watchlistOptions),
-        fetchWatchlistSignals(watchlistOptions),
+        fetchWatchlistSignals({ ...(watchlistOptions || {}), timeframe: 'intraday' }),
         fetchWeeklyIndicators(watchlistOptions),
         fetchOrderBlocks(watchlistOptions),
         fetchSectorOutlook(),

@@ -50,7 +50,11 @@ export const updateWatchlistEntry = async (symbol, data) => {
 
 export const fetchWatchlistSignals = async (options = {}) => {
   const includeAll = Boolean(options?.includeAll);
-  const data = await apiGet(`/watchlist/signals${includeAll ? '?include_all=true' : ''}`);
+  const params = new URLSearchParams();
+  if (includeAll) params.set('include_all', 'true');
+  if (options?.timeframe) params.set('timeframe', String(options.timeframe).toLowerCase());
+  const qs = params.toString();
+  const data = await apiGet(`/watchlist/signals${qs ? `?${qs}` : ''}`);
   return extractRows(data, ['signals', 'rows']);
 };
 

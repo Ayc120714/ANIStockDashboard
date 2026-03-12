@@ -8,6 +8,7 @@ import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
 import OrderPanel from '../components/OrderPanel';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
@@ -97,13 +98,38 @@ const getTrailingState = (row) => {
   const entry = parseNumber(row?.entry_price);
   const stopLoss = parseNumber(row?.stop_loss);
   const t1 = parseNumber(row?.target_short_term ?? row?.target_1);
+  const direction = deriveTradeDirection(row);
+  const isBull = direction >= 0;
   if (cmp == null || entry == null || stopLoss == null || t1 == null) {
-    return { t1Hit: false, costExit: false, effectiveStopLoss: stopLoss };
+    return {
+      t1Hit: false,
+      costExit: false,
+      effectiveStopLoss: stopLoss,
+      entryTriggered: false,
+      stopHit: false,
+      statusLabel: 'NO LEVELS',
+      statusColor: '#757575',
+      isBull,
+    };
   }
-  const t1Hit = cmp >= t1;
+  const t1Hit = isBull ? cmp >= t1 : cmp <= t1;
+  const entryTriggered = isBull ? cmp >= entry : cmp <= entry;
+  const stopHit = isBull ? cmp <= stopLoss : cmp >= stopLoss;
   const effectiveStopLoss = t1Hit ? entry : stopLoss;
-  const costExit = t1Hit && cmp <= entry;
-  return { t1Hit, costExit, effectiveStopLoss };
+  const costExit = t1Hit && (isBull ? cmp <= entry : cmp >= entry);
+  let statusLabel = 'WAIT ENTRY';
+  let statusColor = '#ef6c00';
+  if (t1Hit) {
+    statusLabel = 'EXIT TRIGGERED';
+    statusColor = '#1565c0';
+  } else if (stopHit) {
+    statusLabel = 'SL HIT';
+    statusColor = '#c62828';
+  } else if (entryTriggered) {
+    statusLabel = 'IN TRADE';
+    statusColor = '#2e7d32';
+  }
+  return { t1Hit, costExit, effectiveStopLoss, entryTriggered, stopHit, statusLabel, statusColor, isBull };
 };
 
 const buildFibPivots = (row, currentPrice) => {
@@ -174,7 +200,69 @@ const deriveMacdLabel = (row) => {
   return '—';
 };
 
+const deriveTradeDirection = (row) => {
+  const tier = String(row?.buy_sell_tier || '').toUpperCase();
+  if (tier.startsWith('S')) return -1;
+  if (tier.startsWith('B')) return 1;
+  const macdLabel = deriveMacdLabel(row);
+  if (macdLabel === 'SELL' || macdLabel === 'BEAR') return -1;
+  const trend = String(row?.trend || row?.signal_type || '').toLowerCase();
+  if (trend.includes('bear') || trend.includes('sell')) return -1;
+  return 1;
+};
+
+const normalizeTradeLevels = (row) => {
+  const entry = parseNumber(row?.entry_price ?? row?.price);
+  if (entry == null || entry <= 0) return row;
+  const direction = deriveTradeDirection(row);
+  const cmp = parseNumber(row?.price) ?? entry;
+
+  const rawSl = parseNumber(row?.stop_loss);
+  const rawTarget = parseNumber(row?.target_short_term ?? row?.target_1);
+
+  const minRisk = Math.max(entry * 0.005, 0.5);
+  const maxRisk = Math.max(entry * 0.08, minRisk);
+  const sameSideSlRisk =
+    rawSl != null && ((direction > 0 && rawSl < entry) || (direction < 0 && rawSl > entry))
+      ? Math.abs(entry - rawSl)
+      : null;
+  const inferredRisk = Math.abs(entry - cmp) * 0.6;
+  const unclampedRisk = sameSideSlRisk ?? inferredRisk ?? (entry * 0.02);
+  const risk = Math.min(Math.max(unclampedRisk, minRisk), maxRisk);
+
+  let stopLoss = rawSl;
+  if (
+    stopLoss == null
+    || (direction > 0 && stopLoss >= entry)
+    || (direction < 0 && stopLoss <= entry)
+    || Math.abs(entry - stopLoss) > maxRisk * 1.25
+  ) {
+    stopLoss = Number((entry - direction * risk).toFixed(2));
+  }
+
+  let target1 = rawTarget;
+  const maxTargetMove = entry * 0.25;
+  const targetMove = target1 != null ? Math.abs(target1 - entry) : null;
+  const invalidTargetDirection = target1 != null && (
+    (direction > 0 && target1 <= entry) || (direction < 0 && target1 >= entry)
+  );
+  const unrealisticTarget = targetMove != null && targetMove > maxTargetMove;
+  if (target1 == null || invalidTargetDirection || unrealisticTarget) {
+    target1 = Number((entry + direction * risk * 2.0).toFixed(2));
+  }
+
+  return {
+    ...row,
+    entry_price: Number(entry.toFixed(2)),
+    stop_loss: Number(stopLoss.toFixed(2)),
+    target_short_term: Number(target1.toFixed(2)),
+    target_1: Number(target1.toFixed(2)),
+  };
+};
+
 function ShortTermPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isAdmin, user } = useAuth();
   const [data, setData] = useState([]);
   const [signals, setSignals] = useState([]);
@@ -193,6 +281,8 @@ function ShortTermPage() {
   const [movementDialog, setMovementDialog] = useState({ open: false, symbol: '', current: 0, row: null, pivots: null });
   const [movementAmount, setMovementAmount] = useState('');
   const [selectedPivotPreset, setSelectedPivotPreset] = useState('');
+  const [routeSymbolFilter, setRouteSymbolFilter] = useState([]);
+  const [routeFilterLabel, setRouteFilterLabel] = useState('');
   const rowsPerPage = 15;
   const userId = String(user?.id || user?.user_id || user?.email || 'guest');
   const priceAlertsKey = `short_term_price_alerts_${userId}`;
@@ -207,7 +297,7 @@ function ShortTermPage() {
     setLoading(true);
     Promise.all([
       fetchWatchlist('short_term', { includeAll: isAdmin }),
-      fetchWatchlistSignals({ includeAll: isAdmin }),
+      fetchWatchlistSignals({ includeAll: isAdmin, timeframe: 'intraday' }),
     ]).then(([wl, sigs]) => {
       setData(wl);
       setSignals(sigs);
@@ -220,6 +310,18 @@ function ShortTermPage() {
     const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
   }, [load, loadSymbols]);
+
+  useEffect(() => {
+    const symbols = Array.isArray(location.state?.prefilterSymbols)
+      ? [...new Set(location.state.prefilterSymbols.map((s) => normalizeSymbol(s)).filter(Boolean))]
+      : [];
+    if (!symbols.length) return;
+    setRouteSymbolFilter(symbols);
+    setRouteFilterLabel(String(location.state?.prefilterLabel || 'Filtered'));
+    setSearch('');
+    setPage(1);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     let mounted = true;
@@ -484,7 +586,8 @@ function ShortTermPage() {
 
     const rows = data.map((d) => {
       const sym = normalizeSymbol(d.symbol);
-      return mergeSignalIntoRow({ ...d, symbol: sym || d.symbol }, sigMap[sym] || {});
+      const mergedRow = mergeSignalIntoRow({ ...d, symbol: sym || d.symbol }, sigMap[sym] || {});
+      return normalizeTradeLevels(mergedRow);
     });
     const bySymbol = new Map();
     for (const row of rows) {
@@ -525,13 +628,18 @@ function ShortTermPage() {
   }, [priceAlerts, merged, priceAlertsKey, userId]);
 
   const filtered = useMemo(() => {
-    if (!search) return merged;
+    let base = merged;
+    if (routeSymbolFilter.length) {
+      const allowed = new Set(routeSymbolFilter.map(normalizeSymbol));
+      base = base.filter((r) => allowed.has(normalizeSymbol(r.symbol)));
+    }
+    if (!search) return base;
     const q = search.toLowerCase();
-    return merged.filter(r =>
+    return base.filter(r =>
       (r.symbol || '').toLowerCase().includes(q) ||
       (r.sector || '').toLowerCase().includes(q)
     );
-  }, [merged, search]);
+  }, [merged, search, routeSymbolFilter]);
 
   const sorted = useMemo(() => {
     if (!sortConfig.key) return filtered;
@@ -580,6 +688,19 @@ function ShortTermPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
         <TableTitle style={{ margin: 0 }}>Short Term Watchlist</TableTitle>
         <Chip label="Auto-refresh 60s" size="small" variant="outlined" sx={{ fontSize: 11 }} />
+        {routeSymbolFilter.length > 0 ? (
+          <Chip
+            label={`${routeFilterLabel || 'Filtered'} (${routeSymbolFilter.length})`}
+            size="small"
+            color="primary"
+            onDelete={() => {
+              setRouteSymbolFilter([]);
+              setRouteFilterLabel('');
+              setPage(1);
+            }}
+            sx={{ fontSize: 11 }}
+          />
+        ) : null}
         <IconButton size="small" onClick={load} title="Refresh now"><MdRefresh /></IconButton>
       </Box>
 
@@ -824,7 +945,20 @@ function ShortTermPage() {
                     {row.volume_ratio != null ? `${row.volume_ratio.toFixed(1)}x` : '—'}
                   </td>
                   <td style={{ fontWeight: 600 }}>{row.signal_score != null ? row.signal_score.toFixed(0) : '—'}</td>
-                  <td>{row.entry_price ? `₹${row.entry_price.toFixed(2)}` : '—'}</td>
+                  <td>
+                    {(() => {
+                      const state = getTrailingState(row);
+                      if (!row.entry_price) return '—';
+                      return (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                          <span>₹{row.entry_price.toFixed(2)}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: state.statusColor }}>
+                            {state.statusLabel}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>
                     {(() => {
                       const state = getTrailingState(row);
@@ -837,7 +971,18 @@ function ShortTermPage() {
                       );
                     })()}
                   </td>
-                  <td>{row.target_short_term ? `₹${row.target_short_term.toFixed(2)}` : (row.target_1 ? `₹${row.target_1.toFixed(2)}` : '—')}</td>
+                  <td>
+                    {(() => {
+                      const target = row.target_short_term ?? row.target_1;
+                      if (!target) return '—';
+                      const state = getTrailingState(row);
+                      return (
+                        <span style={{ color: state.t1Hit ? '#1565c0' : undefined, fontWeight: state.t1Hit ? 700 : 400 }}>
+                          ₹{Number(target).toFixed(2)}{state.t1Hit ? ' (Hit)' : ''}
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))}
               {paged.length === 0 && (

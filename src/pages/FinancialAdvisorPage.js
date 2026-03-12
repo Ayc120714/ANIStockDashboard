@@ -1042,6 +1042,83 @@ function PortfolioTab() {
   const [loading, setLoading] = useState(false);
   const allSymbols = useSymbolList();
 
+  const portfolioRows = useMemo(() => {
+    if (!result || typeof result !== 'object') return [];
+    const table = Array.isArray(result?.sentiment_table) ? result.sentiment_table : [];
+    const reviewList = Array.isArray(result?.stocks_requiring_review) ? result.stocks_requiring_review : [];
+    const newsList = Array.isArray(result?.recent_news) ? result.recent_news : [];
+    const knownStocks = new Set(
+      table
+        .map((r) => String(r?.stock || '').trim().toUpperCase())
+        .filter(Boolean)
+    );
+    const reviewByStock = new Map(
+      reviewList.map((r) => [
+        String(r?.stock || '').toUpperCase(),
+        {
+          reason: String(r?.reason || '').trim(),
+          focus: Array.isArray(r?.focus_areas) ? r.focus_areas.join(', ') : '',
+        },
+      ])
+    );
+    const newsByStock = new Map();
+    newsList.forEach((n) => {
+      const raw = String(
+        n?.stock
+        || n?.symbol
+        || n?.for_stock
+        || ''
+      ).trim().toUpperCase();
+      const item = {
+        headline: String(n?.headline || '').trim(),
+        implication: String(n?.implication || '').trim(),
+      };
+      if (!item.headline && !item.implication) return;
+
+      // Primary mapping via explicit stock/symbol fields.
+      if (raw && knownStocks.has(raw)) {
+        const arr = newsByStock.get(raw) || [];
+        arr.push(item);
+        newsByStock.set(raw, arr);
+        return;
+      }
+
+      // Secondary mapping: infer stock from headline/implication mention.
+      const blob = `${item.headline} ${item.implication}`.toUpperCase();
+      knownStocks.forEach((sym) => {
+        if (!sym) return;
+        const tokenMatch =
+          blob.includes(` ${sym} `)
+          || blob.startsWith(`${sym} `)
+          || blob.endsWith(` ${sym}`)
+          || blob.includes(`(${sym})`)
+          || blob.includes(`-${sym}`)
+          || blob.includes(`${sym}-`);
+        if (tokenMatch) {
+          const arr = newsByStock.get(sym) || [];
+          arr.push(item);
+          newsByStock.set(sym, arr);
+        }
+      });
+    });
+
+    return table.map((row) => {
+      const stock = String(row?.stock || '').trim().toUpperCase();
+      const sentiment = String(row?.sentiment || 'Neutral').trim();
+      const expectation = String(row?.analyst_expectation || '').trim();
+      const review = reviewByStock.get(stock);
+      const stockNews = (newsByStock.get(stock) || []).slice(0, 5);
+      return {
+        stock: stock || '—',
+        sentiment: sentiment || '—',
+        expectation: expectation || '',
+        reviewReason: review?.reason || '',
+        reviewFocus: review?.focus ? `Focus: ${review.focus}` : '',
+        newsPoints: stockNews,
+      };
+    });
+  }, [result]);
+
   const handleCheck = async () => {
     const syms = selectedSymbols.map(s => typeof s === 'string' ? s : s.symbol).filter(Boolean);
     if (!syms.length) return;
@@ -1087,8 +1164,50 @@ function PortfolioTab() {
       {loading && <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box>}
 
       {result && !loading && (
-        <Box sx={{ bgcolor: '#f8f9fa', p: 2, borderRadius: 2, fontFamily: 'monospace', fontSize: 12, maxHeight: 500, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-          {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+        <Box>
+          {portfolioRows.length > 0 ? (
+            <TableWrapper>
+              <Table style={{ fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={compact}>Stock Name</th>
+                    <th style={compact}>Sentiment Analysis</th>
+                    <th style={compact}>Overall Analysis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {portfolioRows.map((row) => (
+                    <tr key={row.stock}>
+                      <td style={{ ...compact, fontWeight: 700 }}>{row.stock}</td>
+                      <td style={compact}>{row.sentiment}</td>
+                      <td style={{ ...compact, whiteSpace: 'normal', minWidth: 360 }}>
+                        {[row.expectation, row.reviewReason, row.reviewFocus].filter(Boolean).join(' | ') || '—'}
+                        {row.newsPoints?.length ? (
+                          <Box component="ul" sx={{ mb: 0, mt: 0.6, pl: 2 }}>
+                            {row.newsPoints.map((n, idx) => (
+                              <Box component="li" key={`${row.stock}-news-${idx}`} sx={{ mb: 0.25 }}>
+                                {n.headline || '—'}
+                                {n.implication ? ` — ${n.implication}` : ''}
+                              </Box>
+                            ))}
+                          </Box>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableWrapper>
+          ) : (
+            <Box sx={{ bgcolor: '#f8f9fa', p: 2, borderRadius: 2, fontFamily: 'monospace', fontSize: 12, maxHeight: 500, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+              {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+            </Box>
+          )}
+          {result?.summary ? (
+            <Box sx={{ mt: 1.2, fontSize: 12, color: '#444', lineHeight: 1.5 }}>
+              <b>Summary:</b> {String(result.summary)}
+            </Box>
+          ) : null}
         </Box>
       )}
     </Box>

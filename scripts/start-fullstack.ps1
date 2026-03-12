@@ -11,9 +11,9 @@ $ErrorActionPreference = "Stop"
 function Stop-PortProcess {
     param([int]$Port)
     $pids = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
-    foreach ($pid in $pids) {
+    foreach ($procId in $pids) {
         try {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         } catch {
             # ignore
         }

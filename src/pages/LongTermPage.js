@@ -97,13 +97,38 @@ const getTrailingState = (row) => {
   const entry = parseNumber(row?.entry_price);
   const stopLoss = parseNumber(row?.stop_loss);
   const t1 = parseNumber(row?.target_long_term ?? row?.target_1);
+  const direction = deriveTradeDirection(row);
+  const isBull = direction >= 0;
   if (cmp == null || entry == null || stopLoss == null || t1 == null) {
-    return { t1Hit: false, costExit: false, effectiveStopLoss: stopLoss };
+    return {
+      t1Hit: false,
+      costExit: false,
+      effectiveStopLoss: stopLoss,
+      entryTriggered: false,
+      stopHit: false,
+      statusLabel: 'NO LEVELS',
+      statusColor: '#757575',
+      isBull,
+    };
   }
-  const t1Hit = cmp >= t1;
+  const t1Hit = isBull ? cmp >= t1 : cmp <= t1;
+  const entryTriggered = isBull ? cmp >= entry : cmp <= entry;
+  const stopHit = isBull ? cmp <= stopLoss : cmp >= stopLoss;
   const effectiveStopLoss = t1Hit ? entry : stopLoss;
-  const costExit = t1Hit && cmp <= entry;
-  return { t1Hit, costExit, effectiveStopLoss };
+  const costExit = t1Hit && (isBull ? cmp <= entry : cmp >= entry);
+  let statusLabel = 'WAIT ENTRY';
+  let statusColor = '#ef6c00';
+  if (t1Hit) {
+    statusLabel = 'EXIT TRIGGERED';
+    statusColor = '#1565c0';
+  } else if (stopHit) {
+    statusLabel = 'SL HIT';
+    statusColor = '#c62828';
+  } else if (entryTriggered) {
+    statusLabel = 'IN TRADE';
+    statusColor = '#2e7d32';
+  }
+  return { t1Hit, costExit, effectiveStopLoss, entryTriggered, stopHit, statusLabel, statusColor, isBull };
 };
 
 const buildFibPivots = (row, currentPrice) => {
@@ -147,6 +172,17 @@ const deriveMacdLabel = (row) => {
   return '—';
 };
 
+const deriveTradeDirection = (row) => {
+  const recommendation = String(row?.recommendation || '').toLowerCase().trim();
+  if (recommendation.includes('sell')) return -1;
+  if (recommendation.includes('buy')) return 1;
+  const macdLabel = deriveMacdLabel(row);
+  if (macdLabel === 'SELL' || macdLabel === 'BEAR') return -1;
+  const trend = String(row?.trend || row?.signal_type || '').toLowerCase();
+  if (trend.includes('bear') || trend.includes('sell') || trend.includes('down')) return -1;
+  return 1;
+};
+
 function LongTermPage() {
   const { isAdmin, user } = useAuth();
   const [data, setData] = useState([]);
@@ -182,7 +218,7 @@ function LongTermPage() {
     setLoading(true);
     Promise.all([
       fetchWatchlist('long_term', { includeAll: isAdmin }),
-      fetchWatchlistSignals({ includeAll: isAdmin }),
+      fetchWatchlistSignals({ includeAll: isAdmin, timeframe: 'intraday' }),
     ])
       .then(([wl, sigs]) => {
         setData(Array.isArray(wl) ? wl : []);
@@ -831,7 +867,20 @@ function LongTermPage() {
                   <td style={{ fontWeight: 600, color: (row.volume_ratio || 0) >= 2 ? '#c62828' : undefined }}>
                     {row.volume_ratio != null ? `${row.volume_ratio.toFixed(1)}x` : '—'}
                   </td>
-                  <td>{row.entry_price ? `₹${row.entry_price.toFixed(2)}` : '—'}</td>
+                  <td>
+                    {(() => {
+                      const state = getTrailingState(row);
+                      if (!row.entry_price) return '—';
+                      return (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                          <span>₹{row.entry_price.toFixed(2)}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: state.statusColor }}>
+                            {state.statusLabel}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>
                     {(() => {
                       const state = getTrailingState(row);
@@ -844,7 +893,18 @@ function LongTermPage() {
                       );
                     })()}
                   </td>
-                  <td>{row.target_long_term ? `₹${row.target_long_term.toFixed(2)}` : '—'}</td>
+                  <td>
+                    {(() => {
+                      const target = row.target_long_term ?? row.target_1;
+                      if (!target) return '—';
+                      const state = getTrailingState(row);
+                      return (
+                        <span style={{ color: state.t1Hit ? '#1565c0' : undefined, fontWeight: state.t1Hit ? 700 : 400 }}>
+                          ₹{Number(target).toFixed(2)}{state.t1Hit ? ' (Hit)' : ''}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>{row.risk_reward_ratio ? `${row.risk_reward_ratio}:1` : '—'}</td>
                 </tr>
               ))}
