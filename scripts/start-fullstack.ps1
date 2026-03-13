@@ -20,6 +20,39 @@ function Stop-PortProcess {
     }
 }
 
+function Stop-ProcessByCommandPattern {
+    param(
+        [string[]]$Patterns,
+        [string]$Label = "process"
+    )
+    if (-not $Patterns -or $Patterns.Count -eq 0) {
+        return
+    }
+    $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+    foreach ($p in $all) {
+        $cmd = [string]$p.CommandLine
+        if ([string]::IsNullOrWhiteSpace($cmd)) {
+            continue
+        }
+        $matched = $true
+        foreach ($pat in $Patterns) {
+            if ($cmd -notlike "*$pat*") {
+                $matched = $false
+                break
+            }
+        }
+        if (-not $matched) {
+            continue
+        }
+        try {
+            Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+            Write-Host "Stopped stale $Label process $($p.ProcessId)"
+        } catch {
+            # ignore
+        }
+    }
+}
+
 function Start-DetachedTerminal {
     param(
         [string]$WorkingDir,
@@ -42,9 +75,14 @@ if (-not (Test-Path $backendRoot)) {
 }
 
 if ($KillExisting) {
-    Write-Host "Stopping processes on ports $BackendPort and $FrontendPort ..."
+    Write-Host "Stopping old backend/frontend processes ..."
     Stop-PortProcess -Port $BackendPort
     Stop-PortProcess -Port $FrontendPort
+    # Extra guard: kill stale launchers that may not hold the port anymore.
+    Stop-ProcessByCommandPattern -Patterns @($backendRoot, "uvicorn", "app.main:app") -Label "backend"
+    Stop-ProcessByCommandPattern -Patterns @($frontendRoot, "react-scripts", "start") -Label "frontend"
+    Stop-ProcessByCommandPattern -Patterns @($frontendRoot, "npm start") -Label "frontend-launcher"
+    Start-Sleep -Seconds 1
 }
 
 Write-Host "Starting backend first ..."

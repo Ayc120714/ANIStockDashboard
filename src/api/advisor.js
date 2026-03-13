@@ -120,6 +120,27 @@ export const fetchAgentSupervisorSignals = async ({
   return data ?? { count: 0, data: [], rule: {} };
 };
 
+export const fetchVideoStrategySignals = async ({
+  limit = 200,
+  symbols = '',
+  universe = 'watchlist',
+  sendTelegram = false,
+  refresh = false,
+  cacheTtlSec = 180,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('universe', String(universe || 'watchlist'));
+  params.set('cache_ttl_sec', String(cacheTtlSec));
+  if (symbols && String(symbols).trim()) {
+    params.set('symbols', String(symbols).trim());
+  }
+  if (sendTelegram) params.set('send_telegram', 'true');
+  if (refresh) params.set('refresh', 'true');
+  const data = await apiGet(`/advisor/signals/video-strategies?${params.toString()}`);
+  return data ?? { count: 0, data: [], cached: false, scan_symbols: 0 };
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];
