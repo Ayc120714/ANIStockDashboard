@@ -5,6 +5,7 @@ import Pagination from '@mui/material/Pagination';
 import { MdDelete } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { clearPriceAlertTriggers, deletePriceAlertTrigger, fetchPriceAlertTriggers } from '../api/priceAlerts';
+import { backfillLevelDivergenceAlerts, fetchSpecialAlerts } from '../api/advisor';
 import { useAuth } from '../auth/AuthContext';
 
 const fmtRupee = (v) => {
@@ -36,6 +37,10 @@ function StockAlertsPage() {
   const [symbolFilter, setSymbolFilter] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [advisorAlerts, setAdvisorAlerts] = useState([]);
+  const [setupSideFilter, setSetupSideFilter] = useState('all');
+  const [weeklyAlertTypeFilter, setWeeklyAlertTypeFilter] = useState('all');
+  const [rsiAlertTypeFilter, setRsiAlertTypeFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [sortCol, setSortCol] = useState('');
   const [sortDir, setSortDir] = useState('desc');
@@ -59,7 +64,11 @@ function StockAlertsPage() {
         setErrorMsg(e?.message || 'Failed to load alert history');
       })
       .finally(() => setLoading(false));
-  }, [userId]);
+
+    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter })
+      .then((rows) => setAdvisorAlerts(Array.isArray(rows) ? rows : []))
+      .catch(() => setAdvisorAlerts([]));
+  }, [userId, symbolFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -129,12 +138,51 @@ function StockAlertsPage() {
     }
   };
 
+  const handleGenerateFromOldData = async () => {
+    try {
+      setLoading(true);
+      const res = await backfillLevelDivergenceAlerts({ days: 180, limitSymbols: 300 });
+      const created = Number(res?.created || 0);
+      setStatusMsg(created > 0 ? `Generated ${created} alerts from historical data.` : 'No new historical alerts were generated.');
+      await load();
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to generate alerts from historical data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <FaSort style={{ opacity: 0.3, marginLeft: 2, fontSize: 10 }} />;
     return sortDir === 'asc'
       ? <FaSortUp style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />
       : <FaSortDown style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />;
   };
+
+  const getAlertSide = (alertType) => {
+    const t = String(alertType || '').toLowerCase();
+    if (t.includes('cross_up') || t.includes('bullish') || t.endsWith('_bull') || t.includes('_buy')) return 'bullish';
+    if (t.includes('cross_down') || t.includes('bearish') || t.endsWith('_bear') || t.includes('_sell')) return 'bearish';
+    return 'unknown';
+  };
+
+  const weeklyCrossRows = useMemo(
+    () => advisorAlerts
+      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
+      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+      .filter((a) => weeklyAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === weeklyAlertTypeFilter)
+      .slice(0, 100),
+    [advisorAlerts, setupSideFilter, weeklyAlertTypeFilter]
+  );
+
+  const divergenceRows = useMemo(
+    () => advisorAlerts
+      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('rsi_divergence_'))
+      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+      .filter((a) => rsiAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === rsiAlertTypeFilter)
+      .slice(0, 100),
+    [advisorAlerts, setupSideFilter, rsiAlertTypeFilter]
+  );
 
   return (
     <TableSection>
@@ -146,11 +194,24 @@ function StockAlertsPage() {
           <MenuItem value="short_term">Short Term</MenuItem>
           <MenuItem value="long_term">Long Term</MenuItem>
         </Select>
+        <Select
+          size="small"
+          value={setupSideFilter}
+          onChange={(e) => setSetupSideFilter(e.target.value)}
+          sx={{ width: 170 }}
+        >
+          <MenuItem value="all">All Setups</MenuItem>
+          <MenuItem value="bullish">Bullish Setups</MenuItem>
+          <MenuItem value="bearish">Bearish Setups</MenuItem>
+        </Select>
         <TextField size="small" placeholder="Symbol…" value={symbolFilter}
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="outlined" onClick={load} sx={{ textTransform: 'none', fontSize: 12 }}>
           Refresh
+        </Button>
+        <Button size="small" variant="outlined" onClick={handleGenerateFromOldData} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Generate From Old Data
         </Button>
         <Button size="small" variant="outlined" color="error" onClick={handleClearHistory} sx={{ textTransform: 'none', fontSize: 12 }}>
           Clear History
@@ -208,6 +269,104 @@ function StockAlertsPage() {
           <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" />
         </Box>
       )}
+
+      <Box sx={{ mt: 3 }}>
+        <TableTitle>Weekly Level Cross Alerts (Backend)</TableTitle>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+          <Select
+            size="small"
+            value={weeklyAlertTypeFilter}
+            onChange={(e) => setWeeklyAlertTypeFilter(e.target.value)}
+            sx={{ width: 260 }}
+          >
+            <MenuItem value="all">All Weekly Alert Types</MenuItem>
+            <MenuItem value="weekly_cross_up_low">weekly_cross_up_low</MenuItem>
+            <MenuItem value="weekly_cross_up_mid">weekly_cross_up_mid</MenuItem>
+            <MenuItem value="weekly_cross_up_high">weekly_cross_up_high</MenuItem>
+            <MenuItem value="weekly_cross_down_low">weekly_cross_down_low</MenuItem>
+            <MenuItem value="weekly_cross_down_mid">weekly_cross_down_mid</MenuItem>
+            <MenuItem value="weekly_cross_down_high">weekly_cross_down_high</MenuItem>
+          </Select>
+        </Box>
+        <TableWrapper>
+          <Table style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={compact}>Time</th>
+                <th style={compact}>Symbol</th>
+                <th style={compact}>Alert</th>
+                <th style={compact}>Severity</th>
+                <th style={compact}>Message</th>
+                <th style={compact}>Telegram</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeklyCrossRows.map((a) => (
+                  <tr key={`advisor_${a.id}`}>
+                    <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                    <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
+                    <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
+                    <td style={compact}>{a.severity || '—'}</td>
+                    <td style={{ ...compact, maxWidth: 500, whiteSpace: 'normal' }}>{a.message || '—'}</td>
+                    <td style={compact}>{a.is_sent_telegram ? 'Sent' : 'Pending'}</td>
+                  </tr>
+                ))}
+              {weeklyCrossRows.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                  No weekly level cross alerts yet.
+                </td></tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <TableTitle>Divergence Alerts (5m RSI)</TableTitle>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+          <Select
+            size="small"
+            value={rsiAlertTypeFilter}
+            onChange={(e) => setRsiAlertTypeFilter(e.target.value)}
+            sx={{ width: 260 }}
+          >
+            <MenuItem value="all">All RSI Alert Types</MenuItem>
+            <MenuItem value="rsi_divergence_bullish_5m">rsi_divergence_bullish_5m</MenuItem>
+            <MenuItem value="rsi_divergence_bearish_5m">rsi_divergence_bearish_5m</MenuItem>
+          </Select>
+        </Box>
+        <TableWrapper>
+          <Table style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={compact}>Time</th>
+                <th style={compact}>Symbol</th>
+                <th style={compact}>Type</th>
+                <th style={compact}>Severity</th>
+                <th style={compact}>Message</th>
+                <th style={compact}>Telegram</th>
+              </tr>
+            </thead>
+            <tbody>
+              {divergenceRows.map((a) => (
+                <tr key={`div_${a.id}`}>
+                  <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                  <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
+                  <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
+                  <td style={compact}>{a.severity || '—'}</td>
+                  <td style={{ ...compact, maxWidth: 500, whiteSpace: 'normal' }}>{a.message || '—'}</td>
+                  <td style={compact}>{a.is_sent_telegram ? 'Sent' : 'Pending'}</td>
+                </tr>
+              ))}
+              {divergenceRows.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                  No RSI divergence alerts yet.
+                </td></tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Box>
     </TableSection>
   );
 }

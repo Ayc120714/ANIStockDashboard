@@ -26,8 +26,12 @@ const fmt = (v, d = 2) => {
 
 function VideoStrategyScreenerPage() {
   const [universe, setUniverse] = useState('all');
+  const [side, setSide] = useState('both');
   const [symbolsInput, setSymbolsInput] = useState('');
   const [limit, setLimit] = useState(200);
+  const [relVolThreshold, setRelVolThreshold] = useState(2.0);
+  const [displacementMult, setDisplacementMult] = useState(1.8);
+  const [levelToleranceBps, setLevelToleranceBps] = useState(8.0);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,6 +51,10 @@ function VideoStrategyScreenerPage() {
         limit,
         symbols: symbolsInput,
         universe,
+        side,
+        relVolThreshold,
+        displacementMult,
+        levelToleranceBps,
         refresh: Boolean(opts.forceRefresh),
         cacheTtlSec: 180,
         sendTelegram: Boolean(opts.sendTelegram),
@@ -64,7 +72,7 @@ function VideoStrategyScreenerPage() {
       setRefreshing(false);
       setHasLoadedOnce(true);
     }
-  }, [limit, symbolsInput, universe, hasLoadedOnce, loading, refreshing]);
+  }, [limit, symbolsInput, universe, side, relVolThreshold, displacementMult, levelToleranceBps, hasLoadedOnce, loading, refreshing]);
 
   useEffect(() => {
     load({ forceRefresh: true });
@@ -89,16 +97,19 @@ function VideoStrategyScreenerPage() {
       switch (key) {
         case 'symbol': return String(row?.symbol || '');
         case 'strategy': return String(row?.strategy || '');
-        case 'bias': return String(row?.daily_bias || row?.bias || '');
+        case 'trigger_level': return String(row?.trigger_level || '');
+        case 'cisd_level': return Number(row?.cisd_level ?? Number.NEGATIVE_INFINITY);
         case 'h4_trend': return String(row?.h4_trend || '');
         case 'h1_trend': return String(row?.h1_trend || '');
         case 'trigger_tf': return String(row?.trigger_tf || '');
-        case 'mtf_alignment': return Number(row?.mtf_alignment ?? Number.NEGATIVE_INFINITY);
+        case 'mtf_probability': return String(row?.mtf_probability || '');
         case 'side': return String(row?.side || '');
         case 'entry': return Number(row?.entry ?? Number.NEGATIVE_INFINITY);
         case 'stop_loss': return Number(row?.stop_loss ?? Number.NEGATIVE_INFINITY);
         case 'target_1': return Number(row?.target_1 ?? Number.NEGATIVE_INFINITY);
-        case 'rr': return Number(row?.rr ?? Number.NEGATIVE_INFINITY);
+        case 'target_2': return Number(row?.target_2 ?? Number.NEGATIVE_INFINITY);
+        case 'rr1': return Number(row?.rr1 ?? Number.NEGATIVE_INFINITY);
+        case 'rr2': return Number(row?.rr2 ?? Number.NEGATIVE_INFINITY);
         case 'score': return Number(row?.score ?? Number.NEGATIVE_INFINITY);
         case 'signal_time': return String(row?.signal_time || '');
         default: return '';
@@ -128,7 +139,7 @@ function VideoStrategyScreenerPage() {
         Video Strategy Screener ({meta.count})
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-        Multi-timeframe setup: 1D bias + 4H trend + 1H trend alignment, with 5m trigger scanner.
+        Weekly low/mid/high reclaim strategy with CISD confirmation on 15m and 4H -> 1H -> 5m probability context.
       </Typography>
 
       <Box
@@ -155,11 +166,47 @@ function VideoStrategyScreenerPage() {
           <MenuItem value="all">All Symbols</MenuItem>
         </TextField>
         <TextField
+          select
+          size="small"
+          label="Side"
+          value={side}
+          onChange={(e) => setSide(e.target.value)}
+          sx={{ minWidth: 130 }}
+        >
+          <MenuItem value="both">Both</MenuItem>
+          <MenuItem value="bullish">Bullish</MenuItem>
+          <MenuItem value="bearish">Bearish</MenuItem>
+        </TextField>
+        <TextField
           size="small"
           type="number"
           label="Limit"
           value={limit}
           onChange={(e) => setLimit(Math.max(1, Math.min(1000, Number(e.target.value || 1))))}
+          sx={{ width: 110 }}
+        />
+        <TextField
+          size="small"
+          type="number"
+          label="Rel Vol"
+          value={relVolThreshold}
+          onChange={(e) => setRelVolThreshold(Math.max(1, Number(e.target.value || 1)))}
+          sx={{ width: 110 }}
+        />
+        <TextField
+          size="small"
+          type="number"
+          label="Displacement"
+          value={displacementMult}
+          onChange={(e) => setDisplacementMult(Math.max(1, Number(e.target.value || 1)))}
+          sx={{ width: 130 }}
+        />
+        <TextField
+          size="small"
+          type="number"
+          label="Tol (bps)"
+          value={levelToleranceBps}
+          onChange={(e) => setLevelToleranceBps(Math.max(0, Number(e.target.value || 0)))}
           sx={{ width: 110 }}
         />
         <TextField
@@ -198,16 +245,19 @@ function VideoStrategyScreenerPage() {
               <TableRow>
                 <TableCell onClick={() => handleSort('symbol')} sx={{ cursor: 'pointer' }}>Symbol{getSortArrow('symbol')}</TableCell>
                 <TableCell onClick={() => handleSort('strategy')} sx={{ cursor: 'pointer' }}>Strategy{getSortArrow('strategy')}</TableCell>
-                <TableCell onClick={() => handleSort('bias')} sx={{ cursor: 'pointer' }}>Bias{getSortArrow('bias')}</TableCell>
+                <TableCell onClick={() => handleSort('trigger_level')} sx={{ cursor: 'pointer' }}>Level{getSortArrow('trigger_level')}</TableCell>
+                <TableCell align="right" onClick={() => handleSort('cisd_level')} sx={{ cursor: 'pointer' }}>CISD{getSortArrow('cisd_level')}</TableCell>
                 <TableCell onClick={() => handleSort('h4_trend')} sx={{ cursor: 'pointer' }}>4H Trend{getSortArrow('h4_trend')}</TableCell>
                 <TableCell onClick={() => handleSort('h1_trend')} sx={{ cursor: 'pointer' }}>1H Trend{getSortArrow('h1_trend')}</TableCell>
                 <TableCell onClick={() => handleSort('trigger_tf')} sx={{ cursor: 'pointer' }}>Trigger TF{getSortArrow('trigger_tf')}</TableCell>
-                <TableCell align="right" onClick={() => handleSort('mtf_alignment')} sx={{ cursor: 'pointer' }}>MTF Score{getSortArrow('mtf_alignment')}</TableCell>
+                <TableCell onClick={() => handleSort('mtf_probability')} sx={{ cursor: 'pointer' }}>Probability{getSortArrow('mtf_probability')}</TableCell>
                 <TableCell onClick={() => handleSort('side')} sx={{ cursor: 'pointer' }}>Side{getSortArrow('side')}</TableCell>
                 <TableCell align="right" onClick={() => handleSort('entry')} sx={{ cursor: 'pointer' }}>Entry{getSortArrow('entry')}</TableCell>
                 <TableCell align="right" onClick={() => handleSort('stop_loss')} sx={{ cursor: 'pointer' }}>SL{getSortArrow('stop_loss')}</TableCell>
                 <TableCell align="right" onClick={() => handleSort('target_1')} sx={{ cursor: 'pointer' }}>Target{getSortArrow('target_1')}</TableCell>
-                <TableCell align="right" onClick={() => handleSort('rr')} sx={{ cursor: 'pointer' }}>R:R{getSortArrow('rr')}</TableCell>
+                <TableCell align="right" onClick={() => handleSort('target_2')} sx={{ cursor: 'pointer' }}>Target 2{getSortArrow('target_2')}</TableCell>
+                <TableCell align="right" onClick={() => handleSort('rr1')} sx={{ cursor: 'pointer' }}>R:R1{getSortArrow('rr1')}</TableCell>
+                <TableCell align="right" onClick={() => handleSort('rr2')} sx={{ cursor: 'pointer' }}>R:R2{getSortArrow('rr2')}</TableCell>
                 <TableCell align="right" onClick={() => handleSort('score')} sx={{ cursor: 'pointer' }}>Score{getSortArrow('score')}</TableCell>
                 <TableCell>Reason</TableCell>
                 <TableCell onClick={() => handleSort('signal_time')} sx={{ cursor: 'pointer' }}>Signal Time{getSortArrow('signal_time')}</TableCell>
@@ -221,16 +271,19 @@ function VideoStrategyScreenerPage() {
                   <TableRow key={`${r.symbol}_${r.strategy}_${r.signal_time}`} sx={{ backgroundColor: bg }}>
                     <TableCell sx={{ fontWeight: 700 }}>{r.symbol}</TableCell>
                     <TableCell><Chip size="small" label={r.strategy} variant="outlined" /></TableCell>
-                    <TableCell>{r.daily_bias || r.bias}</TableCell>
+                    <TableCell>{r.trigger_level || '—'}</TableCell>
+                    <TableCell align="right">{fmt(r.cisd_level, 2)}</TableCell>
                     <TableCell>{r.h4_trend || '—'}</TableCell>
                     <TableCell>{r.h1_trend || '—'}</TableCell>
-                    <TableCell>{r.trigger_tf || '5m'}</TableCell>
-                    <TableCell align="right">{fmt(r.mtf_alignment, 0)}</TableCell>
+                    <TableCell>{r.trigger_tf || '15m'}</TableCell>
+                    <TableCell>{r.mtf_probability || '—'}</TableCell>
                     <TableCell>{r.side}</TableCell>
                     <TableCell align="right">{fmt(r.entry, 2)}</TableCell>
                     <TableCell align="right">{fmt(r.stop_loss, 2)}</TableCell>
                     <TableCell align="right">{fmt(r.target_1, 2)}</TableCell>
-                    <TableCell align="right">{fmt(r.rr, 2)}</TableCell>
+                    <TableCell align="right">{fmt(r.target_2, 2)}</TableCell>
+                    <TableCell align="right">{fmt(r.rr1, 2)}</TableCell>
+                    <TableCell align="right">{fmt(r.rr2, 2)}</TableCell>
                     <TableCell align="right">{fmt(r.score, 1)}</TableCell>
                     <TableCell>{r.reason}</TableCell>
                     <TableCell>{r.signal_time || '—'}</TableCell>

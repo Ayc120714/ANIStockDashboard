@@ -123,14 +123,22 @@ export const fetchAgentSupervisorSignals = async ({
 export const fetchVideoStrategySignals = async ({
   limit = 200,
   symbols = '',
-  universe = 'watchlist',
+  universe = 'all',
+  side = 'both',
+  relVolThreshold = 2.0,
+  displacementMult = 1.8,
+  levelToleranceBps = 8.0,
   sendTelegram = false,
   refresh = false,
   cacheTtlSec = 180,
 } = {}) => {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
-  params.set('universe', String(universe || 'watchlist'));
+  params.set('universe', String(universe || 'all'));
+  params.set('side', String(side || 'both'));
+  params.set('rel_vol_threshold', String(relVolThreshold));
+  params.set('displacement_mult', String(displacementMult));
+  params.set('level_tolerance_bps', String(levelToleranceBps));
   params.set('cache_ttl_sec', String(cacheTtlSec));
   if (symbols && String(symbols).trim()) {
     params.set('symbols', String(symbols).trim());
@@ -173,6 +181,24 @@ export const fetchAlerts = async (filters = {}) => {
   const qs = params.toString();
   const data = await apiGet(`/advisor/alerts${qs ? '?' + qs : ''}`);
   return data?.data ?? [];
+};
+
+export const fetchSpecialAlerts = async ({ limit = 1000, symbol = '' } = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (symbol && String(symbol).trim()) params.set('symbol', String(symbol).trim());
+  const data = await apiGet(`/advisor/alerts/special?${params.toString()}`);
+  return data?.data ?? [];
+};
+
+export const backfillLevelDivergenceAlerts = async ({
+  days = 180,
+  limitSymbols = 300,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('days', String(days));
+  params.set('limit_symbols', String(limitSymbols));
+  return apiPost(`/advisor/alerts/backfill-level-divergence?${params.toString()}`, {});
 };
 
 export const markAlertRead = async (alertId) => {
