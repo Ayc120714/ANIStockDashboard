@@ -133,6 +133,16 @@ const mapTableRow = (item, idx) => {
   if (!name) return null;
   const trend = deriveTrend(item);
 
+  const dailyChange =
+    item.percentage_change ??
+    item.percentageChange ??
+    item.change_pct ??
+    item.changePercent ??
+    item.change_percent ??
+    item.perf_1d ??
+    item.day1d ??
+    item['1d'];
+
   return {
     id: item.id ?? idx + 1,
     name,
@@ -140,7 +150,7 @@ const mapTableRow = (item, idx) => {
     trendDirection: trend.direction,
     value: formatValue(item.value ?? item.cmp ?? item.close ?? item.last),
     percentile: formatPercentile(item.percentile ?? item.percentage_change),
-    day1d: fmtPerf(item.perf_1d ?? item.day1d ?? item['1d']),
+    day1d: fmtPerf(dailyChange),
     week1w: fmtPerf(item.perf_1w ?? item.week1w ?? item['1w']),
     month1m: fmtPerf(item.perf_1m ?? item.month1m ?? item['1m']),
     month3m: fmtPerf(item.perf_3m ?? item.month3m ?? item['3m']),

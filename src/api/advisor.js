@@ -201,6 +201,10 @@ export const backfillLevelDivergenceAlerts = async ({
   return apiPost(`/advisor/alerts/backfill-level-divergence?${params.toString()}`, {});
 };
 
+export const triggerLiveSignalScanNow = async () => {
+  return apiPost('/advisor/signals/live-scan-now', {});
+};
+
 export const markAlertRead = async (alertId) => {
   return apiRequest(`/advisor/alerts/${alertId}/read`, { method: 'PUT' });
 };

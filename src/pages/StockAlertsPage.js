@@ -1,16 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField } from '@mui/material';
+import { Alert, Box, Button, Checkbox, CircularProgress, IconButton, MenuItem, Select, TextField } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdDelete } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { clearPriceAlertTriggers, deletePriceAlertTrigger, fetchPriceAlertTriggers } from '../api/priceAlerts';
-import { backfillLevelDivergenceAlerts, fetchSpecialAlerts } from '../api/advisor';
+import { backfillLevelDivergenceAlerts, fetchSpecialAlerts, triggerLiveSignalScanNow } from '../api/advisor';
+import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
 
 const fmtRupee = (v) => {
   if (v == null || v === '' || isNaN(v)) return '—';
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+const fmtNum = (v) => {
+  if (v == null || v === '' || isNaN(v)) return '—';
+  return Number(v).toFixed(2);
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const isMissingResourceError = (err) => {
@@ -41,6 +46,7 @@ function StockAlertsPage() {
   const [setupSideFilter, setSetupSideFilter] = useState('all');
   const [weeklyAlertTypeFilter, setWeeklyAlertTypeFilter] = useState('all');
   const [rsiAlertTypeFilter, setRsiAlertTypeFilter] = useState('all');
+  const [selectedSymbols, setSelectedSymbols] = useState([]);
   const [page, setPage] = useState(1);
   const [sortCol, setSortCol] = useState('');
   const [sortDir, setSortDir] = useState('desc');
@@ -166,6 +172,14 @@ function StockAlertsPage() {
     return 'unknown';
   };
 
+  const getAlertLevel = (row, key) => {
+    return row?.[key]
+      ?? row?.signal_detail?.[key]
+      ?? row?.[key === 'entry' ? 'entry_price' : key]
+      ?? row?.[key === 'stop_loss' ? 'sl' : key]
+      ?? null;
+  };
+
   const weeklyCrossRows = useMemo(
     () => advisorAlerts
       .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
@@ -183,6 +197,140 @@ function StockAlertsPage() {
       .slice(0, 100),
     [advisorAlerts, setupSideFilter, rsiAlertTypeFilter]
   );
+
+  const groupedAlertRows = useMemo(() => {
+    const grouped = new Map();
+    const rows = [...weeklyCrossRows, ...divergenceRows];
+    rows.forEach((row) => {
+      const alertType = String(row?.alert_type || '').toLowerCase();
+      const symbol = String(row?.symbol || '').trim().toUpperCase();
+      if (!alertType || !symbol) return;
+      if (!grouped.has(alertType)) {
+        grouped.set(alertType, new Set());
+      }
+      grouped.get(alertType).add(symbol);
+    });
+    return [...grouped.entries()]
+      .map(([alertType, symbolsSet]) => {
+        const symbols = [...symbolsSet].sort();
+        return {
+          alertType,
+          count: symbols.length,
+          symbols,
+          csv: symbols.join(','),
+        };
+      })
+      .sort((a, b) => b.count - a.count || a.alertType.localeCompare(b.alertType));
+  }, [weeklyCrossRows, divergenceRows]);
+
+  const selectedCsv = useMemo(
+    () => selectedSymbols.join(','),
+    [selectedSymbols]
+  );
+
+  const weeklyVisibleSymbols = useMemo(
+    () => [...new Set(weeklyCrossRows.map((a) => String(a.symbol || '').trim().toUpperCase()).filter(Boolean))],
+    [weeklyCrossRows]
+  );
+
+  const divergenceVisibleSymbols = useMemo(
+    () => [...new Set(divergenceRows.map((a) => String(a.symbol || '').trim().toUpperCase()).filter(Boolean))],
+    [divergenceRows]
+  );
+
+  const isSymbolSelected = useCallback(
+    (symbol) => selectedSymbols.includes(String(symbol || '').trim().toUpperCase()),
+    [selectedSymbols]
+  );
+
+  const toggleSymbolSelection = (symbol) => {
+    const s = String(symbol || '').trim().toUpperCase();
+    if (!s) return;
+    setSelectedSymbols((prev) => (
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+    ));
+  };
+
+  const toggleSymbolsSelection = (symbols, checked) => {
+    const normalized = [...new Set((symbols || []).map((s) => String(s || '').trim().toUpperCase()).filter(Boolean))];
+    if (!normalized.length) return;
+    setSelectedSymbols((prev) => {
+      if (!checked) {
+        return prev.filter((s) => !normalized.includes(s));
+      }
+      const next = new Set(prev);
+      normalized.forEach((s) => next.add(s));
+      return [...next];
+    });
+  };
+
+  const handleCopySelectedCsv = async () => {
+    if (!selectedSymbols.length) {
+      setErrorMsg('Select at least one symbol first.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(selectedCsv);
+      setStatusMsg(`Copied ${selectedSymbols.length} symbols to clipboard as CSV.`);
+    } catch (e) {
+      setErrorMsg(e?.message || 'Clipboard copy failed. You can copy from the CSV text box.');
+    }
+  };
+
+  const handleCopyCsvText = async (csvText) => {
+    if (!csvText) return;
+    try {
+      await navigator.clipboard.writeText(csvText);
+      const cnt = csvText.split(',').filter(Boolean).length;
+      setStatusMsg(`Copied ${cnt} symbols to clipboard as CSV.`);
+    } catch (e) {
+      setErrorMsg(e?.message || 'Clipboard copy failed.');
+    }
+  };
+
+  const handleSelectSymbols = (symbols) => {
+    const normalized = [...new Set((symbols || []).map((s) => String(s || '').trim().toUpperCase()).filter(Boolean))];
+    if (!normalized.length) return;
+    setSelectedSymbols(normalized);
+    setStatusMsg(`Loaded ${normalized.length} symbols into selection.`);
+  };
+
+  const handleAddSelectedToList = async (listType) => {
+    if (!selectedSymbols.length) {
+      setErrorMsg('Select at least one symbol first.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const settled = await Promise.allSettled(
+        selectedSymbols.map((symbol) => addToWatchlist(symbol, listType))
+      );
+      const ok = settled.filter((r) => r.status === 'fulfilled').length;
+      const fail = settled.length - ok;
+      setStatusMsg(
+        fail > 0
+          ? `Added ${ok} symbols to ${listType.replace('_', ' ')}. ${fail} failed/duplicate entries.`
+          : `Added ${ok} symbols to ${listType.replace('_', ' ')}.`
+      );
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to add selected symbols to watchlist.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRun5mScanNow = async () => {
+    try {
+      setLoading(true);
+      await triggerLiveSignalScanNow();
+      setStatusMsg('5m scan executed. Refreshing alerts now.');
+      await load();
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to run 5m scan now.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <TableSection>
@@ -213,10 +361,39 @@ function StockAlertsPage() {
         <Button size="small" variant="outlined" onClick={handleGenerateFromOldData} sx={{ textTransform: 'none', fontSize: 12 }}>
           Generate From Old Data
         </Button>
+        <Button size="small" variant="outlined" onClick={handleRun5mScanNow} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Run 5m Scan Now
+        </Button>
         <Button size="small" variant="outlined" color="error" onClick={handleClearHistory} sx={{ textTransform: 'none', fontSize: 12 }}>
           Clear History
         </Button>
       </Box>
+      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button size="small" variant="contained" onClick={handleCopySelectedCsv} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Copy Selected CSV
+        </Button>
+        <Button size="small" variant="outlined" onClick={() => handleAddSelectedToList('short_term')} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Add Selected to ST
+        </Button>
+        <Button size="small" variant="outlined" onClick={() => handleAddSelectedToList('long_term')} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Add Selected to LT
+        </Button>
+        <Button size="small" variant="text" onClick={() => setSelectedSymbols([])} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Clear Selection
+        </Button>
+        <Box sx={{ fontSize: 12, color: '#666' }}>
+          Selected symbols: {selectedSymbols.length}
+        </Box>
+      </Box>
+      <TextField
+        size="small"
+        fullWidth
+        label="Selected Symbols CSV"
+        value={selectedCsv}
+        placeholder="Select symbols from Weekly / Divergence tables"
+        InputProps={{ readOnly: true }}
+        sx={{ mb: 1 }}
+      />
       {statusMsg ? <Alert severity="success" sx={{ mb: 1 }}>{statusMsg}</Alert> : null}
       {errorMsg ? <Alert severity="error" sx={{ mb: 1 }}>{errorMsg}</Alert> : null}
 
@@ -271,6 +448,46 @@ function StockAlertsPage() {
       )}
 
       <Box sx={{ mt: 3 }}>
+        <TableTitle>1 Alert - Multiple Stocks (Unique Symbols)</TableTitle>
+        <TableWrapper>
+          <Table style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={compact}>Alert Type</th>
+                <th style={compact}>Unique Stocks</th>
+                <th style={compact}>Symbols (CSV)</th>
+                <th style={compact}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedAlertRows.map((r) => (
+                <tr key={`grp_${r.alertType}`}>
+                  <td style={{ ...compact, fontWeight: 600 }}>{r.alertType}</td>
+                  <td style={compact}>{r.count}</td>
+                  <td style={{ ...compact, maxWidth: 640, whiteSpace: 'normal' }}>{r.csv || '—'}</td>
+                  <td style={compact}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button size="small" variant="text" onClick={() => handleCopyCsvText(r.csv)} sx={{ textTransform: 'none', fontSize: 12 }}>
+                        Copy CSV
+                      </Button>
+                      <Button size="small" variant="text" onClick={() => handleSelectSymbols(r.symbols)} sx={{ textTransform: 'none', fontSize: 12 }}>
+                        Select All
+                      </Button>
+                    </Box>
+                  </td>
+                </tr>
+              ))}
+              {groupedAlertRows.length === 0 && (
+                <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                  No grouped alert symbols available.
+                </td></tr>
+              )}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
         <TableTitle>Weekly Level Cross Alerts (Backend)</TableTitle>
         <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
           <Select
@@ -287,14 +504,42 @@ function StockAlertsPage() {
             <MenuItem value="weekly_cross_down_mid">weekly_cross_down_mid</MenuItem>
             <MenuItem value="weekly_cross_down_high">weekly_cross_down_high</MenuItem>
           </Select>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => toggleSymbolsSelection(weeklyVisibleSymbols, true)}
+            sx={{ textTransform: 'none', fontSize: 12 }}
+          >
+            Select All Visible
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => toggleSymbolsSelection(weeklyVisibleSymbols, false)}
+            sx={{ textTransform: 'none', fontSize: 12 }}
+          >
+            Clear Visible
+          </Button>
         </Box>
         <TableWrapper>
           <Table style={{ fontSize: 12 }}>
             <thead>
               <tr>
+                <th style={compact}>
+                  <Checkbox
+                    size="small"
+                    checked={weeklyVisibleSymbols.length > 0 && weeklyVisibleSymbols.every((s) => isSymbolSelected(s))}
+                    indeterminate={weeklyVisibleSymbols.some((s) => isSymbolSelected(s)) && !weeklyVisibleSymbols.every((s) => isSymbolSelected(s))}
+                    onChange={(e) => toggleSymbolsSelection(weeklyVisibleSymbols, e.target.checked)}
+                  />
+                </th>
                 <th style={compact}>Time</th>
                 <th style={compact}>Symbol</th>
                 <th style={compact}>Alert</th>
+                <th style={compact}>Entry</th>
+                <th style={compact}>SL</th>
+                <th style={compact}>T1</th>
+                <th style={compact}>T2</th>
                 <th style={compact}>Severity</th>
                 <th style={compact}>Message</th>
                 <th style={compact}>Telegram</th>
@@ -303,16 +548,27 @@ function StockAlertsPage() {
             <tbody>
               {weeklyCrossRows.map((a) => (
                   <tr key={`advisor_${a.id}`}>
+                    <td style={compact}>
+                      <Checkbox
+                        size="small"
+                        checked={isSymbolSelected(a.symbol)}
+                        onChange={() => toggleSymbolSelection(a.symbol)}
+                      />
+                    </td>
                     <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
                     <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
                     <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
+                    <td style={compact}>{fmtNum(getAlertLevel(a, 'entry'))}</td>
+                    <td style={compact}>{fmtNum(getAlertLevel(a, 'stop_loss'))}</td>
+                    <td style={compact}>{fmtNum(getAlertLevel(a, 'target_1'))}</td>
+                    <td style={compact}>{fmtNum(getAlertLevel(a, 'target_2'))}</td>
                     <td style={compact}>{a.severity || '—'}</td>
                     <td style={{ ...compact, maxWidth: 500, whiteSpace: 'normal' }}>{a.message || '—'}</td>
                     <td style={compact}>{a.is_sent_telegram ? 'Sent' : 'Pending'}</td>
                   </tr>
                 ))}
               {weeklyCrossRows.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
                   No weekly level cross alerts yet.
                 </td></tr>
               )}
@@ -334,14 +590,42 @@ function StockAlertsPage() {
             <MenuItem value="rsi_divergence_bullish_5m">rsi_divergence_bullish_5m</MenuItem>
             <MenuItem value="rsi_divergence_bearish_5m">rsi_divergence_bearish_5m</MenuItem>
           </Select>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => toggleSymbolsSelection(divergenceVisibleSymbols, true)}
+            sx={{ textTransform: 'none', fontSize: 12 }}
+          >
+            Select All Visible
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => toggleSymbolsSelection(divergenceVisibleSymbols, false)}
+            sx={{ textTransform: 'none', fontSize: 12 }}
+          >
+            Clear Visible
+          </Button>
         </Box>
         <TableWrapper>
           <Table style={{ fontSize: 12 }}>
             <thead>
               <tr>
+                <th style={compact}>
+                  <Checkbox
+                    size="small"
+                    checked={divergenceVisibleSymbols.length > 0 && divergenceVisibleSymbols.every((s) => isSymbolSelected(s))}
+                    indeterminate={divergenceVisibleSymbols.some((s) => isSymbolSelected(s)) && !divergenceVisibleSymbols.every((s) => isSymbolSelected(s))}
+                    onChange={(e) => toggleSymbolsSelection(divergenceVisibleSymbols, e.target.checked)}
+                  />
+                </th>
                 <th style={compact}>Time</th>
                 <th style={compact}>Symbol</th>
                 <th style={compact}>Type</th>
+                <th style={compact}>Entry</th>
+                <th style={compact}>SL</th>
+                <th style={compact}>T1</th>
+                <th style={compact}>T2</th>
                 <th style={compact}>Severity</th>
                 <th style={compact}>Message</th>
                 <th style={compact}>Telegram</th>
@@ -350,16 +634,27 @@ function StockAlertsPage() {
             <tbody>
               {divergenceRows.map((a) => (
                 <tr key={`div_${a.id}`}>
+                  <td style={compact}>
+                    <Checkbox
+                      size="small"
+                      checked={isSymbolSelected(a.symbol)}
+                      onChange={() => toggleSymbolSelection(a.symbol)}
+                    />
+                  </td>
                   <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
+                  <td style={compact}>{fmtNum(getAlertLevel(a, 'entry'))}</td>
+                  <td style={compact}>{fmtNum(getAlertLevel(a, 'stop_loss'))}</td>
+                  <td style={compact}>{fmtNum(getAlertLevel(a, 'target_1'))}</td>
+                  <td style={compact}>{fmtNum(getAlertLevel(a, 'target_2'))}</td>
                   <td style={compact}>{a.severity || '—'}</td>
                   <td style={{ ...compact, maxWidth: 500, whiteSpace: 'normal' }}>{a.message || '—'}</td>
                   <td style={compact}>{a.is_sent_telegram ? 'Sent' : 'Pending'}</td>
                 </tr>
               ))}
               {divergenceRows.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
                   No RSI divergence alerts yet.
                 </td></tr>
               )}
