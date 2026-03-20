@@ -251,7 +251,7 @@ function PriceShockersPage() {
         </Box>
       </Box>
       <TableSection>
-        <TableTitle>Price Shockers</TableTitle>
+        <TableTitle>Top Movers</TableTitle>
         <TableWrapper>
           <Table>
             <thead>

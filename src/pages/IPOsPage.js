@@ -31,6 +31,17 @@ const formatGain = (v) => {
   return `${sign}${n.toFixed(2)}%`;
 };
 
+const parseIpoDate = (value) => {
+  const text = String(value || '').trim();
+  if (!text || text === '—') return null;
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct;
+  const normalized = text.replace(/,/g, '').replace(/\s+/g, '-');
+  const fallback = new Date(normalized);
+  if (!Number.isNaN(fallback.getTime())) return fallback;
+  return null;
+};
+
 function IPOsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
@@ -88,6 +99,8 @@ function IPOsPage() {
           isSme: ipo.is_sme ? 'SME' : '',
           _rawSubscription: parseFloat(ipo.subscription_times) || 0,
           _rawListingGain: ipo.listing_gain ?? 0,
+          _issueStartTs: parseIpoDate(ipo.issue_start_date)?.getTime() || null,
+          _listingTs: parseIpoDate(ipo.listing_date)?.getTime() || null,
         }));
         setTableData(mapped);
         setIsLoading(false);
@@ -119,7 +132,25 @@ function IPOsPage() {
   };
 
   const sortedData = useMemo(() => {
-    if (!sortConfig.key) return filteredData;
+    if (!sortConfig.key) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const nowTs = todayStart.getTime();
+      return [...filteredData].sort((a, b) => {
+        const aUpcoming = a._issueStartTs != null && a._issueStartTs >= nowTs;
+        const bUpcoming = b._issueStartTs != null && b._issueStartTs >= nowTs;
+        if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+        if (aUpcoming && bUpcoming) {
+          return (a._issueStartTs || 0) - (b._issueStartTs || 0);
+        }
+        const aListedTs = a._listingTs || 0;
+        const bListedTs = b._listingTs || 0;
+        if (aListedTs !== bListedTs) return bListedTs - aListedTs;
+        const aIssueTs = a._issueStartTs || 0;
+        const bIssueTs = b._issueStartTs || 0;
+        return bIssueTs - aIssueTs;
+      });
+    }
     const sorted = [...filteredData].sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
@@ -144,6 +175,10 @@ function IPOsPage() {
     const start = (page - 1) * rowsPerPage;
     return sortedData.slice(start, start + rowsPerPage);
   }, [sortedData, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, sortConfig]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({

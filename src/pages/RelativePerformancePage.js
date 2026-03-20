@@ -220,7 +220,7 @@ function RelativePerformancePage() {
         </Box>
       </Box>
       <TableSection>
-        <TableTitle>Relative Performance</TableTitle>
+        <TableTitle>Alpha Tracker</TableTitle>
         <TableWrapper>
           <Table>
             <thead>

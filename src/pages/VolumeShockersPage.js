@@ -217,7 +217,7 @@ function VolumeShockersPage() {
         </Box>
       </Box>
       <TableSection>
-        <TableTitle>Volume Shockers</TableTitle>
+        <TableTitle>Volume movers</TableTitle>
         <TableWrapper>
           <Table>
             <thead>

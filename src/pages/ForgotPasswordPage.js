@@ -12,11 +12,8 @@ function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [flowId, setFlowId] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
-  const [mobileOtp, setMobileOtp] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
   const [hint, setHint] = useState('');
-  const [requires, setRequires] = useState(['email', 'mobile']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -26,12 +23,12 @@ function ForgotPasswordPage() {
     [identifier, newPassword]
   );
   const canVerifyEmail = useMemo(() => flowId && emailOtp.length >= 4, [flowId, emailOtp]);
-  const canVerifyMobile = useMemo(() => flowId && mobileOtp.length >= 4, [flowId, mobileOtp]);
-  const requiresMobile = useMemo(() => requires.includes('mobile'), [requires]);
-  const verificationReady = useMemo(
-    () => emailVerified && (!requiresMobile || mobileVerified),
-    [emailVerified, mobileVerified, requiresMobile]
-  );
+  const verificationReady = useMemo(() => emailVerified, [emailVerified]);
+  const authInputSx = {
+    '& .MuiInputBase-input': { color: '#0f172a', fontWeight: 500 },
+    '& .MuiFormLabel-root': { color: '#334155' },
+    '& .MuiFormHelperText-root': { color: '#64748b' },
+  };
 
   const startReset = async (e) => {
     e.preventDefault();
@@ -42,15 +39,9 @@ function ForgotPasswordPage() {
     try {
       const res = await forgotPasswordStart(identifier.trim());
       setFlowId(res?.flow_id || '');
-      const nextRequires = Array.isArray(res?.requires) && res.requires.length ? res.requires : ['email'];
-      setRequires(nextRequires);
-      setHint(
-        nextRequires.includes('mobile')
-          ? `OTP sent to ${res?.masked_email || 'registered email'} and ${res?.masked_mobile || 'registered mobile'}`
-          : `OTP sent to ${res?.masked_email || 'registered email'}`
-      );
-      if (res?.debug_otp?.email || res?.debug_otp?.mobile) {
-        setHint((prev) => `${prev}. Test OTPs: email=${res?.debug_otp?.email || '-'} mobile=${res?.debug_otp?.mobile || '-'}`);
+      setHint(`OTP sent to ${res?.masked_email || 'registered email'}`);
+      if (res?.debug_otp?.email) {
+        setHint((prev) => `${prev}. Test OTP: email=${res?.debug_otp?.email}`);
       }
     } catch (err) {
       setError(err?.message || 'Unable to start password reset.');
@@ -60,7 +51,7 @@ function ForgotPasswordPage() {
   };
 
   const onVerify = async (channel) => {
-    const code = channel === 'email' ? emailOtp : mobileOtp;
+    const code = emailOtp;
     if (!flowId || !code) return;
     setLoading(true);
     setError('');
@@ -68,8 +59,7 @@ function ForgotPasswordPage() {
     try {
       await verifyOtp(flowId, 'reset_password', channel, code);
       if (channel === 'email') setEmailVerified(true);
-      if (channel === 'mobile') setMobileVerified(true);
-      setMessage(`${channel === 'email' ? 'Email' : 'Mobile'} OTP verified.`);
+      setMessage('Email OTP verified.');
     } catch (err) {
       setError(err?.message || `Failed to verify ${channel} OTP.`);
     } finally {
@@ -84,7 +74,7 @@ function ForgotPasswordPage() {
     setMessage('');
     try {
       const res = await resendOtp(flowId, 'reset_password', channel);
-      setMessage(`${channel === 'email' ? 'Email' : 'Mobile'} OTP resent.`);
+      setMessage('Email OTP resent.');
       if (res?.debug_otp) {
         setMessage((prev) => `${prev} Test OTP: ${res.debug_otp}`);
       }
@@ -112,10 +102,40 @@ function ForgotPasswordPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, background: '#f5f7fb' }}>
-      <Card sx={{ width: '100%', maxWidth: 560 }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 2,
+        background: 'radial-gradient(circle at 15% 20%, #1d4ed8 0%, #0b1630 45%, #060b19 100%)',
+      }}
+    >
+      <Card
+        sx={{
+          width: '100%',
+          maxWidth: 560,
+          borderRadius: 3,
+          boxShadow: '0 20px 56px rgba(30, 64, 175, 0.2)',
+          border: '1px solid rgba(30, 64, 175, 0.2)',
+          backgroundColor: '#ffffff',
+        }}
+      >
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            color: '#fff',
+            background: 'linear-gradient(110deg, #1d4ed8 0%, #0ea5e9 100%)',
+          }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>Forgot Password</Typography>
+          <Typography variant="body2" sx={{ opacity: 0.92 }}>
+            Reset securely with email OTP
+          </Typography>
+        </Box>
         <CardContent>
-          <Typography variant="h5" sx={{ mb: 2 }}>Forgot Password</Typography>
           {!flowId ? (
             <Box component="form" onSubmit={startReset} sx={{ display: 'grid', gap: 1.2 }}>
               <TextField
@@ -123,6 +143,7 @@ function ForgotPasswordPage() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 size="small"
+                sx={authInputSx}
               />
               <TextField
                 label="New Password"
@@ -131,8 +152,20 @@ function ForgotPasswordPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 size="small"
                 helperText="Min 8 chars with uppercase, lowercase, number and special character"
+                sx={authInputSx}
               />
-              <Button type="submit" variant="contained" disabled={!canStart || loading}>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={!canStart || loading}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  backgroundColor: '#1d4ed8',
+                  '&:hover': { backgroundColor: '#1e40af' },
+                  '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
+                }}
+              >
                 {loading ? 'Sending OTP...' : 'Send OTP for Reset'}
               </Button>
             </Box>
@@ -146,38 +179,51 @@ function ForgotPasswordPage() {
                 onChange={(e) => setEmailOtp(onlyDigits(e.target.value))}
                 disabled={emailVerified}
                 helperText={emailVerified ? 'Email OTP verified' : 'Enter OTP sent to email'}
+                sx={authInputSx}
               />
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Button variant="contained" disabled={!canVerifyEmail || loading || emailVerified} onClick={() => onVerify('email')}>
+                <Button
+                  variant="contained"
+                  disabled={!canVerifyEmail || loading || emailVerified}
+                  onClick={() => onVerify('email')}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    backgroundColor: '#1d4ed8',
+                    '&:hover': { backgroundColor: '#1e40af' },
+                    '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
+                  }}
+                >
                   Verify Email OTP
                 </Button>
-                <Button variant="outlined" disabled={loading || emailVerified} onClick={() => onResend('email')}>
+                <Button
+                  variant="outlined"
+                  disabled={loading || emailVerified}
+                  onClick={() => onResend('email')}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    color: '#1d4ed8',
+                    borderColor: '#2563eb',
+                    '&:hover': { borderColor: '#1e40af', backgroundColor: '#eff6ff' },
+                    '&.Mui-disabled': { borderColor: '#cbd5e1', color: '#94a3b8' },
+                  }}
+                >
                   Resend Email OTP
                 </Button>
               </Box>
 
-              {requiresMobile ? (
-                <>
-                  <TextField
-                    size="small"
-                    label="Mobile OTP"
-                    value={mobileOtp}
-                    onChange={(e) => setMobileOtp(onlyDigits(e.target.value))}
-                    disabled={mobileVerified}
-                    helperText={mobileVerified ? 'Mobile OTP verified' : 'Enter OTP sent to mobile'}
-                  />
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Button variant="contained" disabled={!canVerifyMobile || loading || mobileVerified} onClick={() => onVerify('mobile')}>
-                      Verify Mobile OTP
-                    </Button>
-                    <Button variant="outlined" disabled={loading || mobileVerified} onClick={() => onResend('mobile')}>
-                      Resend Mobile OTP
-                    </Button>
-                  </Box>
-                </>
-              ) : null}
-
-              <Button color="success" variant="contained" disabled={!verificationReady || loading} onClick={completeReset}>
+              <Button
+                color="success"
+                variant="contained"
+                disabled={!verificationReady || loading}
+                onClick={completeReset}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
+                }}
+              >
                 Reset Password
               </Button>
             </Box>
@@ -185,7 +231,7 @@ function ForgotPasswordPage() {
 
           {error ? <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert> : null}
           {message ? <Alert severity="success" sx={{ mt: 2 }}>{message}</Alert> : null}
-          <Button variant="text" onClick={() => navigate('/login')} sx={{ mt: 1, textTransform: 'none' }}>
+          <Button variant="text" onClick={() => navigate('/login')} sx={{ mt: 1, textTransform: 'none', color: '#1d4ed8', fontWeight: 700 }}>
             Back to Login
           </Button>
         </CardContent>

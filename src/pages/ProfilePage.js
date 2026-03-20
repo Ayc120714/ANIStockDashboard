@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -99,8 +99,6 @@ function ProfilePage() {
   const [aiKeys, setAiKeys] = useState([]);
   const [aiKeyDrafts, setAiKeyDrafts] = useState({});
   const [aiBusy, setAiBusy] = useState(false);
-  const autoBrokerConnectAttemptedRef = useRef(false);
-  const onValidateBrokerRef = useRef(null);
   const isLiveExecution = (row) => Boolean(row?.is_enabled && row?.has_session) || Boolean(row?.live_enabled);
   const brokerDraftKey = useCallback(
     (broker) => `broker_integration_draft_${userId}_${String(broker || '').toLowerCase()}`,
@@ -325,7 +323,7 @@ function ProfilePage() {
         {
           broker,
           client_id: '',
-          is_enabled: true,
+          is_enabled: false,
           has_session: false,
           live_enabled: false,
           credentials: emptyCredentials(broker),
@@ -350,7 +348,7 @@ function ProfilePage() {
         {
           broker,
           client_id: '',
-          is_enabled: true,
+          is_enabled: false,
           has_session: false,
           live_enabled: false,
           credentials: { ...emptyCredentials(broker), [key]: value },
@@ -590,7 +588,25 @@ function ProfilePage() {
     () => brokerRows.find((r) => r.broker === selectedBroker) || brokerRows[0] || null,
     [brokerRows, selectedBroker]
   );
-  onValidateBrokerRef.current = onValidateBroker;
+  const hasBrokerCredentials = useMemo(() => {
+    if (!activeBrokerRow) return false;
+    const broker = String(activeBrokerRow.broker || '').toLowerCase();
+    const clientId = String(activeBrokerRow.client_id || activeBrokerRow.credentials?.mobile || '').trim();
+    const pin = String(activeBrokerRow.credentials?.pin || '').trim();
+    const totp = String(activeBrokerRow.credentials?.totp || '').trim();
+    const accessToken = String(activeBrokerRow.credentials?.access_token || '').trim();
+    const apiKey = String(activeBrokerRow.credentials?.api_key || '').trim();
+    const apiSecret = String(activeBrokerRow.credentials?.api_secret || '').trim();
+    const authCode = String(activeBrokerRow.credentials?.auth_code || '').trim();
+    const clientSecret = String(activeBrokerRow.credentials?.client_secret || '').trim();
+    const redirectUri = String(activeBrokerRow.credentials?.redirect_uri || '').trim();
+
+    if (broker === 'dhan') return Boolean(clientId && ((pin && totp) || accessToken || (apiKey && apiSecret)));
+    if (broker === 'samco') return Boolean(clientId && (pin || accessToken));
+    if (broker === 'angelone') return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
+    if (broker === 'upstox') return Boolean(clientId && (accessToken || (authCode && clientSecret && redirectUri)));
+    return Boolean(clientId);
+  }, [activeBrokerRow]);
 
   const setAiDraft = (provider, value) => {
     setAiKeyDrafts((prev) => ({ ...prev, [provider]: value }));
@@ -650,28 +666,6 @@ function ProfilePage() {
       setAiBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (!onboardingBrokerSetup) return;
-    if (autoBrokerConnectAttemptedRef.current) return;
-    const dhanRow = brokerRows.find((r) => r.broker === 'dhan') || null;
-    if (!dhanRow || dhanRow.has_session) return;
-    const hasClient = Boolean(String(dhanRow.client_id || '').trim() || String(dhanRow.credentials?.mobile || '').trim());
-    const hasConsentKeys = Boolean(
-      String(dhanRow.credentials?.api_key || '').trim()
-      && String(dhanRow.credentials?.api_secret || '').trim()
-    );
-    const hasDirectAuth = Boolean(
-      String(dhanRow.credentials?.pin || '').trim()
-      && String(dhanRow.credentials?.totp || '').trim()
-    );
-    if (!(hasClient && (hasConsentKeys || hasDirectAuth))) return;
-    autoBrokerConnectAttemptedRef.current = true;
-    setSelectedBroker('dhan');
-    if (onValidateBrokerRef.current) {
-      onValidateBrokerRef.current(dhanRow);
-    }
-  }, [onboardingBrokerSetup, brokerRows]);
 
   return (
     <Box sx={{ p: 2 }}>
@@ -894,7 +888,13 @@ function ProfilePage() {
               <Button size="small" variant="outlined" onClick={() => onSaveBroker(activeBrokerRow)} disabled={busy} sx={{ textTransform: 'none' }}>
                 Save
               </Button>
-              <Button size="small" variant="contained" onClick={() => onValidateBroker(activeBrokerRow)} disabled={busy} sx={{ textTransform: 'none' }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => onValidateBroker(activeBrokerRow)}
+                disabled={busy || !Boolean(activeBrokerRow?.is_enabled) || !hasBrokerCredentials}
+                sx={{ textTransform: 'none' }}
+              >
                 Validate & Create Session
               </Button>
               {activeBrokerRow.broker === 'dhan' ? (
@@ -912,6 +912,16 @@ function ProfilePage() {
               <Typography sx={{ fontSize: 12, color: '#666', mb: 1 }}>
                 Enter mobile/client id, PIN and TOTP, then click <b>Validate &amp; Create Session</b>. If consent redirect is needed, complete it and return to <code>https://localhost:3000/callback</code>.
               </Typography>
+            ) : null}
+            {!Boolean(activeBrokerRow?.is_enabled) ? (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                Broker login is disabled by default. Turn on <b>Enable now</b> after entering your broker details.
+              </Alert>
+            ) : null}
+            {Boolean(activeBrokerRow?.is_enabled) && !hasBrokerCredentials ? (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                Enter required broker details to enable <b>Validate &amp; Create Session</b>.
+              </Alert>
             ) : null}
             {activeBrokerRow.broker === 'dhan' ? (
               <Alert severity="info" sx={{ mb: 1 }}>

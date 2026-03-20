@@ -21,14 +21,14 @@ function ScreensPage() {
         <Tab active={activeTab === 'Trending'} onClick={() => setActiveTab('Trending')}>
           Trending
         </Tab>
-        <Tab active={activeTab === 'Price Shockers'} onClick={() => setActiveTab('Price Shockers')}>
-          Price Shockers
+        <Tab active={activeTab === 'Top Movers'} onClick={() => setActiveTab('Top Movers')}>
+          Top Movers
         </Tab>
-        <Tab active={activeTab === 'Volume Shockers'} onClick={() => setActiveTab('Volume Shockers')}>
-          Volume Shockers
+        <Tab active={activeTab === 'Volume movers'} onClick={() => setActiveTab('Volume movers')}>
+          Volume movers
         </Tab>
-        <Tab active={activeTab === 'Relative Performance'} onClick={() => setActiveTab('Relative Performance')}>
-          Relative Performance
+        <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
+          Alpha Tracker
         </Tab>
         <Tab active={activeTab === 'Live Screener'} onClick={() => setActiveTab('Live Screener')}>
           Live Screener
@@ -46,16 +46,16 @@ function ScreensPage() {
         {activeTab === 'Trending' ? <TrendingPage /> : null}
       </TabContent>
 
-      <TabContent active={activeTab === 'Price Shockers'}>
-        {activeTab === 'Price Shockers' ? <PriceShockersPage /> : null}
+      <TabContent active={activeTab === 'Top Movers'}>
+        {activeTab === 'Top Movers' ? <PriceShockersPage /> : null}
       </TabContent>
 
-      <TabContent active={activeTab === 'Volume Shockers'}>
-        {activeTab === 'Volume Shockers' ? <VolumeShockersPage /> : null}
+      <TabContent active={activeTab === 'Volume movers'}>
+        {activeTab === 'Volume movers' ? <VolumeShockersPage /> : null}
       </TabContent>
 
-      <TabContent active={activeTab === 'Relative Performance'}>
-        {activeTab === 'Relative Performance' ? <RelativePerformancePage /> : null}
+      <TabContent active={activeTab === 'Alpha Tracker'}>
+        {activeTab === 'Alpha Tracker' ? <RelativePerformancePage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Live Screener'}>

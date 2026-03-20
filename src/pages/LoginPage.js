@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { adminPasswordlessLogin, loginStart, loginWithEmailOtpStart } from '../api/auth';
+import { loginStart, loginWithEmailOtpStart } from '../api/auth';
 import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
-const DEFAULT_ADMIN_EMAIL = 'gvc1990@gmail.com';
 const AYC_LOGO_PATH = '/ayc-logo.png';
 const CARD_FONT_FAMILY = '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif';
 
@@ -97,11 +96,6 @@ function LoginPage() {
     [email, password]
   );
   const canEmailOtp = useMemo(() => email.trim().length > 4, [email]);
-  const canPasswordlessAdminLogin = useMemo(
-    () => email.trim().toLowerCase() === DEFAULT_ADMIN_EMAIL,
-    [email]
-  );
-  const showPasswordField = !canPasswordlessAdminLogin;
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -135,25 +129,6 @@ function LoginPage() {
     }
   };
 
-  const onAdminPasswordlessLogin = async () => {
-    if (!canPasswordlessAdminLogin) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await adminPasswordlessLogin(email.trim());
-      persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-      await routeAfterLogin({
-        nextUser: res?.user || null,
-        fallbackPath: location.state?.from?.pathname || '/',
-        navigate,
-      });
-    } catch (err) {
-      setError(err?.message || 'Admin passwordless login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onEmailOtpLogin = async () => {
     if (!canEmailOtp) return;
     setLoading(true);
@@ -179,6 +154,11 @@ function LoginPage() {
   const frameworkItems = Array.isArray(DEFAULT_LOGIN_CONTENT.frameworkItems) ? DEFAULT_LOGIN_CONTENT.frameworkItems : [];
   const solutionItems = Array.isArray(DEFAULT_LOGIN_CONTENT.solutionItems) ? DEFAULT_LOGIN_CONTENT.solutionItems : [];
   const whyItems = Array.isArray(DEFAULT_LOGIN_CONTENT.whyItems) ? DEFAULT_LOGIN_CONTENT.whyItems : [];
+  const authInputSx = {
+    '& .MuiInputBase-input': { color: '#0f172a', fontWeight: 500 },
+    '& .MuiFormLabel-root': { color: '#334155' },
+    '& .MuiFormHelperText-root': { color: '#64748b' },
+  };
 
   return (
     <Box
@@ -426,10 +406,22 @@ function LoginPage() {
                 },
               }}
             >
-              <CardContent sx={{ p: { xs: 2.2, md: 3 } }}>
-                <Typography variant="h5" sx={{ mb: 0.6, fontWeight: 800, color: '#0f172a', fontSize: 'clamp(26px, 1.5vw, 34px)' }}>
+              <Box
+                sx={{
+                  px: { xs: 2.2, md: 3 },
+                  py: 1.6,
+                  color: '#fff',
+                  background: 'linear-gradient(110deg, #1d4ed8 0%, #0ea5e9 100%)',
+                }}
+              >
+                <Typography sx={{ fontWeight: 800, fontSize: 'clamp(20px, 1.2vw, 28px)' }}>
                   Welcome Back
                 </Typography>
+                <Typography sx={{ opacity: 0.92, fontSize: 'clamp(13px, 0.8vw, 16px)' }}>
+                  Continue with secure email OTP verification
+                </Typography>
+              </Box>
+              <CardContent sx={{ p: { xs: 2.2, md: 3 } }}>
                 <Typography sx={{ mb: 2, color: '#475569', fontSize: 'clamp(14px, 0.85vw, 18px)' }}>
                   Sign in to continue with AYC Industries strategic dashboard.
                 </Typography>
@@ -459,48 +451,56 @@ function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     size="small"
                     autoComplete="email"
+                    sx={authInputSx}
                   />
-                  {showPasswordField ? (
-                    <TextField
-                      label="Password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      size="small"
-                      autoComplete="current-password"
-                    />
-                  ) : (
-                    <Alert severity="info">
-                      Admin email detected. Use quick login below (no password/OTP).
-                    </Alert>
-                  )}
-                  {showPasswordField ? (
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      disabled={!canSubmit || loading}
-                      sx={{ py: 1.1, fontWeight: 700, textTransform: 'none' }}
-                    >
-                      {loading ? 'Sending OTP...' : 'Continue with OTP'}
-                    </Button>
-                  ) : null}
-                  <Button variant="outlined" onClick={onEmailOtpLogin} disabled={!canEmailOtp || loading}>
+                  <TextField
+                    label="Password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    size="small"
+                    autoComplete="current-password"
+                    sx={authInputSx}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={!canSubmit || loading}
+                    sx={{
+                      py: 1.1,
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      backgroundColor: '#1d4ed8',
+                      '&:hover': { backgroundColor: '#1e40af' },
+                      '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
+                    }}
+                  >
+                    {loading ? 'Sending OTP...' : 'Continue with OTP'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={onEmailOtpLogin}
+                    disabled={!canEmailOtp || loading}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      color: '#1d4ed8',
+                      borderColor: '#2563eb',
+                      '&:hover': { borderColor: '#1e40af', backgroundColor: '#eff6ff' },
+                      '&.Mui-disabled': { borderColor: '#cbd5e1', color: '#94a3b8' },
+                    }}
+                  >
                     Login with Email OTP
                   </Button>
-                  {canPasswordlessAdminLogin ? (
-                    <Button variant="outlined" color="warning" onClick={onAdminPasswordlessLogin} disabled={loading}>
-                      Admin Quick Login (No Password / OTP)
-                    </Button>
-                  ) : null}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                    <Button variant="text" onClick={() => navigate('/forgot-user-id')} sx={{ textTransform: 'none', p: 0 }}>
+                    <Button variant="text" onClick={() => navigate('/forgot-user-id')} sx={{ textTransform: 'none', p: 0, color: '#1d4ed8', fontWeight: 700 }}>
                       Forgot User ID?
                     </Button>
-                    <Button variant="text" onClick={() => navigate('/forgot-password')} sx={{ textTransform: 'none', p: 0 }}>
+                    <Button variant="text" onClick={() => navigate('/forgot-password')} sx={{ textTransform: 'none', p: 0, color: '#1d4ed8', fontWeight: 700 }}>
                       Forgot Password?
                     </Button>
                   </Box>
-                  <Button variant="text" onClick={() => navigate('/signup')} sx={{ textTransform: 'none' }}>
+                  <Button variant="text" onClick={() => navigate('/signup')} sx={{ textTransform: 'none', color: '#1d4ed8', fontWeight: 700 }}>
                     New user? Sign up
                   </Button>
                 </Box>
@@ -510,7 +510,7 @@ function LoginPage() {
             <Card
               sx={{
                 borderRadius: 2.4,
-                background: 'rgba(7,17,42,0.75)',
+                background: 'rgba(15,23,42,0.88)',
                 border: '1px solid rgba(96,165,250,0.35)',
                 fontFamily: CARD_FONT_FAMILY,
                 '& .MuiTypography-root': {
@@ -537,7 +537,7 @@ function LoginPage() {
             <Card
               sx={{
                 borderRadius: 2.4,
-                background: 'rgba(7,17,42,0.75)',
+                background: 'rgba(15,23,42,0.88)',
                 border: '1px solid rgba(96,165,250,0.35)',
                 fontFamily: CARD_FONT_FAMILY,
                 '& .MuiTypography-root': {

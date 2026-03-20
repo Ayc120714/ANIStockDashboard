@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './OutlookPage.style';
 import MarketOutlookPage from './MarketOutlookPage';
+import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './OutlookPage.style';
 import SectorOutlookPage from './SectorOutlookPage';
 import SubSectorOutlookPage from './SubSectorOutlookPage';
 
@@ -174,26 +174,26 @@ function resolveMapping(sectorName) {
 }
 
 function OutlookPage() {
-   const [activeTab, setActiveTab] = useState('market');
-   const [selectedSector, setSelectedSector] = useState(null);
-   const [mappedGroups, setMappedGroups] = useState(null);
+  const [activeTab, setActiveTab] = useState('market');
+  const [selectedSector, setSelectedSector] = useState(null);
+  const [mappedGroups, setMappedGroups] = useState(null);
 
-   const handleSectorClick = (sectorName) => {
-     setSelectedSector(sectorName);
-     setMappedGroups(resolveMapping(sectorName));
-     setActiveTab('subsector');
-   };
+  const handleSectorClick = (sectorName) => {
+    setSelectedSector(sectorName);
+    setMappedGroups(resolveMapping(sectorName));
+    setActiveTab('subsector');
+  };
 
   return (
     <PageContainer>
-      <PageTitle>Outlook</PageTitle>
+      <PageTitle>Overview</PageTitle>
       <TabContainer>
-        <Tab active={activeTab === 'market'} onClick={() =>setActiveTab('market')}>Market Outlook</Tab>
+        <Tab active={activeTab === 'market'} onClick={() => setActiveTab('market')}>Market Insights</Tab>
         <Tab active={activeTab === 'sector'} onClick={() => setActiveTab('sector')}>
-          Sector Outlook
+          Sector Insights
         </Tab>
         <Tab active={activeTab === 'subsector'} onClick={() => { setSelectedSector(null); setMappedGroups(null); setActiveTab('subsector'); }} last>
-          Sub Sector Outlook
+          SubSector Insights
         </Tab>
       </TabContainer>
 

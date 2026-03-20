@@ -31,9 +31,9 @@ function Sidebar() {
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Stocks</SectionTitle>
 
-          <NavLink to="/outlook" collapsed={collapsed} title={collapsed ? 'Outlook' : undefined}>
+          <NavLink to="/outlook" collapsed={collapsed} title={collapsed ? 'Overview' : undefined}>
             <MdOutlineShowChart />
-            <span className="label">Outlook</span>
+            <span className="label">Overview</span>
           </NavLink>
 
           <NavLink to="/long-term" collapsed={collapsed} title={collapsed ? 'Long Term' : undefined}>

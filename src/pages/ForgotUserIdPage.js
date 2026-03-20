@@ -30,7 +30,16 @@ function ForgotUserIdPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, background: '#f5f7fb' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 2,
+        background: 'radial-gradient(circle at 15% 20%, #1d4ed8 0%, #0b1630 45%, #060b19 100%)',
+      }}
+    >
       <Card sx={{ width: '100%', maxWidth: 440 }}>
         <CardContent>
           <Typography variant="h5" sx={{ mb: 2 }}>Forgot User ID</Typography>
