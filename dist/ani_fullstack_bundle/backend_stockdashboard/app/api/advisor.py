@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 
 from app.db.database import SessionLocal
-from app.db.models import Alert, HistoricalCandle, StockAnalysis, StockFundamentals, StockRating, StockSectorInfo, TechnicalSignal
+from app.db.models import Alert, HistoricalCandle, Stock, StockAnalysis, StockFundamentals, StockRating, StockSectorInfo, TechnicalSignal
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/advisor", tags=["advisor"])
@@ -212,6 +212,52 @@ def _parse_market_cap_cr(value) -> Optional[float]:
     return num
 
 
+def _latest_intraday_price_map(db, symbols: List[str]) -> dict:
+    """
+    Resolve latest live-ish CMP per symbol using intraday-first sources:
+    1) `stocks` table latest tick (preferred)
+    2) `technical_signals` intraday latest EMA5 fallback
+    """
+    if not symbols:
+        return {}
+
+    out = {}
+    sym_set = {str(s).upper() for s in symbols if s}
+
+    stock_rows = (
+        db.query(Stock)
+        .filter(Stock.symbol.in_(sym_set))
+        .order_by(Stock.symbol.asc(), Stock.timestamp.desc(), Stock.id.desc())
+        .all()
+    )
+    for r in stock_rows:
+        sym = (r.symbol or "").upper()
+        if not sym or sym in out:
+            continue
+        if r.price is not None:
+            out[sym] = float(r.price)
+
+    missing = [s for s in sym_set if s not in out]
+    if missing:
+        intraday_rows = (
+            db.query(TechnicalSignal)
+            .filter(
+                TechnicalSignal.timeframe == "intraday",
+                TechnicalSignal.symbol.in_(missing),
+            )
+            .order_by(TechnicalSignal.symbol.asc(), desc(TechnicalSignal.scan_time), desc(TechnicalSignal.id))
+            .all()
+        )
+        for r in intraday_rows:
+            sym = (r.symbol or "").upper()
+            if not sym or sym in out:
+                continue
+            if r.ema5 is not None:
+                out[sym] = float(r.ema5)
+
+    return out
+
+
 def _latest_5m_metrics(symbol: str) -> dict:
     """
     Fetch latest 5m candle metrics from yfinance.
@@ -374,6 +420,8 @@ def _compute_monthly_macd_setups(db, limit: int = 200) -> List[dict]:
 
     sector_map = {r.symbol: r.sector for r in universe}
     cmp_map = {r.symbol: r.price for r in universe if r.price is not None}
+    # Always prioritize intraday-candle-derived latest prices for setup CMP.
+    cmp_map.update(_latest_intraday_price_map(db, symbols))
 
     # ~4 years to compute stable monthly MACD/EMA
     since = date.today() - timedelta(days=1600)
@@ -766,6 +814,7 @@ def get_ratings(
                 StockSectorInfo.symbol.in_(symbols)
             ).all():
                 cmp_map[si.symbol] = si.price
+            cmp_map.update(_latest_intraday_price_map(db, symbols))
 
         result = []
         for r in rows:
@@ -877,6 +926,8 @@ def get_latest_signals(
                 cmp_cache[si.symbol] = si.price
             if si.ema50 is not None:
                 ema50_cache[si.symbol] = si.ema50
+        # Keep advisor setup outputs aligned to latest intraday candle updates.
+        cmp_cache.update(_latest_intraday_price_map(db, list(stock_symbols)))
 
         weekly_cache = {}
         for w in db.query(TechnicalSignal).filter(

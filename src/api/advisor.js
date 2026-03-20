@@ -203,7 +203,7 @@ export const backfillLevelDivergenceAlerts = async ({
 };
 
 export const triggerLiveSignalScanNow = async () => {
-  return apiPost('/advisor/signals/live-scan-now', {});
+  return apiGet('/advisor/signals/live-scan-now');
 };
 
 export const markAlertRead = async (alertId) => {

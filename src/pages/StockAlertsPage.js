@@ -22,6 +22,17 @@ const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
 };
+const isTodayTimestamp = (value) => {
+  if (!value) return false;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return false;
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear()
+    && dt.getMonth() === now.getMonth()
+    && dt.getDate() === now.getDate()
+  );
+};
 
 const SORTABLE_COLS = [
   { key: 'triggered_at', label: 'Time' },
@@ -71,7 +82,7 @@ function StockAlertsPage() {
       })
       .finally(() => setLoading(false));
 
-    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter })
+    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: true })
       .then((rows) => setAdvisorAlerts(Array.isArray(rows) ? rows : []))
       .catch(() => setAdvisorAlerts([]));
   }, [userId, symbolFilter]);
@@ -91,6 +102,7 @@ function StockAlertsPage() {
 
   const filteredData = useMemo(() => {
     return data.filter((row) => {
+      if (!isTodayTimestamp(row.triggered_at)) return false;
       if (listTypeFilter && String(row.list_type || '').toLowerCase() !== listTypeFilter.toLowerCase()) return false;
       if (symbolFilter && !String(row.symbol || '').toLowerCase().includes(symbolFilter.toLowerCase())) return false;
       return true;
@@ -222,6 +234,7 @@ function StockAlertsPage() {
     },
     [advisorAlerts, setupSideFilter, rsiAlertTypeFilter]
   );
+
 
   const groupedAlertRows = useMemo(() => {
     const grouped = new Map();
@@ -359,7 +372,7 @@ function StockAlertsPage() {
 
   return (
     <TableSection>
-      <TableTitle>Stock Alerts</TableTitle>
+      <TableTitle>Stock Alerts (Today)</TableTitle>
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Select size="small" value={listTypeFilter} onChange={e => { setListTypeFilter(e.target.value); setPage(1); }} displayEmpty sx={{ width: 140 }}>
@@ -458,7 +471,7 @@ function StockAlertsPage() {
               ))}
               {paged.length === 0 && (
                 <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
-                  No alert history matching filters.
+                  No alerts triggered today for the selected list/filter.
                 </td></tr>
               )}
             </tbody>
