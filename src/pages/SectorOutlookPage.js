@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   TableSection,
   TableTitle,
@@ -10,6 +10,8 @@ import { CircularProgress } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 
+const SECTOR_REFRESH_MS = 30000;
+
 function SectorOutlookPage({ onSectorClick }) {
     const [page, setPage] = useState(1);
     const rowsPerPage = 10;
@@ -19,33 +21,47 @@ function SectorOutlookPage({ onSectorClick }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     setLoadError(null);
-    // Try cache and fetch in parallel
     let cacheSet = false;
     const cached = sessionStorage.getItem('sectorOutlookData');
-    if (cached) {
+    if (!silent && cached) {
       const parsed = JSON.parse(cached);
       setTableData(Array.isArray(parsed) ? parsed : []);
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchSectorOutlook().then((fresh) => {
+    try {
+      const fresh = await fetchSectorOutlook();
       sessionStorage.setItem('sectorOutlookData', JSON.stringify(fresh));
-      if (isMounted) {
-        setTableData(Array.isArray(fresh) ? fresh : []);
+      setTableData(Array.isArray(fresh) ? fresh : []);
+      if (!silent) {
         setIsLoading(false);
       }
-    }).catch((err) => {
-      if (isMounted && !cacheSet) {
+    } catch (err) {
+      if (!silent && !cacheSet) {
         setLoadError(err?.message || 'Failed to load sector outlook.');
         setIsLoading(false);
       }
-    });
-    return () => { isMounted = false; };
+    }
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadData({ silent: false });
+    const timer = setInterval(() => {
+      if (isMounted) {
+        loadData({ silent: true });
+      }
+    }, SECTOR_REFRESH_MS);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [loadData]);
 
   // Filter data based on search term
   const filteredData = tableData.filter((row) =>

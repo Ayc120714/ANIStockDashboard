@@ -1586,6 +1586,63 @@ def run_live_scan_now():
         raise HTTPException(status_code=500, detail=f"Failed to run live scan: {e}")
 
 
+@router.post("/alerts/resend-pending-weekly-cross")
+def resend_pending_weekly_cross_alerts(limit: int = Query(200, ge=1, le=2000)):
+    """
+    Re-send pending weekly LOW/MID/HIGH cross alerts via Telegram and
+    mark rows as sent when delivery succeeds.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(Alert)
+            .filter(
+                Alert.alert_type.like("weekly_cross_up_%"),
+                Alert.is_sent_telegram.is_(False),
+            )
+            .order_by(desc(Alert.timestamp))
+            .limit(limit)
+            .all()
+        )
+        if not rows:
+            return {"status": "ok", "total": 0, "sent": 0, "failed": 0}
+
+        from app.notifications.telegram_notifier import send_stock_alert
+
+        sent = 0
+        failed = 0
+        for row in rows:
+            sd = row.signal_detail or {}
+            ok = send_stock_alert(
+                {
+                    "symbol": row.symbol,
+                    "alert_type": row.alert_type,
+                    "severity": row.severity or "critical",
+                    "message": row.message or "",
+                    "trend": sd.get("trend") or "uptrend",
+                    "signal_score": sd.get("signal_score"),
+                    "signal_type": sd.get("signal_type") or "buy",
+                    "entry": sd.get("entry"),
+                    "stop_loss": sd.get("stop_loss"),
+                    "target_1": sd.get("target_1"),
+                    "target_2": sd.get("target_2"),
+                }
+            )
+            if ok:
+                row.is_sent_telegram = True
+                sent += 1
+            else:
+                failed += 1
+
+        db.commit()
+        return {"status": "ok", "total": len(rows), "sent": sent, "failed": failed}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to resend pending alerts: {e}")
+    finally:
+        db.close()
+
+
 # ── Alerts ───────────────────────────────────────────────────────────────────
 
 @router.get("/alerts")

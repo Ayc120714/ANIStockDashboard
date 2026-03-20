@@ -24,6 +24,7 @@ import {
 } from './MarketOutlook.styles';
 
 const MIN_FII_DII_DAYS = 20;
+const MARKET_REFRESH_MS = 30000;
 
 function MarketOutlookPage() {
   const defaultIndexCards = [
@@ -47,13 +48,16 @@ function MarketOutlookPage() {
   const [loadError, setLoadError] = useState(null);
   const [fiiHoverIdx, setFiiHoverIdx] = useState(null);
   const [diiHoverIdx, setDiiHoverIdx] = useState(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const load = async () => {
-      setIsLoading(true);
-      setLoadError(null);
+    const load = async ({ silent = false } = {}) => {
+      if (!silent) {
+        setIsLoading(true);
+        setLoadError(null);
+      }
       try {
         const [normalized, tableRows] = await Promise.all([fetchMarketIndices(), fetchMarketIndicesTable()]);
         if (!isMounted) return;
@@ -65,10 +69,11 @@ function MarketOutlookPage() {
           setSmallcapCards(padded.slice(0, 3));
         }
         setTableData(Array.isArray(tableRows) ? tableRows : []);
+        setLastRefreshedAt(new Date());
       } catch (error) {
-        if (isMounted) setLoadError(error?.message || 'Failed to load market data.');
+        if (isMounted && !silent) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted && !silent) setIsLoading(false);
       }
     };
 
@@ -83,8 +88,13 @@ function MarketOutlookPage() {
 
     load();
     loadFiiDii();
+    const marketTimer = setInterval(() => {
+      load({ silent: true });
+    }, MARKET_REFRESH_MS);
+
     return () => {
       isMounted = false;
+      clearInterval(marketTimer);
     };
   }, []);
 
@@ -261,6 +271,11 @@ function MarketOutlookPage() {
       {isLoading && !loadError && (
         <div style={{ marginBottom: '12px', color: '#666', fontWeight: 600 }}>
           Loading market indices...
+        </div>
+      )}
+      {lastRefreshedAt && (
+        <div style={{ marginBottom: '12px', color: '#666', fontSize: 12 }}>
+          Live refresh every 30s. Last update: {lastRefreshedAt.toLocaleTimeString()}
         </div>
       )}
       {/* Index Cards Row 1 */}

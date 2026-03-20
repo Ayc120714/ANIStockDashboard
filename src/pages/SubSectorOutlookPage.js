@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import {
   Container,
@@ -34,6 +34,8 @@ import {
 } from './SubSectorOutlook.styles';
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
 import { fetchTrending, fetchStocksBySubsector } from '../api/stocks'; 
+
+const SUBSECTOR_REFRESH_MS = 30000;
 
 function getHighlight(val) {
   if (typeof val !== 'number') return null;
@@ -85,32 +87,47 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const [tableSort, setTableSort] = useState({ key: null, direction: 'asc' });
   const [allStocks, setAllStocks] = useState([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
+  const loadSubsectorData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     setLoadError(null);
     let cacheSet = false;
     const cached = sessionStorage.getItem('subsectorOutlookData');
-    if (cached) {
+    if (!silent && cached) {
       const parsed = JSON.parse(cached);
       setSectorData(parsed?.data ? parsed : { weekLabels: [], data: [] });
       setIsLoading(false);
       cacheSet = true;
     }
-    fetchSubsectorOutlook().then((fresh) => {
+    try {
+      const fresh = await fetchSubsectorOutlook();
       sessionStorage.setItem('subsectorOutlookData', JSON.stringify(fresh));
-      if (isMounted) {
-        setSectorData(fresh?.data ? fresh : { weekLabels: [], data: [] });
+      setSectorData(fresh?.data ? fresh : { weekLabels: [], data: [] });
+      if (!silent) {
         setIsLoading(false);
       }
-    }).catch((err) => {
-      if (isMounted && !cacheSet) {
+    } catch (err) {
+      if (!silent && !cacheSet) {
         setLoadError(err?.message || 'Failed to load subsector outlook.');
         setIsLoading(false);
       }
-    });
-    return () => { isMounted = false; };
+    }
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadSubsectorData({ silent: false });
+    const timer = setInterval(() => {
+      if (isMounted) {
+        loadSubsectorData({ silent: true });
+      }
+    }, SUBSECTOR_REFRESH_MS);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [loadSubsectorData]);
 
   // Preload all stocks for faster modal opening and stock counting
   useEffect(() => {

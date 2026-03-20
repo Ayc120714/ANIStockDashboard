@@ -1,7 +1,7 @@
 """
-Live Signal Scanner – runs every N minutes during market hours on watchlist
-stocks, detects new technical signals, generates alerts, and sends Telegram
-notifications for critical ones.
+Live Signal Scanner – runs every N minutes during market hours on configured
+symbol universe, detects new technical signals, generates alerts, and sends
+Telegram notifications for critical ones.
 """
 
 import logging
@@ -125,11 +125,34 @@ def _detect_divergence_alerts(symbol: str) -> List[Dict]:
     return alerts
 
 
-def _get_watchlist_symbols() -> List[str]:
+def _get_scan_symbols() -> List[str]:
     db = SessionLocal()
     try:
-        rows = db.query(Watchlist.symbol).distinct().all()
-        return [r[0] for r in rows if r[0]]
+        out: List[str] = []
+        seen = set()
+
+        # Always include watchlist symbols.
+        wl_rows = db.query(Watchlist.symbol).distinct().all()
+        for (sym,) in wl_rows:
+            s = str(sym or "").strip().upper()
+            if s and s not in seen:
+                seen.add(s)
+                out.append(s)
+
+        include_all = os.getenv("SIGNAL_SCAN_INCLUDE_ALL_STOCKS", "true").lower() == "true"
+        if include_all:
+            all_rows = db.query(StockSectorInfo.symbol).distinct().all()
+            for (sym,) in all_rows:
+                s = str(sym or "").strip().upper()
+                if s and s not in seen:
+                    seen.add(s)
+                    out.append(s)
+
+        max_scan = int(os.getenv("SIGNAL_SCAN_MAX_SYMBOLS", "0") or 0)
+        if max_scan > 0:
+            out = out[:max_scan]
+
+        return out
     finally:
         db.close()
 
@@ -361,7 +384,7 @@ def scan_cycle():
     """Execute one full scan cycle across all watchlist symbols."""
     global _previous_signals
 
-    symbols = _get_watchlist_symbols()
+    symbols = _get_scan_symbols()
     if not symbols:
         logger.debug("No watchlist symbols to scan")
         return

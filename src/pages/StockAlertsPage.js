@@ -181,20 +181,45 @@ function StockAlertsPage() {
   };
 
   const weeklyCrossRows = useMemo(
-    () => advisorAlerts
-      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
-      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
-      .filter((a) => weeklyAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === weeklyAlertTypeFilter)
-      .slice(0, 100),
+    () => {
+      const filtered = advisorAlerts
+        .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
+        .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+        .filter((a) => weeklyAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === weeklyAlertTypeFilter)
+        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+
+      // Keep only latest alert per symbol+type to avoid duplicate flooding.
+      const seen = new Set();
+      const deduped = [];
+      for (const row of filtered) {
+        const key = `${String(row.symbol || '').toUpperCase()}|${String(row.alert_type || '').toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(row);
+      }
+      return deduped.slice(0, 100);
+    },
     [advisorAlerts, setupSideFilter, weeklyAlertTypeFilter]
   );
 
   const divergenceRows = useMemo(
-    () => advisorAlerts
-      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('rsi_divergence_'))
-      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
-      .filter((a) => rsiAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === rsiAlertTypeFilter)
-      .slice(0, 100),
+    () => {
+      const filtered = advisorAlerts
+        .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('rsi_divergence_'))
+        .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+        .filter((a) => rsiAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === rsiAlertTypeFilter)
+        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+
+      const seen = new Set();
+      const deduped = [];
+      for (const row of filtered) {
+        const key = `${String(row.symbol || '').toUpperCase()}|${String(row.alert_type || '').toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(row);
+      }
+      return deduped.slice(0, 100);
+    },
     [advisorAlerts, setupSideFilter, rsiAlertTypeFilter]
   );
 
