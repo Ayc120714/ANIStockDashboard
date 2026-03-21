@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
+import AiPicksPage from './AiPicksPage';
+import IPOsPage from './IPOsPage';
+import LiveScreenerPage from './LiveScreenerPage';
+import PriceShockersPage from './PriceShockersPage';
+import RelativePerformancePage from './RelativePerformancePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
 import TrendingPage from './TrendingPage';
-import PriceShockersPage from './PriceShockersPage';
 import VolumeShockersPage from './VolumeShockersPage';
-import RelativePerformancePage from './RelativePerformancePage';
-import IPOsPage from './IPOsPage';
-import AiPicksPage from './AiPicksPage';
-import LiveScreenerPage from './LiveScreenerPage';
 
 function ScreensPage() {
   const [activeTab, setActiveTab] = useState('AI Picks');
@@ -24,8 +24,8 @@ function ScreensPage() {
         <Tab active={activeTab === 'Top Movers'} onClick={() => setActiveTab('Top Movers')}>
           Top Movers
         </Tab>
-        <Tab active={activeTab === 'Volume movers'} onClick={() => setActiveTab('Volume movers')}>
-          Volume movers
+        <Tab active={activeTab === 'Volume Movers'} onClick={() => setActiveTab('Volume Movers')}>
+          Volume Movers
         </Tab>
         <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
           Alpha Tracker
@@ -50,8 +50,8 @@ function ScreensPage() {
         {activeTab === 'Top Movers' ? <PriceShockersPage /> : null}
       </TabContent>
 
-      <TabContent active={activeTab === 'Volume movers'}>
-        {activeTab === 'Volume movers' ? <VolumeShockersPage /> : null}
+      <TabContent active={activeTab === 'Volume Movers'}>
+        {activeTab === 'Volume Movers' ? <VolumeShockersPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'Alpha Tracker'}>
