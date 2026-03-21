@@ -111,14 +111,18 @@ const SECTOR_TO_SUBSECTORS = {
 
   // Tata Steel, JSW Steel, SAIL, Jindal Steel (Steel)
   // Hindalco, NALCO (Aluminum), Vedanta (Diversified metals)
-  // NMDC (Iron ore mining), Hindustan Zinc (Mining)
+  // NMDC → Other Industrial Metals & Mining (backend override; not Steel)
+  // MIDHANI → Aerospace & Defense (backend override)
+  // Ratnamani / SARVAMN / BANSALWIRE → see backend symbol_sector_overrides.py
   // Coal India (Thermal Coal), APL Apollo (Steel tubes)
-  // Ratnamani Metals (Metal Fabrication)
   'NIFTY METAL': [
     'Steel', 'Aluminum', 'Copper',
     'Other Industrial Metals & Mining', 'Other Precious Metals & Mining',
     'Metal Fabrication',
     'Thermal Coal',
+    'Aerospace & Defense',
+    'Oil & Gas Equipment & Services',
+    'Electrical Equipment & Parts',
   ],
 
   // Sun Pharma, Dr Reddy's, Cipla, Divi's (Drug Manufacturers)

@@ -34,6 +34,7 @@ function MarketOutlookPage() {
   ];
 
   const [fiiDiiData, setFiiDiiData] = useState(null);
+  const [fiiDiiLoadState, setFiiDiiLoadState] = useState('idle'); // idle | loading | error | done
 
   const defaultSmallcapCards = [
     { title: 'Smallcap 100', trend: 'UP TREND', value: '18,184', change: '-0.37%', percentile: '71%', pe: '31 PE' },
@@ -78,11 +79,18 @@ function MarketOutlookPage() {
     };
 
     const loadFiiDii = async () => {
+      setFiiDiiLoadState('loading');
       try {
         const data = await fetchFiiDiiActivity(MIN_FII_DII_DAYS);
-        if (isMounted && data) setFiiDiiData(data);
+        if (isMounted && data) {
+          setFiiDiiData(data);
+          setFiiDiiLoadState('done');
+        } else if (isMounted) {
+          setFiiDiiLoadState('error');
+        }
       } catch (err) {
         console.warn('FII/DII fetch failed:', err?.message || err);
+        if (isMounted) setFiiDiiLoadState('error');
       }
     };
 
@@ -212,7 +220,7 @@ function MarketOutlookPage() {
   }, [diiCard, diiHoverIdx]);
 
   const buildBarChart = (values, activeIndex = null, height = 68) => {
-    if (!values || values.length < 2) return null;
+    if (!values || values.length < 1) return null;
     const width = Math.max(160, values.length * 12);
     const maxAbs = Math.max(...values.map(Math.abs), 1);
     const gap = 2;
@@ -349,7 +357,9 @@ function MarketOutlookPage() {
                 ) : (
                   <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
                     <line x1="0" y1="30" x2="100" y2="30" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
-                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">Loading...</text>
+                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">
+                      {fiiDiiLoadState === 'loading' ? 'Loading…' : 'No chart data'}
+                    </text>
                   </svg>
                 )}
               </BarChart>
@@ -405,7 +415,9 @@ function MarketOutlookPage() {
                 ) : (
                   <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
                     <line x1="0" y1="30" x2="100" y2="30" stroke="#ccc" strokeWidth="1" strokeDasharray="4" />
-                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">Loading...</text>
+                    <text x="50" y="20" textAnchor="middle" fontSize="8" fill="#bbb">
+                      {fiiDiiLoadState === 'loading' ? 'Loading…' : 'No chart data'}
+                    </text>
                   </svg>
                 )}
               </BarChart>

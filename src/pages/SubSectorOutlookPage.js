@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button, Pagination } from '@mui/material';
 import {
   Container,
   LeftContent,
@@ -33,7 +33,7 @@ import {
   TableScroll,
 } from './SubSectorOutlook.styles';
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
-import { fetchTrending, fetchStocksBySubsector } from '../api/stocks'; 
+import { fetchStocksBySubsector } from '../api/stocks'; 
 
 const SUBSECTOR_REFRESH_MS = 30000;
 
@@ -83,9 +83,11 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStocks, setModalStocks] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
+  const [modalPage, setModalPage] = useState(1);
+  const [modalTotal, setModalTotal] = useState(0);
+  const modalPageSize = 25;
   const [sortConfig, setSortConfig] = useState({ key: 'symbol', direction: 'asc' });
   const [tableSort, setTableSort] = useState({ key: null, direction: 'asc' });
-  const [allStocks, setAllStocks] = useState([]);
 
   const loadSubsectorData = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
@@ -129,73 +131,20 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     };
   }, [loadSubsectorData]);
 
-  // Preload all stocks for faster modal opening and stock counting
-  useEffect(() => {
-    let isMounted = true;
-    fetchTrending(500).then(stocks => {
-      if (isMounted) {
-        console.log('Preloaded stocks count:', stocks.length);
-        if (stocks.length > 0) {
-          console.log('First stock data:', stocks[0]);
-          console.log('All unique subsectors:', [...new Set(stocks.map(s => s.subSector).filter(Boolean))]);
-        }
-        setAllStocks(stocks);
-      }
-    }).catch(err => {
-      console.error('Failed to preload stocks:', err);
-    });
-    return () => { isMounted = false; };
-  }, []);
-
-  const handleSubsectorClick = async (subsectorName, sectorName) => {
-    setSelectedSubsector({ name: subsectorName, sector: sectorName });
-    setModalOpen(true);
+  const loadModalStocks = useCallback(async (subsectorName, page = 1) => {
     setModalLoading(true);
     try {
-      console.log('=== Fetching stocks ===');
-      console.log('Subsector:', subsectorName);
-      console.log('Sector:', sectorName);
-      
-      let stocks = [];
-      
-      // Try the dedicated subsector stocks endpoint first
-      console.log('Trying /subsector-stocks endpoint...');
-      stocks = await fetchStocksForSubsector(subsectorName);
-      
-      if (stocks.length === 0) {
-        console.log('Subsector endpoint returned 0, trying /stocks/by-subsector...');
-        stocks = await fetchStocksBySubsector(subsectorName, 500);
+      const paged = await fetchStocksForSubsector(subsectorName, page, modalPageSize);
+      let stocks = paged.data;
+      let total = paged.total;
+
+      // Backward-compatible fallback for older API responses.
+      if (!Array.isArray(stocks) || stocks.length === 0) {
+        const fallback = await fetchStocksBySubsector(subsectorName, 500);
+        stocks = Array.isArray(fallback) ? fallback : [];
+        total = stocks.length;
       }
-      
-      if (stocks.length === 0) {
-        console.log('Still 0, trying cache filter...');
-        if (allStocks && allStocks.length > 0) {
-          const normalizedSearchName = subsectorName.trim().toLowerCase();
-          const uniqueSubsectors = [...new Set(
-            allStocks
-              .map(s => s.subSector)
-              .filter(s => s && s !== '—')
-          )];
-          console.log('Available subsectors:', uniqueSubsectors);
-          console.log('Looking for (normalized):', normalizedSearchName);
-          
-          stocks = allStocks.filter(stock => {
-            if (!stock.subSector || stock.subSector === '—') return false;
-            const normalized = stock.subSector.trim().toLowerCase();
-            const match = normalized === normalizedSearchName;
-            if (match && stocks.length < 3) {
-              console.log('Match found:', stock.symbol, stock.subSector);
-            }
-            return match;
-          });
-        }
-      }
-      
-      console.log('Total stocks found:', stocks.length);
-      if (stocks.length > 0) {
-        console.log('First stock:', stocks[0]);
-      }
-      
+
       // Remove duplicates
       const seen = new Set();
       const deduplicated = stocks.filter(stock => {
@@ -203,22 +152,36 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
         seen.add(stock.symbol);
         return true;
       });
-      
-      console.log('Final deduped count:', deduplicated.length);
-      
+
       setModalStocks(deduplicated);
+      setModalTotal(Number(total || deduplicated.length));
+      setModalPage(page);
       setSortConfig({ key: 'symbol', direction: 'asc' });
     } catch (err) {
-      console.error('Error fetching stocks:', err);
       setModalStocks([]);
+      setModalTotal(0);
     }
     setModalLoading(false);
+  }, []);
+
+  const handleSubsectorClick = async (subsectorName, sectorName) => {
+    setSelectedSubsector({ name: subsectorName, sector: sectorName });
+    setModalOpen(true);
+    setModalPage(1);
+    await loadModalStocks(subsectorName, 1);
+  };
+
+  const handleModalPageChange = async (_event, value) => {
+    if (!selectedSubsector?.name || value === modalPage) return;
+    await loadModalStocks(selectedSubsector.name, value);
   };
 
   const handleModalClose = () => {
     setModalOpen(false);
     setSelectedSubsector(null);
     setModalStocks([]);
+    setModalTotal(0);
+    setModalPage(1);
   };
 
   const handleSort = (key) => {
@@ -578,7 +541,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                     <TableRow key={stock.symbol} className={stock.chg && stock.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                       <TableCell>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {idx + 1}
+                          {(modalPage - 1) * modalPageSize + idx + 1}
                           <a
                             href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(stock.symbol)}`}
                             target="_blank"
@@ -620,6 +583,18 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                 )}
               </tbody>
             </Table>
+          )}
+          {!modalLoading && modalTotal > modalPageSize && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+              <Pagination
+                page={modalPage}
+                count={Math.max(1, Math.ceil(modalTotal / modalPageSize))}
+                onChange={handleModalPageChange}
+                color="primary"
+                shape="rounded"
+                size="small"
+              />
+            </div>
           )}
         </DialogContent>
         <DialogActions>

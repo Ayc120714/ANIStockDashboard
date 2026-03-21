@@ -17,15 +17,19 @@ export const fetchSubsectorOutlook = async () => {
 /**
  * Fetch stocks for a specific subsector
  */
-export const fetchStocksForSubsector = async (subsectorName) => {
+export const fetchStocksForSubsector = async (subsectorName, page = 1, pageSize = 25) => {
   try {
-    console.log('Fetching stocks for subsector:', subsectorName);
-    const resp = await apiGet(`/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}`);
-    const list = resp?.data ?? [];
-    console.log('Subsector stocks endpoint returned:', list.length);
-    return list;
+    const resp = await apiGet(
+      `/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}&page=${page}&page_size=${pageSize}`
+    );
+    return {
+      data: Array.isArray(resp?.data) ? resp.data : [],
+      total: Number(resp?.total || 0),
+      page: Number(resp?.page || page),
+      pageSize: Number(resp?.page_size || pageSize),
+    };
   } catch (err) {
     console.warn('Subsector stocks endpoint failed:', err?.message);
-    return [];
+    return { data: [], total: 0, page, pageSize };
   }
 };
