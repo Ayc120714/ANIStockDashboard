@@ -82,7 +82,7 @@ function StockAlertsPage() {
       })
       .finally(() => setLoading(false));
 
-    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: true })
+    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: false })
       .then((rows) => setAdvisorAlerts(Array.isArray(rows) ? rows : []))
       .catch(() => setAdvisorAlerts([]));
   }, [userId, symbolFilter]);

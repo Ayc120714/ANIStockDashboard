@@ -68,10 +68,13 @@ function Start-DetachedTerminal {
 
 $frontendRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent $frontendRoot
-$backendRoot = Join-Path $repoRoot "backend_stockdashboard"
-
+# Monorepo: backend inside stockdashboard/ — or sibling ANIStockProject/backend_stockdashboard
+$backendRoot = Join-Path $frontendRoot "backend_stockdashboard"
 if (-not (Test-Path $backendRoot)) {
-    throw "Backend directory not found: $backendRoot"
+    $backendRoot = Join-Path $repoRoot "backend_stockdashboard"
+}
+if (-not (Test-Path $backendRoot)) {
+    throw "Backend directory not found. Expected $frontendRoot\backend_stockdashboard or $repoRoot\backend_stockdashboard."
 }
 
 if ($KillExisting) {

@@ -47,4 +47,4 @@ sudo systemctl restart "$BACKEND_SERVICE"
 sudo systemctl reload nginx
 
 echo "Deployment completed for $DOMAIN"
-echo "Check: https://$DOMAIN"
+echo "Check: https://www.$DOMAIN (canonical site + API)"

@@ -20,7 +20,10 @@ Copy-Item -Recurse -Force $frontendBuild (Join-Path $TempDir "frontend_build")
 Copy-Item -Recurse -Force (Join-Path $RepoRoot "docs\deployment") (Join-Path $TempDir "deployment_docs")
 Copy-Item -Force (Join-Path $RepoRoot ".env.production.example") (Join-Path $TempDir ".env.production.example")
 
-$backendEnvExample = Join-Path (Split-Path -Parent $RepoRoot) "backend_stockdashboard\.env.production.example"
+$backendEnvExample = Join-Path $RepoRoot "backend_stockdashboard\.env.production.example"
+if (-not (Test-Path $backendEnvExample)) {
+  $backendEnvExample = Join-Path (Split-Path -Parent $RepoRoot) "backend_stockdashboard\.env.production.example"
+}
 if (Test-Path $backendEnvExample) {
   Copy-Item -Force $backendEnvExample (Join-Path $TempDir "backend.env.production.example")
 }

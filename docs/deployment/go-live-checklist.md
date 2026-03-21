@@ -3,7 +3,7 @@
 ## A) Pre-launch validation (must pass)
 
 - [ ] DNS `A` records for `aycindustries.com` and `www` point to VPS IP.
-- [ ] SSL valid (`https://aycindustries.com` opens without warnings).
+- [ ] SSL valid (`https://www.aycindustries.com` opens without warnings; apex redirects to www).
 - [ ] Frontend build deployed to `/var/www/ani-stock`.
 - [ ] Backend service is healthy: `systemctl status ani-backend`.
 - [ ] Critical APIs respond from public domain (`/api/auth/*`, `/api/dhan/*`, `/api/watchlist/*`).
@@ -28,8 +28,8 @@
   - `journalctl -u ani-backend -f`
   - `sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log`
 - [ ] Add simple uptime checks (external monitor) for:
-  - `https://aycindustries.com`
-  - `https://aycindustries.com/api/health` (or equivalent ping endpoint)
+  - `https://www.aycindustries.com`
+  - `https://www.aycindustries.com/api/health` (or equivalent ping endpoint)
 - [ ] Set alerts for high CPU, RAM, disk, and repeated backend restarts.
 
 ## D) Backups

@@ -1,5 +1,7 @@
 # VPS Runbook (Hostinger) - ANI Stock App
 
+**Condensed “enable full stack on Linux VPS” guide:** [vps-linux-fullstack-setup.md](vps-linux-fullstack-setup.md) (this file is the detailed runbook).
+
 This runbook assumes:
 
 - Ubuntu 22.04/24.04 VPS
@@ -43,15 +45,26 @@ sudo ufw status
 
 ## 4) Clone project(s)
 
+**Monorepo** (backend inside `stockdashboard/backend_stockdashboard` — default for `ANIStockDashboard`):
+
 ```bash
 sudo mkdir -p /opt/ani-stock
 sudo chown -R deploy:deploy /opt/ani-stock
 cd /opt/ani-stock
-git clone <FRONTEND_REPO_URL> stockdashboard
+git clone https://github.com/Ayc120714/ANIStockDashboard.git stockdashboard
+```
+
+**Two repos** (separate backend remote). GitHub **will not** accept your account password over HTTPS — use a **[Personal Access Token](https://github.com/settings/tokens)** as the password, or **SSH** / **Deploy key**. See **[VPS_INSTALL_RUN_AYCINDUSTRIES.md](VPS_INSTALL_RUN_AYCINDUSTRIES.md)** → *GitHub error: Password authentication is not supported*.
+
+```bash
+sudo mkdir -p /opt/ani-stock
+sudo chown -R deploy:deploy /opt/ani-stock
+cd /opt/ani-stock
+git clone https://github.com/Ayc120714/ANIStockDashboard.git stockdashboard
 git clone <BACKEND_REPO_URL> backend_stockdashboard
 ```
 
-If both folders are in one monorepo, clone once and keep current structure.
+Full VPS walkthrough: **[VPS_INSTALL_RUN_AYCINDUSTRIES.md](VPS_INSTALL_RUN_AYCINDUSTRIES.md)** (includes Git + OTP email notes).
 
 ## 5) PostgreSQL setup
 
@@ -69,6 +82,8 @@ GRANT ALL PRIVILEGES ON DATABASE stockdb TO stockapp;
 ```
 
 ## 6) Backend setup
+
+Monorepo: use `cd /opt/ani-stock/stockdashboard/backend_stockdashboard` instead of `backend_stockdashboard` below.
 
 ```bash
 cd /opt/ani-stock/backend_stockdashboard
@@ -142,8 +157,8 @@ cp .env.production.example .env.production
 
 Update `.env.production`:
 
-- `REACT_APP_API_URL=https://aycindustries.com/api`
-- `REACT_APP_TRADE_API_URL=https://aycindustries.com/api`
+- `REACT_APP_API_URL=https://www.aycindustries.com/api`
+- `REACT_APP_TRADE_API_URL=https://www.aycindustries.com/api`
 
 Build:
 
@@ -181,9 +196,9 @@ sudo certbot renew --dry-run
 ## 11) Post-deploy verification
 
 ```bash
-curl -I https://aycindustries.com
-curl -sS https://aycindustries.com/api/health || true
-curl -sS https://aycindustries.com/api/dhan/health || true
+curl -I https://www.aycindustries.com
+curl -sS https://www.aycindustries.com/api/health || true
+curl -sS https://www.aycindustries.com/api/dhan/health || true
 ```
 
 Then validate in browser:

@@ -83,15 +83,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable ani-backend
 sudo systemctl restart ani-backend
 
-echo "[8/9] Configuring Nginx..."
-sudo cp "$APP_ROOT/stockdashboard/docs/deployment/nginx-aycindustries.com.conf" /etc/nginx/sites-available/aycindustries.com
+echo "[8/9] Configuring Nginx (HTTP first — SSL after certbot)..."
+sudo cp "$APP_ROOT/stockdashboard/docs/deployment/nginx-aycindustries.com.http-bootstrap.conf" /etc/nginx/sites-available/aycindustries.com
 sudo ln -sf /etc/nginx/sites-available/aycindustries.com /etc/nginx/sites-enabled/aycindustries.com
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 
 echo "[9/9] Bootstrap done."
-echo "Next: edit env files and run certbot:"
+echo "Next: edit env files, restart backend, then SSL:"
 echo "  nano $APP_ROOT/backend_stockdashboard/.env"
 echo "  nano $APP_ROOT/stockdashboard/.env.production"
+echo "  sudo systemctl restart ani-backend"
 echo "  sudo certbot --nginx -d aycindustries.com -d www.aycindustries.com"
+echo "Optional: compare with nginx-aycindustries.com.conf for extra TLS hardening."

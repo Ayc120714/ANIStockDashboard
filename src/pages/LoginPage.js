@@ -553,7 +553,7 @@ function LoginPage() {
                   Mobile: +919989927143
                 </Typography>
                 <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
-                  Email: info@aycindustries.com
+                  Email: support@aycindustries.com
                 </Typography>
                 <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
                   Website: www.aycindustries.com

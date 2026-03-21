@@ -3,9 +3,9 @@
 ## Final Topology (Recommended)
 
 - **Hosting provider:** Hostinger VPS (not Shared hPanel for backend runtime)
-- **Primary domain:** `aycindustries.com`
-- **Frontend (React static build):** served by Nginx at `https://aycindustries.com`
-- **Backend API (FastAPI/Uvicorn):** served behind Nginx at `https://aycindustries.com/api/*`
+- **Primary domain (canonical):** `www.aycindustries.com` (apex `aycindustries.com` redirects to www)
+- **Frontend (React static build):** served by Nginx at `https://www.aycindustries.com`
+- **Backend API (FastAPI/Uvicorn):** served behind Nginx at `https://www.aycindustries.com/api/*`
 - **Database:** PostgreSQL on the same VPS (or managed DB, optional later)
 - **Process supervision:** `systemd` (backend), `cron` (backups), Nginx for web serving/reverse proxy
 

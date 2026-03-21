@@ -2,6 +2,26 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Docker (full stack)
+
+Docker files live **next to this repo** so they do not affect normal `npm` / backend workflows:
+
+**`../stockdashboard-docker/`** (under `ANIStockProject`)
+
+From that folder run `docker compose build && docker compose up -d`, then open **http://localhost**. See **`stockdashboard-docker/README.md`** in that folder for logs, backups, and env vars.
+
+## Local dev (React + FastAPI + PostgreSQL + Cursor)
+
+Step-by-step (Postgres, env vars, `uvicorn`, `npm start`, and using Cursor’s terminal for API calls): **[docs/deployment/local-fullstack-cursor-setup.md](docs/deployment/local-fullstack-cursor-setup.md)**. Quick start: `npm run dev:fullstack` (requires Postgres + backend `.env`).
+
+## Linux VPS (production-style stack)
+
+Enable the same components on an Ubuntu VPS (systemd, Nginx, Let’s Encrypt): **[docs/deployment/vps-linux-fullstack-setup.md](docs/deployment/vps-linux-fullstack-setup.md)**.
+
+**Install & run for production domain `aycindustries.com`:** **[docs/deployment/VPS_INSTALL_RUN_AYCINDUSTRIES.md](docs/deployment/VPS_INSTALL_RUN_AYCINDUSTRIES.md)** (DNS, bootstrap script, SSL, checks).
+
+**Hostinger API vs SSH to the VPS:** **[docs/deployment/hostinger-api-and-vps-access.md](docs/deployment/hostinger-api-and-vps-access.md)**.
+
 ## Available Scripts
 
 In the project directory, you can run:

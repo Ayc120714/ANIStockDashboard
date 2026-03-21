@@ -4,9 +4,9 @@
 
 | Variable | Required | Example | Purpose |
 |---|---|---|---|
-| `REACT_APP_API_URL` | Yes | `https://aycindustries.com/api` | Primary API base for app calls |
-| `REACT_APP_TRADE_API_URL` | Yes | `https://aycindustries.com/api` | Trade API base (can be same as primary API) |
-| `REACT_APP_ADMIN_EMAILS` | Optional | `admin@aycindustries.com` | Comma-separated admin emails for UI role checks |
+| `REACT_APP_API_URL` | Yes | `https://www.aycindustries.com/api` | Primary API base for app calls |
+| `REACT_APP_TRADE_API_URL` | Yes | `https://www.aycindustries.com/api` | Trade API base (can be same as primary API) |
+| `REACT_APP_ADMIN_EMAILS` | Optional | `support@aycindustries.com` | Comma-separated admin emails for UI role checks |
 
 ## Backend (`backend_stockdashboard/.env`)
 
@@ -32,7 +32,7 @@
 | `DHAN_TOKEN_SECRET` | Recommended | `<long-random-secret>` | Dhan auth token integrity |
 | `AUTH_DEBUG_OTP` | No (prod=false) | `false` | OTP debug mode |
 | `AUTH_PASSWORDLESS_ADMIN_ENABLED` | Optional | `true` | Passwordless admin flow toggle |
-| `AUTH_PASSWORDLESS_ADMIN_EMAILS` | Optional | `admin@aycindustries.com` | Allowed passwordless admin emails |
+| `AUTH_PASSWORDLESS_ADMIN_EMAILS` | Optional | `support@aycindustries.com` | Allowed passwordless admin emails |
 | `LOGIN_LOCK_MINUTES` | Optional | `15` | Login lockout duration |
 | `MAX_FAILED_LOGINS` | Optional | `5` | Failed login threshold |
 | `PASSWORD_HASH_ITERATIONS` | Optional | `240000` | Password hashing rounds |
@@ -81,9 +81,9 @@
 |---|---|---|---|
 | `SMTP_HOST` | Conditional | `smtp.hostinger.com` | SMTP host |
 | `SMTP_PORT` | Conditional | `587` | SMTP port |
-| `SMTP_USER` | Conditional | `noreply@aycindustries.com` | SMTP username |
+| `SMTP_USER` | Conditional | `support@aycindustries.com` | SMTP username (OTP / mail from this mailbox) |
 | `SMTP_PASSWORD` | Conditional | `<smtp-password>` | SMTP password |
-| `SMTP_FROM_EMAIL` | Conditional | `noreply@aycindustries.com` | Sender address |
+| `SMTP_FROM_EMAIL` | Conditional | `support@aycindustries.com` | Sender address for OTP emails |
 | `FAST2SMS_API_KEY` | Optional | `<api-key>` | SMS OTP provider |
 | `FAST2SMS_SENDER_ID` | Optional | `<sender-id>` | SMS sender id |
 | `FAST2SMS_ROUTE` | Optional | `q` | SMS route type |
