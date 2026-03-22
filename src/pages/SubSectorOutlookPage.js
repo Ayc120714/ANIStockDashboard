@@ -36,6 +36,8 @@ import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsector
 import { fetchStocksBySubsector } from '../api/stocks'; 
 const SUBSECTOR_REFRESH_MS = 30000;
 const SUBSECTOR_MAIN_ROWS_OPTIONS = [15, 25, 50, 100];
+/** Bump when API shape changes (e.g. trend string + trend_pct) so stale sessionStorage is not used. */
+const SUBSECTOR_CACHE_KEY = 'subsectorOutlookData_v2';
 
 function getHighlight(val) {
   if (typeof val !== 'number') return null;
@@ -58,6 +60,26 @@ function getHighlight(val) {
 
   return `hsla(${hue}, 100%, ${lightness}%, ${alpha})`;
 } 
+
+/** Sort key for Trend column (API may send trend_pct or legacy numeric trend). */
+function trendSortValue(sub) {
+  if (sub == null) return 0;
+  if (typeof sub.trend_pct === 'number' && Number.isFinite(sub.trend_pct)) return sub.trend_pct;
+  if (typeof sub.trend === 'number' && Number.isFinite(sub.trend)) return sub.trend;
+  const p = parseFloat(String(sub.trend || '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(p) ? p : 0;
+}
+
+/** Display text for Trend (string from API or legacy number). */
+function formatTrendDisplay(sub) {
+  if (sub == null) return '—';
+  if (typeof sub.trend === 'string' && sub.trend.trim()) return sub.trend;
+  if (typeof sub.trend === 'number' && Number.isFinite(sub.trend)) {
+    const arrow = sub.trend >= 0 ? '↗' : '↘';
+    return `${arrow} ${sub.trend >= 0 ? '+' : ''}${sub.trend.toFixed(1)}%`;
+  }
+  return '—';
+}
 
 function matchesChip(chip, sub, weekLabels) {
   if (chip === 'All') return true;
@@ -438,6 +460,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                 return pagedFlatRows.map(({ sector, sub }) => {
                   const showHeader = sector !== prevSector;
                   prevSector = sector;
+                  const trendText = formatTrendDisplay(sub);
                   const countVal =
                     sub.stock_count != null && sub.stock_count !== ''
                       ? sub.stock_count
@@ -466,7 +489,17 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                               ? sub.all
                               : `${sub.all}%`}
                         </TableCell>
-                        <TableCell>{sub.trend ?? '—'}</TableCell>
+                        <TableCell
+                          className={
+                            trendText === '—'
+                              ? ''
+                              : trendSortValue(sub) >= 0
+                                ? 'trend-up'
+                                : 'trend-down'
+                          }
+                        >
+                          {trendText}
+                        </TableCell>
                         {(weekLabels.length ? weekLabels : [1, 2, 3, 4]).map((lbl, idx) => {
                           const val = weekLabels.length ? sub[lbl] : null;
                           const display = val != null ? `${val}%` : '—';
