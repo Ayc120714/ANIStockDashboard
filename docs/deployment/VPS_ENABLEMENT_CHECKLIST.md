@@ -90,6 +90,34 @@ Both should be **200** (replace domain as needed).
 
 ## 4. Backend service and `.env`
 
+### 4a. Install Python deps in the **venv** (not system `pip`)
+
+On **Debian / Ubuntu**, system Python is **PEP 668** (“externally managed”): **`pip install -r requirements.txt` without a venv fails** with `externally-managed-environment`.
+
+The backend should use a project **virtualenv** (same one **`ani-backend`** uses — usually **`.venv`** next to `requirements.txt`):
+
+```bash
+cd /opt/ani-stock/backend_stockdashboard
+
+# Create venv once if missing
+test -d .venv || python3 -m venv .venv
+
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
+
+sudo systemctl restart ani-backend
+```
+
+Confirm **`systemd` points at that venv** (must match where you installed packages):
+
+```bash
+systemctl cat ani-backend | grep -E 'ExecStart|WorkingDirectory'
+```
+
+You should see something like **`…/backend_stockdashboard/.venv/bin/uvicorn`**. If **`ExecStart`** uses a different path, either install into **that** venv or align the unit file with **`/opt/ani-stock/backend_stockdashboard/.venv`**.
+
 ```bash
 sudo systemctl restart ani-backend
 sudo systemctl status ani-backend --no-pager
