@@ -4,6 +4,12 @@ export const fetchBrokerOptions = () => tradeApiGet('/brokers/options');
 
 export const fetchBrokerSetup = async ({ userId } = {}) => {
   const suffix = userId ? `?user_id=${encodeURIComponent(String(userId))}` : '';
+  try {
+    const rows = await tradeApiGet(`/brokers/setup${suffix}`);
+    if (Array.isArray(rows) && rows.length) return rows;
+  } catch (_) {
+    /* fallback if older backend without /brokers/setup */
+  }
   const status = await tradeApiGet(`/dhan/status${suffix}`);
   const connected = Boolean(status?.connected);
   return [{
@@ -29,8 +35,8 @@ export const saveBrokerSetup = ({ user_id, broker, client_id, is_enabled, has_se
       })
     : tradeApiPost('/brokers/setup', {
         user_id,
-        broker,
-        client_id,
+        broker: String(broker || '').toLowerCase(),
+        client_id: String(client_id || ''),
         is_enabled: Boolean(is_enabled),
         ...(typeof has_session === 'boolean' ? { has_session } : {}),
       }));
