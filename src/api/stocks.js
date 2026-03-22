@@ -25,12 +25,25 @@ const rsFieldByPeriod = {
 };
 
 const mapStockToTable = (s, idx, opts = {}) => {
-  const rsField = rsFieldByPeriod[opts.period] || 'week1w';
-  const rsVal = s.relative_strength ?? s[rsField] ?? s.week1w ?? s.month1m ?? s.day1d;
+  const period = opts.period || '1d';
+  const perfField = rsFieldByPeriod[period] || 'day1d';
+  const chgVal = s[perfField] ?? s.day1d;
 
   const volJump = (s.volume && s.avg_volume && s.avg_volume > 0)
     ? (s.volume / s.avg_volume).toFixed(1) + 'x'
     : '—';
+
+  // RS% = relative strength vs benchmark (API). Never mix with price % or RSI.
+  const rsDisplay =
+    s.relative_strength != null && !Number.isNaN(Number(s.relative_strength))
+      ? formatPercent(s.relative_strength)
+      : '—';
+
+  // RSI oscillator 0–100 from TechnicalSignal / Wilder fallback (Alpha Tracker & APIs that send rsi).
+  const rsiDisplay =
+    s.rsi != null && !Number.isNaN(Number(s.rsi))
+      ? Number(s.rsi).toFixed(1)
+      : '—';
 
   return {
     id: String(idx + 1).padStart(2, '0'),
@@ -41,8 +54,9 @@ const mapStockToTable = (s, idx, opts = {}) => {
     ema21: formatCurrency(s.ema21),
     ema50: formatCurrency(s.ema50),
     cmp: formatCurrency(s.price),
-    chg: formatPercent(s.day1d),
-    rs: formatPercent(rsVal),
+    chg: formatPercent(chgVal),
+    rs: rsDisplay,
+    rsi: rsiDisplay,
     volume: s.volume != null ? s.volume.toLocaleString('en-IN') : '—',
     avgVolume: s.avg_volume != null ? Math.round(s.avg_volume).toLocaleString('en-IN') : '—',
     volJump,

@@ -1,12 +1,13 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button, Checkbox } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, Checkbox, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchRelativePerformance, fetchScreenDates } from '../api/stocks';
+import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 
 function RelativePerformancePage() {
@@ -26,6 +27,11 @@ function RelativePerformancePage() {
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
+    () => getScreenDatePickerBounds(availableDates),
+    [availableDates],
+  );
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -86,19 +92,7 @@ function RelativePerformancePage() {
     return () => { isMounted = false; };
   }, [timeFrame, selectedDate, searchTerm]);
 
-  const defaultTableData = [
-    { id: '01', symbol: 'NACLIND', sector: 'Chemicals', subSector: 'Agri Inputs', mc: 'Small Cap', cmp: '₹269.60', chg: '-2.97%', rs: '327.58%', date: new Date('2026-01-24') },
-    { id: '02', symbol: 'SMLISUZU', sector: 'Auto', subSector: 'Automobiles', mc: 'Small Cap', cmp: '₹4,086.60', chg: '-2.64%', rs: '247.76%', date: new Date('2025-12-15') },
-    { id: '03', symbol: 'KRISHANA', sector: 'Chemicals', subSector: 'Agri Inputs', mc: 'Small Cap', cmp: '₹589.30', chg: '2.02%', rs: '167.85%', date: new Date('2025-10-01') },
-    { id: '04', symbol: 'FORCEMOT', sector: 'Auto', subSector: 'Automobiles', mc: 'Small Cap', cmp: '₹19,092.00', chg: '-1.98%', rs: '157.13%', date: new Date('2025-07-10') },
-    { id: '05', symbol: 'GABRIEL', sector: 'Auto', subSector: 'Automotive - OEM', mc: 'Small Cap', cmp: '₹1,229.40', chg: '6.68%', rs: '138.11%', date: new Date('2025-06-24') },
-    { id: '06', symbol: 'PARADEEP', sector: 'Chemicals', subSector: 'Agri Inputs', mc: 'Small Cap', cmp: '₹228.23', chg: '4.97%', rs: '136.00%', date: new Date('2025-05-15') },
-    { id: '07', symbol: 'CUPID', sector: 'FMCG', subSector: 'Consumer Staples', mc: 'Small Cap', cmp: '₹172.61', chg: '0.19%', rs: '127.96%', date: new Date('2025-04-01') },
-    { id: '08', symbol: 'LUMAXTECH', sector: 'Auto', subSector: 'Auto Components', mc: 'Small Cap', cmp: '₹1,240.90', chg: '5.64%', rs: '122.91%', date: new Date('2025-03-10') },
-    { id: '09', symbol: 'APOLLO', sector: 'Defence', subSector: 'Defence & Aerospace', mc: 'Small Cap', cmp: '₹269.60', chg: '1.45%', rs: '118.58%', date: new Date('2024-12-24') },
-  ];
-
-  const dataToFilter = tableData.length ? tableData : defaultTableData;
+  const dataToFilter = tableData;
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
@@ -116,7 +110,7 @@ function RelativePerformancePage() {
     if (typeof value === 'number') return value;
     if (value === null || value === undefined) return 0;
     let str = value.toString().replace(/,/g, '');
-    if (key === 'cmp' || key === 'chg' || key === 'rs') str = str.replace(/[^\d.-]/g, '');
+    if (key === 'cmp' || key === 'chg' || key === 'rs' || key === 'rsi') str = str.replace(/[^\d.-]/g, '');
     return parseFloat(str) || 0;
   };
 
@@ -125,7 +119,7 @@ function RelativePerformancePage() {
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-      if (['cmp', 'chg', 'rs'].includes(sortConfig.key)) {
+      if (['cmp', 'chg', 'rs', 'rsi'].includes(sortConfig.key)) {
         aValue = extractNumeric(aValue, sortConfig.key);
         bValue = extractNumeric(bValue, sortConfig.key);
       }
@@ -153,6 +147,8 @@ function RelativePerformancePage() {
     return sortConfig.ascending ? ' ↑' : ' ↓';
   };
 
+  const chgColumnLabel = timeFrame === 'Short Term' ? '1W CHG%' : '6M CHG%';
+
   const columnConfig = [
     { key: 'id', label: '#' },
     { key: 'symbol', label: 'Symbol' },
@@ -160,8 +156,9 @@ function RelativePerformancePage() {
     { key: 'subSector', label: 'Sub Sector' },
     { key: 'mc', label: 'MC' },
     { key: 'cmp', label: 'CMP' },
-    { key: 'chg', label: 'CHG%' },
-    { key: 'rs', label: 'RS%' },
+    { key: 'chg', label: chgColumnLabel },
+    { key: 'rs', label: 'RS% (vs NIFTY)' },
+    { key: 'rsi', label: 'RSI' },
   ];
 
   return (
@@ -221,6 +218,9 @@ function RelativePerformancePage() {
       </Box>
       <TableSection>
         <TableTitle>Alpha Tracker</TableTitle>
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mb: 1, maxWidth: 720 }}>
+          RS% = relative strength vs NIFTY for the selected horizon (not RSI).           RSI = Wilder oscillator (0–100), same length as technical_engine daily scans; shown when available.
+        </Typography>
         <TableWrapper>
           <Table>
             <thead>
@@ -251,6 +251,13 @@ function RelativePerformancePage() {
               </tr>
             </thead>
             <tbody>
+              {!isLoading && sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                    No data for this date / horizon. Pick another date or wait for market data.
+                  </td>
+                </tr>
+              ) : null}
               {paginatedData.map((row) => (
                 <tr key={row.id} className={(row.chg || '').toString().startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>
@@ -308,6 +315,19 @@ function RelativePerformancePage() {
                     <span className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>
                       {row.rs}
                     </span>
+                  </td>
+                  <td
+                    style={{
+                      fontWeight: 600,
+                      color:
+                        row.rsi !== '—' && parseFloat(row.rsi) > 70
+                          ? '#2e7d32'
+                          : row.rsi !== '—' && parseFloat(row.rsi) < 30
+                            ? '#c62828'
+                            : undefined,
+                    }}
+                  >
+                    {row.rsi}
                   </td>
                 </tr>
               ))}

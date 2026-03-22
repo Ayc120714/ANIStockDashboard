@@ -175,6 +175,13 @@ curl -sS "http://127.0.0.1:8000/api/fii-dii/refresh"
 
 If a normal user still **manually opens** `/admin-users`, they are redirected home; API calls from their token return **403** from protected admin routes.
 
+### Trusted device (skip email OTP for 7 days)
+
+- The app sends **`X-Device-Id`** on every API request; after a successful OTP, checking **“Trust this device”** inserts/updates **`trusted_login_devices`** (hashed id + expiry).
+- **Nginx `/api/`:** forward the header — `proxy_set_header X-Device-Id $http_x_device_id;` (see `docs/deployment/nginx-aycindustries.com.conf`). If the header never reaches FastAPI, OTP is always required.
+- **`AUTH_TRUSTED_DEVICE_FOR_SUPER_ADMIN`**: default **true** (super-admins can use trusted device). Set **`false`** in `.env` if admins must OTP every login.
+- Changing **`TOKEN_HASH_SECRET`** changes how device ids are hashed; users re-trust once.
+
 ### Screens / 3-year snapshot backfill (backend)
 
 After each backend start, **`STARTUP_SCREEN_SNAPSHOT_BACKFILL_DAYS`** (default **1095** ≈ 3 years) drives a **background** `backfill_snapshots` so **Screens** history fills without blocking API readiness. Optional: set **`STARTUP_SCREEN_SNAPSHOT_BACKFILL_DAYS=365`** on a small VPS if needed. Index multi-year % uses existing Samco index EOD backfill (**`SAMCO_INDEX_BACKFILL_DAYS`**, default 1200) inside the candle sync path.
