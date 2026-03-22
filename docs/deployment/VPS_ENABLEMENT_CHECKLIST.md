@@ -159,6 +159,28 @@ curl -sS "http://127.0.0.1:8000/api/fii-dii/refresh"
 
 ---
 
+## 5b. Admin-only UI (Admin Users / Telegram Admin)
+
+**Already implemented** in code:
+
+| Layer | Behaviour |
+|--------|-----------|
+| **Sidebar** | `src/components/Sidebar/Sidebar.js` — links render only when `useAuth().isSuperAdmin` is true. |
+| **Routes** | `src/routes/AppRouter.js` — `/admin-users` and `/telegram-admin` are wrapped in `<AdminRoute>`. |
+| **AdminRoute** | `src/routes/AdminRoute.js` — not logged in → `/login`; not super-admin → `/` (dashboard). |
+| **Backend** | `app/api/auth.py` — `AUTH_SUPER_ADMIN_EMAILS` (comma list); admin APIs call `_require_super_admin()`. |
+
+**Frontend** super-admin list: `REACT_APP_SUPER_ADMIN_EMAILS` (optional) merged with defaults in `src/auth/AuthContext.js`.  
+**Backend** must list the **same** emails: `AUTH_SUPER_ADMIN_EMAILS` in `backend_stockdashboard/.env` (defaults include `gvc1990@gmail.com`, `admin@aycindustries.com`).
+
+If a normal user still **manually opens** `/admin-users`, they are redirected home; API calls from their token return **403** from protected admin routes.
+
+### Screens / 3-year snapshot backfill (backend)
+
+After each backend start, **`STARTUP_SCREEN_SNAPSHOT_BACKFILL_DAYS`** (default **1095** ≈ 3 years) drives a **background** `backfill_snapshots` so **Screens** history fills without blocking API readiness. Optional: set **`STARTUP_SCREEN_SNAPSHOT_BACKFILL_DAYS=365`** on a small VPS if needed. Index multi-year % uses existing Samco index EOD backfill (**`SAMCO_INDEX_BACKFILL_DAYS`**, default 1200) inside the candle sync path.
+
+---
+
 ## 6. Other pages (quick mapping)
 
 | UI area | API (examples) | If empty, check |
