@@ -121,8 +121,10 @@ export const fetchMarketIndices = async () => {
 
 const fmtPerf = (v) => {
   if (v === null || v === undefined) return '—';
-  const n = typeof v === 'number' ? v : parseFloat(v);
-  if (isNaN(n)) return String(v);
+  if (typeof v === 'object') return '—';
+  // Hyphen must be first/last in `[]` or escaped — `.-+` is parsed as an invalid range.
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^\d.eE+-]/g, ''));
+  if (!Number.isFinite(n)) return '—';
   const sign = n >= 0 ? '+' : '';
   return `${sign}${n.toFixed(2)}%`;
 };

@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button, Pagination } from '@mui/material';
+import { CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button, Pagination, TablePagination } from '@mui/material';
 import {
   Container,
   LeftContent,
@@ -34,8 +34,8 @@ import {
 } from './SubSectorOutlook.styles';
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
 import { fetchStocksBySubsector } from '../api/stocks'; 
-
 const SUBSECTOR_REFRESH_MS = 30000;
+const SUBSECTOR_MAIN_ROWS_OPTIONS = [15, 25, 50, 100];
 
 function getHighlight(val) {
   if (typeof val !== 'number') return null;
@@ -88,6 +88,8 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const modalPageSize = 25;
   const [sortConfig, setSortConfig] = useState({ key: 'symbol', direction: 'asc' });
   const [tableSort, setTableSort] = useState({ key: null, direction: 'asc' });
+  const [mainListPage, setMainListPage] = useState(0);
+  const [mainListRowsPerPage, setMainListRowsPerPage] = useState(25);
 
   const loadSubsectorData = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
@@ -130,6 +132,10 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
       clearInterval(timer);
     };
   }, [loadSubsectorData]);
+
+  useEffect(() => {
+    setMainListPage(0);
+  }, [search, chip, selectedSector]);
 
   const loadModalStocks = useCallback(async (subsectorName, page = 1) => {
     setModalLoading(true);
@@ -258,14 +264,22 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     return sorted;
   };
 
+  const normLabel = (s) =>
+    (s || '')
+      .normalize('NFKC')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\u2013/g, '-')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
   const mappedSet = mappedGroups && mappedGroups.length
-    ? new Set(mappedGroups.map(n => n.toLowerCase()))
+    ? new Set(mappedGroups.map((n) => normLabel(n)))
     : null;
 
   const filtered = dataList.map(sector => ({
     ...sector,
     subsectors: sortSubsectors(sector.subsectors.filter(sub =>{
-      if (mappedSet && !mappedSet.has(sub.name.toLowerCase())) return false;
+      if (mappedSet && !mappedSet.has(normLabel(sub.name))) return false;
 
       const matchesSearch = sub.name
       .toLowerCase()
@@ -277,15 +291,30 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   })),
   })).filter(sector => sector.subsectors.length);
 
-  // Calculate top and under performers from all subsectors
-  const allSubsectors = dataList.flatMap(sector => 
-    sector.subsectors.map(sub => ({
-      name: sub.name,
-      sector: sector.sector,
-      value: typeof sub.all === 'number' ? sub.all : 0,
-      weekValues: weekLabels.map(lbl => sub[lbl]).filter(v => typeof v === 'number')
-    }))
+  /** Flat list for pagination (full filtered dataset from DB-backed API). */
+  const flatSubsectorRows = useMemo(
+    () =>
+      filtered.flatMap((sector) =>
+        sector.subsectors.map((sub) => ({
+          sector: sector.sector,
+          sub,
+        }))
+      ),
+    [filtered]
   );
+
+  const pagedFlatRows = useMemo(() => {
+    const start = mainListPage * mainListRowsPerPage;
+    return flatSubsectorRows.slice(start, start + mainListRowsPerPage);
+  }, [flatSubsectorRows, mainListPage, mainListRowsPerPage]);
+
+  // Top / under performers from current filtered set (same scope as the table)
+  const allSubsectors = flatSubsectorRows.map(({ sector, sub }) => ({
+    name: sub.name,
+    sector,
+    value: typeof sub.all === 'number' ? sub.all : 0,
+    weekValues: weekLabels.map((lbl) => sub[lbl]).filter((v) => typeof v === 'number'),
+  }));
 
   // Sort by 'all' value (or average of recent weeks if 'all' is not available)
   const sortedSubsectors = [...allSubsectors].sort((a, b) => {
@@ -397,46 +426,77 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
               </HeaderRow>
             </thead>
             <tbody>
-              {filtered.length === 0 && !isLoading && !loadError && (
+              {flatSubsectorRows.length === 0 && !isLoading && !loadError && (
                 <TableRow>
                   <TableCell colSpan={3 + Math.max(weekLabels.length, 4)} style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
                     No subsector data available.
                   </TableCell>
                 </TableRow>
               )}
-              {filtered.map(sector => (
-                <React.Fragment key={sector.sector}>
-                  <SectorHeader>
-                    <TableCell colSpan={3 + Math.max(weekLabels.length, 4)}>{sector.sector}</TableCell>
-                  </SectorHeader>
-                  {sector.subsectors.map(sub => (
-                    <TableRow key={sub.name}>
-                      <TableCell 
-                        style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
-                        onClick={() => handleSubsectorClick(sub.name, sector.sector)}
-                      >
-                        {sub.name} 
-                        {(sub.stock_count || sub.all) > 0 && (
-                          <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>
-                            ({sub.stock_count || sub.all})
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>{sub.stock_count || sub.all}</TableCell>
-                      <TableCell>{sub.trend}</TableCell>
-                      {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => {
-                        const val = weekLabels.length ? sub[lbl] : null;
-                        const display = val != null ? `${val}%` : '—';
-                        return (
-                          <TableCell key={lbl || idx} highlight={getHighlight(val)}>{display}</TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </React.Fragment>
-              ))}
+              {(() => {
+                let prevSector = null;
+                return pagedFlatRows.map(({ sector, sub }) => {
+                  const showHeader = sector !== prevSector;
+                  prevSector = sector;
+                  const countVal =
+                    sub.stock_count != null && sub.stock_count !== ''
+                      ? sub.stock_count
+                      : null;
+                  return (
+                    <React.Fragment key={`${sector}::${sub.name}`}>
+                      {showHeader && (
+                        <SectorHeader>
+                          <TableCell colSpan={3 + Math.max(weekLabels.length, 4)}>{sector}</TableCell>
+                        </SectorHeader>
+                      )}
+                      <TableRow>
+                        <TableCell
+                          style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                          onClick={() => handleSubsectorClick(sub.name, sector)}
+                        >
+                          {sub.name}
+                          {countVal != null && Number(countVal) > 0 && (
+                            <span style={{ fontSize: '12px', color: '#666', marginLeft: '4px' }}>({countVal})</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {sub.all == null || sub.all === ''
+                            ? '—'
+                            : typeof sub.all === 'string' && String(sub.all).includes('%')
+                              ? sub.all
+                              : `${sub.all}%`}
+                        </TableCell>
+                        <TableCell>{sub.trend ?? '—'}</TableCell>
+                        {(weekLabels.length ? weekLabels : [1, 2, 3, 4]).map((lbl, idx) => {
+                          const val = weekLabels.length ? sub[lbl] : null;
+                          const display = val != null ? `${val}%` : '—';
+                          return (
+                            <TableCell key={lbl || idx} highlight={getHighlight(val)}>
+                              {display}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </Table>
+          <TablePagination
+            component="div"
+            count={flatSubsectorRows.length}
+            page={mainListPage}
+            onPageChange={(_e, p) => setMainListPage(p)}
+            rowsPerPage={mainListRowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setMainListRowsPerPage(parseInt(e.target.value, 10));
+              setMainListPage(0);
+            }}
+            rowsPerPageOptions={SUBSECTOR_MAIN_ROWS_OPTIONS}
+            labelRowsPerPage="Subsectors per page"
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`}
+          />
         </TableScroll>
       </LeftContent>
 

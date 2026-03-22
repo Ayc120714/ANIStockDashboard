@@ -12,7 +12,7 @@ From that folder run `docker compose build && docker compose up -d`, then open *
 
 ## Local dev (React + FastAPI + PostgreSQL + Cursor)
 
-Step-by-step (Postgres, env vars, `uvicorn`, `npm start`, and using Cursor’s terminal for API calls): **[docs/deployment/local-fullstack-cursor-setup.md](docs/deployment/local-fullstack-cursor-setup.md)**. Quick start: `npm run dev:fullstack` (requires Postgres + backend `.env`).
+Step-by-step (Postgres, env vars, `uvicorn`, `npm start`, and using Cursor’s terminal for API calls): **[docs/deployment/local-fullstack-cursor-setup.md](docs/deployment/local-fullstack-cursor-setup.md)**. Quick start: `npm run dev:fullstack` (requires Postgres + backend `.env`). The API must live in **`../backend_stockdashboard`** (sibling of this folder), not inside `stockdashboard/`.
 
 ## Linux VPS (production-style stack)
 

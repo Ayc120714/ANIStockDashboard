@@ -168,11 +168,22 @@ const SECTOR_TO_SUBSECTORS = {
 };
 
 function resolveMapping(sectorName) {
-  if (!sectorName) return null;
-  const key = sectorName.toUpperCase().trim();
-  if (SECTOR_TO_SUBSECTORS[key]) return SECTOR_TO_SUBSECTORS[key];
+  if (!sectorName || typeof sectorName !== 'string') return null;
+  // Match Sector Insights labels (incl. NBSP / odd spacing) to SECTOR_TO_SUBSECTORS keys
+  const normalized = sectorName.normalize('NFKC').replace(/\u00A0/g, ' ').trim();
+  const keySpaced = normalized.toUpperCase().replace(/\s+/g, ' ').trim();
+  if (SECTOR_TO_SUBSECTORS[keySpaced]) return SECTOR_TO_SUBSECTORS[keySpaced];
+
+  const alnum = keySpaced.replace(/[^A-Z0-9]/g, '');
+  const mapKeys = Object.keys(SECTOR_TO_SUBSECTORS).sort((a, b) => b.length - a.length);
+  for (const mk of mapKeys) {
+    const mkAlnum = mk.replace(/[^A-Z0-9]/g, '');
+    if (alnum && mkAlnum && alnum === mkAlnum) {
+      return SECTOR_TO_SUBSECTORS[mk];
+    }
+  }
   for (const [k, v] of Object.entries(SECTOR_TO_SUBSECTORS)) {
-    if (key.includes(k) || k.includes(key)) return v;
+    if (keySpaced.includes(k) || k.includes(keySpaced)) return v;
   }
   return null;
 }
@@ -184,7 +195,9 @@ function OutlookPage() {
 
   const handleSectorClick = (sectorName) => {
     setSelectedSector(sectorName);
-    setMappedGroups(resolveMapping(sectorName));
+    const m = resolveMapping(sectorName);
+    // Empty array = broken mapping; treat as "show all" (avoid "0 mapped" + empty filter)
+    setMappedGroups(Array.isArray(m) && m.length ? m : null);
     setActiveTab('subsector');
   };
 

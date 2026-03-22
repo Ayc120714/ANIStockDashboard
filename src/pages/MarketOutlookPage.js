@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { TablePagination } from '@mui/material';
 import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
+import { useBootstrapReady } from '../hooks/useBootstrapReady';
 import {
   CardContainer,
   Card,
@@ -25,8 +27,9 @@ import {
 
 const MIN_FII_DII_DAYS = 20;
 const MARKET_REFRESH_MS = 30000;
+const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
-function MarketOutlookPage() {
+function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
   const defaultIndexCards = [
     { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
     { title: 'Next 50', trend: 'UP TREND', value: '69,852', change: '+0.00%', percentile: '79%', pe: '20 PE' },
@@ -107,6 +110,8 @@ function MarketOutlookPage() {
   }, []);
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [tablePage, setTablePage] = useState(0);
+  const [tableRowsPerPage, setTableRowsPerPage] = useState(15);
 
   const sortedTableData = React.useMemo(() => {
     const sortableItems = [...tableData];
@@ -138,12 +143,18 @@ function MarketOutlookPage() {
     return sortableItems;
   }, [tableData, sortConfig]);
 
+  const paginatedTableRows = useMemo(() => {
+    const start = tablePage * tableRowsPerPage;
+    return sortedTableData.slice(start, start + tableRowsPerPage);
+  }, [sortedTableData, tablePage, tableRowsPerPage]);
+
   const requestSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setTablePage(0);
   };
 
   // Column configuration for header rendering
@@ -271,6 +282,16 @@ function MarketOutlookPage() {
 
   return (
     <>
+      {timedOut && !apiReady && (
+        <div style={{ marginBottom: '12px', color: '#b45309', fontWeight: 600, fontSize: 14 }}>
+          Could not reach the API within 60s — check that the backend is running on port 8000, then refresh.
+        </div>
+      )}
+      {apiReady && !bootstrapComplete && (
+        <div style={{ marginBottom: '12px', color: '#0369a1', fontWeight: 600, fontSize: 13 }}>
+          Background data sync is still running — table shows current DB data and refreshes every 30s.
+        </div>
+      )}
       {loadError && (
         <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>
           {loadError}
@@ -481,7 +502,7 @@ function MarketOutlookPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedTableData.map((row) => (
+              {paginatedTableRows.map((row) => (
                 <tr key={row.id} className={getDailySignClass(row.day1d) === 'up' ? 'row-up' : getDailySignClass(row.day1d) === 'down' ? 'row-down' : ''}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
@@ -499,9 +520,47 @@ function MarketOutlookPage() {
               ))}
             </tbody>
           </Table>
+          <TablePagination
+            component="div"
+            count={sortedTableData.length}
+            page={tablePage}
+            onPageChange={(_e, p) => setTablePage(p)}
+            rowsPerPage={tableRowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setTableRowsPerPage(parseInt(e.target.value, 10));
+              setTablePage(0);
+            }}
+            rowsPerPageOptions={INDICES_TABLE_ROWS_PER_PAGE_OPTIONS}
+            labelRowsPerPage="Rows per page"
+          />
         </TableWrapper>
       </TableSection>
     </>
+  );
+}
+
+function MarketOutlookPage() {
+  const { showData, apiReady, timedOut, bootstrapComplete } = useBootstrapReady();
+
+  if (!showData) {
+    return (
+      <div style={{ padding: '48px 24px', textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ marginBottom: 16, color: '#333', fontWeight: 600, fontSize: 18 }}>
+          Connecting to API…
+        </div>
+        <div style={{ color: '#666', fontSize: 14, lineHeight: 1.5 }}>
+          Waiting for <code style={{ fontSize: 13 }}>GET /api/system/status</code> (backend on port 8000).
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <MarketOutlookContent
+      apiReady={apiReady}
+      timedOut={timedOut}
+      bootstrapComplete={bootstrapComplete}
+    />
   );
 }
 

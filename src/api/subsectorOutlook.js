@@ -20,7 +20,7 @@ export const fetchSubsectorOutlook = async () => {
 export const fetchStocksForSubsector = async (subsectorName, page = 1, pageSize = 25) => {
   try {
     const resp = await apiGet(
-      `/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}&page=${page}&page_size=${pageSize}`
+      `/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}&page=${page}&page_size=${pageSize}&hydrate_market_fields=true`
     );
     return {
       data: Array.isArray(resp?.data) ? resp.data : [],
