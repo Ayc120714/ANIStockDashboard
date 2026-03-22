@@ -294,7 +294,7 @@ After the backend is healthy, **`curl`** to **`127.0.0.1:8000`** should succeed 
 
 **Meaning:** Nothing is listening on **`127.0.0.1:8000`** — usually **`ani-backend` is not `active (running)`**, or systemd points at a **wrong path** (venv/app), or the process **crashes on import** before binding.
 
-**Historical note (fixed in backend `main.py`):** With **`uvicorn --workers 2`** and a **blocking** startup bootstrap + **blocking second `flock()`** on the follower worker, Uvicorn could **refuse TCP connections** until the long bootstrap finished (ASGI startup had not completed in all workers). Current code runs bootstrap on a **background thread** so the listen socket comes up **immediately** after restart. **`git pull`** the latest **`backend_stockdashboard`** if you still see refusal while **`systemctl` is `active (running)`**.
+**Historical note (fixed in backend `main.py`):** Uvicorn will not accept TCP until **every** worker finishes ASGI startup. Blockers were: (1) long bootstrap / blocking **`flock`** — fixed with a **background** bootstrap thread + non-blocking election; (2) **`start_orchestrator()`** on the **follower** — `orchestrator.start()` runs heavy initial work and was blocking that worker’s startup — fixed by starting the orchestrator in a **background thread** on the follower (and when **`STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=false`**). **`git pull`** **`backend_stockdashboard`** if **`curl`** still refuses while **`systemctl` is `active (running)`**.
 
 ### A. Run these in order (copy/paste on the VPS)
 
