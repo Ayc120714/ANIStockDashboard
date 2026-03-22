@@ -47,8 +47,8 @@ If these fail or return errors, fix **Nginx `/api/` proxy → Uvicorn** and **`a
 
 | Cause | What to check |
 |--------|----------------|
-| **Trendlyne blocked / layout change** | Cloudflare or `data-jsondata` moved. **Logs:** `journalctl -u ani-backend -n 200` → `Trendlyne`, `data-jsondata`. Test: `curl -sSI https://trendlyne.com/macro-data/fii-dii/latest/cash-pastmonth/` |
-| **Moneycontrol backfill fails** | Optional; primary data may still load from Trendlyne. |
+| **Trendlyne HTTP 403** | Datacenter IPs often get Cloudflare **403** on plain `requests`. Backend retries with **`curl-cffi`** (browser TLS). On the VPS: `pip install -r requirements.txt` (includes `curl-cffi`) and **restart** `ani-backend`. If 403 persists, **Moneycontrol** fallback uses Next.js `__NEXT_DATA__` (no Trendlyne needed). |
+| **Moneycontrol parse errors** | Cash page is **Next.js** — ensure backend is **updated** (parses `FiiDiiData.fiiDiiData`). Monthly overlay still uses the HTML table under `fidi_table`. |
 | **Outbound HTTPS blocked** | Firewall / provider policy. |
 | Rows exist but **all zeros** | API treats as bad import and may retry refresh; if remote still fails, charts stay empty. |
 | **Stale > 7 days** | Code may trigger refresh; same network constraints apply. |
