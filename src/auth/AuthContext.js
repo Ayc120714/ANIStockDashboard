@@ -6,13 +6,23 @@ import { clearBrokerSession } from '../api/brokers';
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY = 'auth_user';
-const DEFAULT_ADMIN_EMAILS = ['gvc1990@gmail.com'];
+const DEFAULT_ADMIN_EMAILS = ['gvc1990@gmail.com', 'admin@aycindustries.com'];
 
 const AuthContext = createContext(null);
 const ADMIN_EMAILS = new Set(
   [
     ...DEFAULT_ADMIN_EMAILS,
     ...(process.env.REACT_APP_ADMIN_EMAILS || '').split(','),
+  ]
+    .map((v) => String(v).trim().toLowerCase())
+    .filter(Boolean)
+);
+
+/** Admin Users + Telegram Admin routes only (not watchlist/order admin). */
+const SUPER_ADMIN_EMAILS = new Set(
+  [
+    ...DEFAULT_ADMIN_EMAILS,
+    ...(process.env.REACT_APP_SUPER_ADMIN_EMAILS || '').split(','),
   ]
     .map((v) => String(v).trim().toLowerCase())
     .filter(Boolean)
@@ -153,13 +163,16 @@ export function AuthProvider({ children }) {
       refreshToken,
       isAuthenticated: Boolean(accessToken && user),
       isAdmin: Boolean(user?.is_admin) || ADMIN_EMAILS.has(String(user?.email || '').toLowerCase()),
+      isSuperAdmin:
+        Boolean(user?.is_super_admin) ||
+        SUPER_ADMIN_EMAILS.has(String(user?.email || '').toLowerCase()),
       bootstrapping,
       persistAuth,
       clearAuth,
       logout,
       hydrateMe,
     }),
-    [user, accessToken, refreshToken, bootstrapping, persistAuth, clearAuth, logout, hydrateMe]
+    [user, accessToken, refreshToken, bootstrapping, persistAuth, clearAuth, logout, hydrateMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

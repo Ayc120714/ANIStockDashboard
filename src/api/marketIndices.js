@@ -151,7 +151,8 @@ const mapTableRow = (item, idx) => {
     trend: trend.label,
     trendDirection: trend.direction,
     value: formatValue(item.value ?? item.cmp ?? item.close ?? item.last),
-    percentile: formatPercentile(item.percentile ?? item.percentage_change),
+    // Do not fall back to percentage_change — that breaks India VIX "Percentile" vs daily %.
+    percentile: formatPercentile(item.percentile),
     day1d: fmtPerf(dailyChange),
     week1w: fmtPerf(item.perf_1w ?? item.week1w ?? item['1w']),
     month1m: fmtPerf(item.perf_1m ?? item.month1m ?? item['1m']),

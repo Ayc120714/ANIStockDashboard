@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { isAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
 
   return (
     <SidebarContainer collapsed={collapsed}>
@@ -104,14 +104,14 @@ function Sidebar() {
             <span className="label">Events</span>
           </NavLink>
 
-          {isAdmin ? (
+          {isSuperAdmin ? (
             <NavLink to="/admin-users" collapsed={collapsed} title={collapsed ? 'Admin Users' : undefined}>
               <MdVerifiedUser />
               <span className="label">Admin Users</span>
             </NavLink>
           ) : null}
 
-          {isAdmin ? (
+          {isSuperAdmin ? (
             <NavLink to="/telegram-admin" collapsed={collapsed} title={collapsed ? 'Telegram Admin' : undefined}>
               <MdVerifiedUser />
               <span className="label">Telegram Admin</span>

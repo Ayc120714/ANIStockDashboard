@@ -11,6 +11,12 @@
 # production
 /build
 
+# tool caches
+.eslintcache
+node_modules/.cache
+node_modules/.cache-loader
+.turbo
+
 # misc
 .DS_Store
 .env.local

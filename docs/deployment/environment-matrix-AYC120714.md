@@ -31,7 +31,7 @@
 | `API_OBFUSCATION_SECRET` | Yes | `<long-random-secret>` | Secondary security secret |
 | `DHAN_TOKEN_SECRET` | Recommended | `<long-random-secret>` | Dhan auth token integrity |
 | `AUTH_DEBUG_OTP` | No (prod=false) | `false` | OTP debug mode |
-| `AUTH_SUPER_ADMIN_EMAILS` | Recommended | `gvc1990@gmail.com,admin@aycindustries.com` | Super-admin emails (admin APIs, UI). **Login:** password + email OTP only |
+| `AUTH_SUPER_ADMIN_EMAILS` | Recommended | `gvc1990@gmail.com,admin@aycindustries.com` | Super-admin emails. **Login:** password + email OTP only |
 | `AUTH_PASSWORDLESS_ADMIN_EMAILS` | Optional (legacy) | — | Deprecated alias for `AUTH_SUPER_ADMIN_EMAILS` if unset |
 | `LOGIN_LOCK_MINUTES` | Optional | `15` | Login lockout duration |
 | `MAX_FAILED_LOGINS` | Optional | `5` | Failed login threshold |

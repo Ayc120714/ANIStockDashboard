@@ -3,13 +3,13 @@ import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 
 function AdminRoute({ children }) {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isSuperAdmin } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isAdmin) {
+  if (!isSuperAdmin) {
     return <Navigate to="/" replace />;
   }
 

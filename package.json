@@ -29,6 +29,7 @@
     "start": "craco start",
     "dev:fullstack": "powershell -ExecutionPolicy Bypass -File ./scripts/start-fullstack.ps1",
     "stop:fullstack": "powershell -ExecutionPolicy Bypass -File ./scripts/stop-fullstack.ps1",
+    "clean": "node scripts/clean-cache.js",
     "build": "craco build",
     "test": "craco test",
     "eject": "react-scripts eject"

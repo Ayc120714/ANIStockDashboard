@@ -7,9 +7,6 @@ export const forgotUserId = (mobile) => apiPost('/auth/forgot-id', { mobile });
 export const forgotPasswordStart = (identifier) => apiPost('/auth/forgot-password/start', { identifier });
 export const forgotPasswordComplete = (flowId, newPassword) =>
   apiPost('/auth/forgot-password/complete', { flow_id: flowId, new_password: newPassword });
-export const adminPasswordlessLogin = (email) =>
-  apiPost('/auth/admin/passwordless-login', { email });
-
 export const loginStart = (email, password) =>
   apiPost('/auth/login/start', { email, password });
 
