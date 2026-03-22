@@ -186,7 +186,7 @@ After each backend start, **`STARTUP_SCREEN_SNAPSHOT_BACKFILL_DAYS`** (default *
 | UI area | API (examples) | If empty, check |
 |---------|----------------|-----------------|
 | Market indices / FII cards | `/api/market-indices/`, `/api/fii-dii/` | Build URL, nginx, DB, Trendlyne |
-| SubSector Insights | `/api/subsector-outlook/grouped` | Backend pull, `StockSectorInfo` / weekly jobs |
+| SubSector Insights | `/api/subsector-outlook/grouped` | Backend pull, `StockSectorInfo` / weekly jobs. **CHG% fix:** **`STOCK_PERSIST_EOD_DAY1D=true`** (default) saves EOD-based `day1d` when `/api/subsector-stocks` loads a page — keeps Screens/Trending aligned with the modal. |
 | Screens → Trending | `/api/stocks/trending` | `StockSectorInfo.day1d`, snapshots — see [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md) |
 | Advisor / Alerts | advisor + scheduler routes | DB jobs, not only Git |
 
