@@ -52,6 +52,21 @@ const buildUrl = (endpoint) => {
   return `${base}${path}`;
 };
 
+/** Nginx/HTML error pages are not user-friendly; map to a short message. */
+const humanizeNonJsonError = (status, rawText) => {
+  if (status >= 502 && status <= 504) {
+    return 'Server temporarily unavailable. The API may be restarting — wait a minute and try again. If this persists, contact support.';
+  }
+  const t = (rawText || '').trim();
+  if (!t) {
+    return `Request failed (${status}). Please try again.`;
+  }
+  if (/^<\s*html[\s>]/i.test(t) || /<title>\s*502/i.test(t) || /<title>\s*503/i.test(t)) {
+    return 'The service returned an error page instead of the API. The backend may be down or misconfigured — try again shortly.';
+  }
+  return t.length > 400 ? `${t.slice(0, 400)}…` : t;
+};
+
 const getOrCreateDeviceId = () => {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
@@ -138,7 +153,7 @@ export const apiRequest = async (endpoint, options = {}) => {
       }
     } else {
       const errorText = await interceptedResponse.text().catch(() => '');
-      if (errorText) errorMessage = errorText;
+      errorMessage = humanizeNonJsonError(interceptedResponse.status, errorText);
     }
     throw new Error(errorMessage);
   }
