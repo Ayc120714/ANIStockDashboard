@@ -41,7 +41,7 @@ If these fail or return errors, fix **Nginx `/api/` proxy → Uvicorn** and **`a
 **Data path:** PostgreSQL table **`fii_dii_activity`** (category `cash`), filled by:
 
 - Background/scheduler jobs, and/or  
-- **On-demand refresh** when the API sees empty/stale rows — **`fii_dii_fetcher.py`** uses **Trendlyne** [cash past-month](https://trendlyne.com/macro-data/fii-dii/latest/cash-pastmonth/) (embedded `data-jsondata`), then **Moneycontrol** monthly HTML if more history is needed or Trendlyne fails.
+- **On-demand refresh** when the API sees empty/stale rows — **`fii_dii_fetcher.py`** uses **Trendlyne** [cash past-month](https://trendlyne.com/macro-data/fii-dii/latest/cash-pastmonth/) (the page can embed **multiple** `data-jsondata` tables; the fetcher **scores and picks** the cash FII/DII table, and maps columns by **header names** so FII/MF segment tables do not mis-map to ₹0). **Moneycontrol** monthly HTML fills more history if needed or Trendlyne fails.
 
 **Common VPS issues**
 
