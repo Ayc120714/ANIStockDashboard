@@ -37,7 +37,7 @@ import { fetchStocksBySubsector } from '../api/stocks';
 const SUBSECTOR_REFRESH_MS = 30000;
 const SUBSECTOR_MAIN_ROWS_OPTIONS = [15, 25, 50, 100];
 /** Bump when API shape changes (e.g. trend string + trend_pct) so stale sessionStorage is not used. */
-const SUBSECTOR_CACHE_KEY = 'subsectorOutlookData_v2';
+const SUBSECTOR_CACHE_KEY = 'subsectorOutlookData_v3';
 
 function getHighlight(val) {
   if (typeof val !== 'number') return null;
@@ -73,7 +73,13 @@ function trendSortValue(sub) {
 /** Display text for Trend (string from API or legacy number). */
 function formatTrendDisplay(sub) {
   if (sub == null) return '—';
-  if (typeof sub.trend === 'string' && sub.trend.trim()) return sub.trend;
+  const tStr = typeof sub.trend === 'string' ? sub.trend.trim() : '';
+  if (tStr && tStr !== '—') return tStr;
+  if (typeof sub.trend_pct === 'number' && Number.isFinite(sub.trend_pct)) {
+    const v = sub.trend_pct;
+    const arrow = v >= 0 ? '↗' : '↘';
+    return `${arrow} ${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+  }
   if (typeof sub.trend === 'number' && Number.isFinite(sub.trend)) {
     const arrow = sub.trend >= 0 ? '↗' : '↘';
     return `${arrow} ${sub.trend >= 0 ? '+' : ''}${sub.trend.toFixed(1)}%`;
