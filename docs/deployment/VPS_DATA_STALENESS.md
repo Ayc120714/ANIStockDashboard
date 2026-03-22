@@ -4,6 +4,17 @@ Use this when the **UI loads** but **FII/DII charts are empty**, **Trending is b
 
 ---
 
+## 0. Startup: full data bootstrap on every restart (backend)
+
+By default (`STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=true` in `backend_stockdashboard/.env`), the API **runs `run_startup_data_bootstrap()` and waits for it** before starting the **orchestrator** on **every** process restart. That refreshes candles, indices, sector outlook, FII/DII attempt, etc., so you are less likely to serve empty/stale data right after a deploy.
+
+- **First requests after restart** may lag until bootstrap finishes (Samco, DB work).  
+- **Timeout:** `STARTUP_BOOTSTRAP_TIMEOUT_SEC` (default **7200**). If bootstrap is still running, the server logs a warning and starts the orchestrator anyway.  
+- **Fast dev restarts:** set `STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=false` (bootstrap runs in background; orchestrator starts immediately).  
+- **Readiness:** `GET /api/system/readiness` → `bootstrap_complete: true` after the bootstrap gate releases (see `app/scheduler.py`).
+
+---
+
 ## 1. Confirm the browser hits the right API
 
 The React app must call **your** backend base URL (e.g. `https://www.aycindustries.com/api`), not `localhost`.
