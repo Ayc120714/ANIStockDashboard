@@ -3,6 +3,8 @@
 Use this whenever you need to **restart** or **redeploy** on the VPS (systemd + Nginx + static React build).
 For first-time install, see **[VPS_INSTALL_RUN_AYCINDUSTRIES.md](VPS_INSTALL_RUN_AYCINDUSTRIES.md)**.
 
+If the UI loads but **FII/DII, screens, or other API data is empty**, see **[VPS_ENABLEMENT_CHECKLIST.md](VPS_ENABLEMENT_CHECKLIST.md)** (two-repo deploy, `REACT_APP_API_URL`, Nginx, DB, Trendlyne).
+
 **Typical layout**
 
 | Item | Path / name |
