@@ -23,7 +23,7 @@ import {
   Typography,
 } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
 import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';

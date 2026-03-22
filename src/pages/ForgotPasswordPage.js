@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { forgotPasswordComplete, forgotPasswordStart, resendOtp, verifyOtp } from '../api/auth';
 
 const onlyDigits = (value) => (value || '').replace(/\D/g, '').slice(0, 8);

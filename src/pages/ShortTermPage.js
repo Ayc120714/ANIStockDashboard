@@ -8,7 +8,7 @@ import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
 import OrderPanel from '../components/OrderPanel';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',

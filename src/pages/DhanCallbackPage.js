@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { connectDhan, ensureDhanSession } from '../api/dhan';
 import { markConsentLimitForToday, shouldSkipBrokerConsentToday } from '../auth/postLoginRouting';

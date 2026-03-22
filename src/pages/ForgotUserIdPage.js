@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { forgotUserId } from '../api/auth';
 
 function ForgotUserIdPage() {

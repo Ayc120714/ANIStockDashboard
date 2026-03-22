@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import { MdRefresh, MdTrendingUp, MdTrendingDown, MdRemoveRedEye } from 'react-icons/md';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchPriceShockers } from '../api/stocks';

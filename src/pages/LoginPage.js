@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { loginStart } from '../api/auth';
 import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
