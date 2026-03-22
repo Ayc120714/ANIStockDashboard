@@ -41,14 +41,15 @@ If these fail or return errors, fix **Nginx `/api/` proxy → Uvicorn** and **`a
 **Data path:** PostgreSQL table **`fii_dii_activity`** (category `cash`), filled by:
 
 - Background/scheduler jobs, and/or  
-- **On-demand refresh** when the API sees empty/stale rows — it calls **Trendlyne** (`app/external/fii_dii_fetcher.py` → HTTP GET).
+- **On-demand refresh** when the API sees empty/stale rows — **`fii_dii_fetcher.py`** fetches **Moneycontrol** ([`/markets/fii-dii-data/cash/`](https://www.moneycontrol.com/markets/fii-dii-data/cash/) and related URLs), with **Trendlyne** as a fallback if Moneycontrol HTML cannot be parsed.
 
 **Common VPS issues**
 
 | Cause | What to check |
 |--------|----------------|
-| Empty DB + **Trendlyne blocked** | Datacenter IP blocked by Cloudflare / rate limits. **Logs:** `journalctl -u ani-backend -n 200` → look for `FII/DII on-demand refresh failed` or `requests` errors. |
-| **Outbound HTTPS blocked** | Firewall / provider policy. Test: `curl -sSI https://trendlyne.com/macro-data/fii-dii/latest/cash-pastmonth/` from the VPS. |
+| Empty DB + **Moneycontrol blocked** | HTML/layout change, bot block, or consent interstitial. **Logs:** `journalctl -u ani-backend -n 200` → `FII/DII`, `Moneycontrol`, `Trendlyne`. |
+| **Trendlyne fallback also fails** | Same as below for outbound HTTPS. |
+| **Outbound HTTPS blocked** | Firewall / provider policy. Test from VPS: `curl -sSI https://www.moneycontrol.com/markets/fii-dii-data/cash/` |
 | Rows exist but **all zeros** | API treats as bad import and may retry refresh; if remote still fails, charts stay empty. |
 | **Stale > 7 days** | Code may trigger refresh; same network constraints apply. |
 
