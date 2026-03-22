@@ -125,7 +125,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     }
     setLoadError(null);
     let cacheSet = false;
-    const cached = sessionStorage.getItem('subsectorOutlookData');
+    const cached = sessionStorage.getItem(SUBSECTOR_CACHE_KEY);
     if (!silent && cached) {
       const parsed = JSON.parse(cached);
       setSectorData(parsed?.data ? parsed : { weekLabels: [], data: [] });
@@ -134,7 +134,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     }
     try {
       const fresh = await fetchSubsectorOutlook();
-      sessionStorage.setItem('subsectorOutlookData', JSON.stringify(fresh));
+      sessionStorage.setItem(SUBSECTOR_CACHE_KEY, JSON.stringify(fresh));
       setSectorData(fresh?.data ? fresh : { weekLabels: [], data: [] });
       if (!silent) {
         setIsLoading(false);
@@ -165,10 +165,13 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     setMainListPage(0);
   }, [search, chip, selectedSector]);
 
-  const loadModalStocks = useCallback(async (subsectorName, page = 1) => {
+  const loadModalStocks = useCallback(async (subsectorName, page = 1, options = {}) => {
+    const { hydrateMarketFields = false } = options;
     setModalLoading(true);
     try {
-      const paged = await fetchStocksForSubsector(subsectorName, page, modalPageSize);
+      const paged = await fetchStocksForSubsector(subsectorName, page, modalPageSize, {
+        hydrateMarketFields,
+      });
       let stocks = paged.data;
       let total = paged.total;
 
@@ -696,7 +699,15 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
             </div>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingLeft: 16, paddingRight: 16 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={modalLoading || !selectedSubsector?.name}
+            onClick={() => loadModalStocks(selectedSubsector.name, modalPage, { hydrateMarketFields: true })}
+          >
+            Refresh live quotes (slower)
+          </Button>
           <Button onClick={handleModalClose} color="primary">
             Close
           </Button>

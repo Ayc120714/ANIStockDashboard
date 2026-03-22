@@ -17,10 +17,15 @@ export const fetchSubsectorOutlook = async () => {
 /**
  * Fetch stocks for a specific subsector
  */
-export const fetchStocksForSubsector = async (subsectorName, page = 1, pageSize = 25) => {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.hydrateMarketFields] - If true, slow Samco refresh for MC/EMA/LTP (default false: EOD CHG% from DB candles).
+ */
+export const fetchStocksForSubsector = async (subsectorName, page = 1, pageSize = 25, opts = {}) => {
+  const hydrate = opts.hydrateMarketFields === true ? 'true' : 'false';
   try {
     const resp = await apiGet(
-      `/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}&page=${page}&page_size=${pageSize}&hydrate_market_fields=true`
+      `/subsector-stocks?subsector=${encodeURIComponent(subsectorName)}&page=${page}&page_size=${pageSize}&hydrate_market_fields=${hydrate}`
     );
     return {
       data: Array.isArray(resp?.data) ? resp.data : [],
