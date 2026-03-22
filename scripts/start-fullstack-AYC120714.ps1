@@ -2,7 +2,6 @@ param(
     [int]$BackendPort = 8000,
     [int]$FrontendPort = 3000,
     [int]$BackendStartupTimeoutSec = 90,
-    [int]$BootstrapReadinessTimeoutSec = 900,
     [string]$BackendHealthUrl = "",
     [switch]$KillExisting = $true
 )
@@ -67,21 +66,14 @@ function Start-DetachedTerminal {
     ) -WorkingDirectory $WorkingDir | Out-Null
 }
 
-# Frontend repo root (folder that contains package.json + scripts/)
 $frontendRoot = Split-Path -Parent $PSScriptRoot
-# Backend lives as a SIBLING of stockdashboard: ANIStockProject/backend_stockdashboard
-$projectRoot = Split-Path -Parent $frontendRoot
-$backendRoot = Join-Path $projectRoot "backend_stockdashboard"
+$repoRoot = Split-Path -Parent $frontendRoot
+# Real backend: ANIStockProject/backend_stockdashboard (sibling of stockdashboard). Not the nested copy under stockdashboard/.
+$backendRoot = Join-Path $repoRoot "backend_stockdashboard"
 if (-not (Test-Path $backendRoot)) {
-    throw @"
-Backend directory not found: $backendRoot
-
-Expected layout:
-  <project>/stockdashboard/     (this React app)
-  <project>/backend_stockdashboard/   (FastAPI — clone next to stockdashboard, not inside it)
-
-"@
+    throw "Backend directory not found: $backendRoot`nClone https://github.com/Ayc120714/backend_stockdashboard.git next to stockdashboard."
 }
+Write-Host "Backend directory: $backendRoot"
 
 if ($KillExisting) {
     Write-Host "Stopping old backend/frontend processes ..."
@@ -94,14 +86,8 @@ if ($KillExisting) {
     Start-Sleep -Seconds 1
 }
 
-Write-Host "Starting backend first (BACKGROUND_REFRESH + sector sync + orchestrator enabled for this session) ..."
-# Child shell env so startup bootstrap + scheduled jobs can populate indices, candles, FII/DII, etc.
-$backendCmd = (
-    '$env:BACKGROUND_REFRESH=''true''; ' +
-    '$env:SECTOR_CLASSIFICATION_SYNC_ON_STARTUP=''true''; ' +
-    '$env:ENABLE_ORCHESTRATOR=''true''; ' +
-    'python -m uvicorn app.main:app --host 127.0.0.1 --port ' + $BackendPort + ' --log-level info'
-)
+Write-Host "Starting backend first ..."
+$backendCmd = "python -m uvicorn app.main:app --host 127.0.0.1 --port $BackendPort --log-level info"
 Start-DetachedTerminal -WorkingDir $backendRoot -Command $backendCmd
 
 $urls = @()
@@ -135,38 +121,7 @@ if (-not $ready) {
     throw "Backend did not become ready within $BackendStartupTimeoutSec seconds."
 }
 
-$readinessUrl = "http://127.0.0.1:$BackendPort/api/system/readiness"
-Write-Host "Waiting for startup DB/candle bootstrap (readiness) up to $BootstrapReadinessTimeoutSec s ..."
-$bootstrapDone = $false
-$readinessMissing = $false
-for ($j = 0; $j -lt $BootstrapReadinessTimeoutSec; $j += 2) {
-    try {
-        $body = Invoke-RestMethod -Uri $readinessUrl -TimeoutSec 8 -ErrorAction Stop
-        if ($body.bootstrap_complete -eq $true) {
-            $bootstrapDone = $true
-            break
-        }
-    } catch {
-        $resp = $_.Exception.Response
-        if ($resp -and [int]$resp.StatusCode -eq 404) {
-            Write-Host "Readiness endpoint not found (older backend) — skipping bootstrap wait."
-            $readinessMissing = $true
-            $bootstrapDone = $true
-            break
-        }
-    }
-    Start-Sleep -Seconds 2
-}
-
-if (-not $bootstrapDone) {
-    throw "Startup bootstrap did not report complete within $BootstrapReadinessTimeoutSec seconds. Check backend logs (Samco login, CandleSyncEngine)."
-}
-
-if (-not $readinessMissing) {
-    Write-Host "Startup bootstrap complete."
-}
-
-Write-Host "Starting frontend ..."
+Write-Host "Backend is ready. Starting frontend ..."
 $frontendCmd = "npm start"
 Start-DetachedTerminal -WorkingDir $frontendRoot -Command $frontendCmd
 
