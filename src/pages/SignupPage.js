@@ -11,7 +11,6 @@ function SignupPage() {
   const [form, setForm] = useState({
     full_name: '',
     email: '',
-    mobile: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
@@ -57,7 +56,6 @@ function SignupPage() {
       const res = await signup({
         full_name: form.full_name,
         email: form.email.trim(),
-        mobile: form.mobile.trim(),
         password: form.password,
       });
       navigate('/verify-otp', {
@@ -66,7 +64,7 @@ function SignupPage() {
           purpose: 'signup',
           requires: res?.requires || ['email'],
           email: res?.email || form.email.trim(),
-          mobile: res?.mobile || form.mobile.trim(),
+          mobile: res?.mobile ?? '',
         },
       });
     } catch (err) {
@@ -187,7 +185,7 @@ function SignupPage() {
                   '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
                 }}
               >
-                {loading ? 'Creating account...' : 'Sign up and send OTP'}
+                {loading ? 'Creating account...' : 'Sign up and send email OTP'}
               </Button>
               <Button variant="text" onClick={() => navigate('/login')} sx={{ textTransform: 'none', fontWeight: 700, color: '#1d4ed8' }}>
                 Already have an account? Login
