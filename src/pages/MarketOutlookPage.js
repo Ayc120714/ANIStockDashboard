@@ -184,12 +184,21 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
     if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
     const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
     const latest = daily[0];
-    const mtdNet = fiiDiiData.mtd?.fii?.net ?? 0;
-    const series = [...daily].reverse().map((d) => ({ date: d.date, net: d.fii.net }));
-    const bars = series.map(d => d.net);
+    const mtdNet = Number(fiiDiiData.mtd?.fii?.net ?? 0) || 0;
+    let series = [...daily].reverse().map((d) => ({
+      date: d?.date ?? '',
+      net: Number(d?.fii?.net ?? 0) || 0,
+    }));
+    let bars = series.map((d) => d.net);
+    // Backend may return empty daily[] but still send MTD — show one bar so the chart isn't blank.
+    if (bars.length < 1 && Number.isFinite(mtdNet)) {
+      series = [{ date: 'MTD', net: mtdNet }];
+      bars = [mtdNet];
+    }
+    const latestNet = latest != null ? (Number(latest?.fii?.net ?? 0) || 0) : null;
     return {
-      value: latest ? fmtCr(latest.fii.net) : '—',
-      latestNet: latest?.fii.net ?? 0,
+      value: latest != null ? fmtCr(latestNet) : mtdNet !== 0 ? fmtCr(mtdNet) : '—',
+      latestNet: latestNet ?? mtdNet,
       latestDate: latest?.date ?? '',
       mtdNet,
       bars,
@@ -201,12 +210,20 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
     if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
     const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
     const latest = daily[0];
-    const mtdNet = fiiDiiData.mtd?.dii?.net ?? 0;
-    const series = [...daily].reverse().map((d) => ({ date: d.date, net: d.dii.net }));
-    const bars = series.map(d => d.net);
+    const mtdNet = Number(fiiDiiData.mtd?.dii?.net ?? 0) || 0;
+    let series = [...daily].reverse().map((d) => ({
+      date: d?.date ?? '',
+      net: Number(d?.dii?.net ?? 0) || 0,
+    }));
+    let bars = series.map((d) => d.net);
+    if (bars.length < 1 && Number.isFinite(mtdNet)) {
+      series = [{ date: 'MTD', net: mtdNet }];
+      bars = [mtdNet];
+    }
+    const latestNet = latest != null ? (Number(latest?.dii?.net ?? 0) || 0) : null;
     return {
-      value: latest ? fmtCr(latest.dii.net) : '—',
-      latestNet: latest?.dii.net ?? 0,
+      value: latest != null ? fmtCr(latestNet) : mtdNet !== 0 ? fmtCr(mtdNet) : '—',
+      latestNet: latestNet ?? mtdNet,
       latestDate: latest?.date ?? '',
       mtdNet,
       bars,
@@ -232,14 +249,18 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
 
   const buildBarChart = (values, activeIndex = null, height = 68) => {
     if (!values || values.length < 1) return null;
-    const width = Math.max(160, values.length * 12);
-    const maxAbs = Math.max(...values.map(Math.abs), 1);
+    const safeVals = values.map((v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    });
+    const width = Math.max(160, safeVals.length * 12);
+    const maxAbs = Math.max(...safeVals.map(Math.abs), 1);
     const gap = 2;
     const barW = Math.max(4, (width - gap * (values.length - 1)) / values.length);
     const midY = height / 2;
     const maxH = midY - 2;
 
-    const rects = values.map((val, i) => {
+    const rects = safeVals.map((val, i) => {
       const x = i * (barW + gap);
       const h = (Math.abs(val) / maxAbs) * maxH;
       const y = val >= 0 ? midY - h : midY;
