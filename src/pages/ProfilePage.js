@@ -4,6 +4,8 @@ import {
   Box,
   Button,
   Chip,
+  IconButton,
+  InputAdornment,
   Link,
   MenuItem,
   Paper,
@@ -20,6 +22,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
@@ -99,7 +102,27 @@ function ProfilePage() {
   const [aiKeys, setAiKeys] = useState([]);
   const [aiKeyDrafts, setAiKeyDrafts] = useState({});
   const [aiBusy, setAiBusy] = useState(false);
+  /** Placeholder only — real password is never stored in the browser. Default: hidden (off). */
+  const [showAccountPassword, setShowAccountPassword] = useState(false);
+  const [aiKeyShowPassword, setAiKeyShowPassword] = useState({});
+  const [brokerSecretVisible, setBrokerSecretVisible] = useState({ pin: false, api_secret: false });
   const isLiveExecution = (row) => Boolean(row?.is_enabled && row?.has_session) || Boolean(row?.live_enabled);
+
+  const brokerSecretAdornment = (field) => ({
+    endAdornment: (
+      <InputAdornment position="end">
+        <IconButton
+          aria-label={brokerSecretVisible[field] ? `Hide ${field}` : `Show ${field}`}
+          edge="end"
+          size="small"
+          onClick={() => setBrokerSecretVisible((p) => ({ ...p, [field]: !p[field] }))}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {brokerSecretVisible[field] ? <MdVisibilityOff size={22} /> : <MdVisibility size={22} />}
+        </IconButton>
+      </InputAdornment>
+    ),
+  });
   const brokerDraftKey = useCallback(
     (broker) => `broker_integration_draft_${userId}_${String(broker || '').toLowerCase()}`,
     [userId]
@@ -222,6 +245,14 @@ function ProfilePage() {
     setActiveTab('broker');
     setMessage('Complete broker validation to activate session and show holdings on dashboard.');
   }, [onboardingBrokerSetup]);
+
+  useEffect(() => {
+    setBrokerSecretVisible({ pin: false, api_secret: false });
+  }, [selectedBroker]);
+
+  useEffect(() => {
+    setShowAccountPassword(false);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!userId) return;
@@ -689,9 +720,77 @@ function ProfilePage() {
               <TextField size="small" label="Name" value={displayName} disabled />
               <TextField size="small" label="Email ID" value={displayEmail} disabled />
               <TextField size="small" label="Mobile Number" value={displayMobile} disabled />
-              <TextField size="small" label="Password" value="********" type="password" disabled />
+              {showAccountPassword ? (
+                <TextField
+                  key="profile-pw-shown"
+                  size="small"
+                  label="Password"
+                  name="profile-password-placeholder-shown"
+                  value="********"
+                  type="text"
+                  autoComplete="off"
+                  inputProps={{
+                    readOnly: true,
+                    'aria-label': 'Password placeholder (visible)',
+                    spellCheck: false,
+                  }}
+                  sx={{
+                    '& .MuiInputBase-root': { bgcolor: 'action.hover' },
+                    '& .MuiInputBase-input': { cursor: 'default', fontFamily: 'ui-monospace, monospace' },
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label="Hide placeholder"
+                          edge="end"
+                          size="small"
+                          onClick={() => setShowAccountPassword(false)}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          <MdVisibility size={22} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              ) : (
+                <TextField
+                  key="profile-pw-hidden"
+                  size="small"
+                  label="Password"
+                  name="profile-password-placeholder-hidden"
+                  value="********"
+                  type="password"
+                  autoComplete="new-password"
+                  inputProps={{
+                    readOnly: true,
+                    'aria-label': 'Password (masked placeholder)',
+                    spellCheck: false,
+                  }}
+                  sx={{
+                    '& .MuiInputBase-root': { bgcolor: 'action.hover' },
+                    '& .MuiInputBase-input': { cursor: 'default' },
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label="Show placeholder characters"
+                          edge="end"
+                          size="small"
+                          onClick={() => setShowAccountPassword(true)}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          <MdVisibilityOff size={22} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              )}
             </Box>
-            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+            <Box sx={{ mt: 1.5 }}>
               <Button
                 variant="contained"
                 sx={{ textTransform: 'none' }}
@@ -699,10 +798,7 @@ function ProfilePage() {
               >
                 Change Password
               </Button>
-              <Typography sx={{ fontSize: 12, color: '#666', alignSelf: 'center' }}>
-                Password is never shown directly for security.
-              </Typography>
-            </Stack>
+            </Box>
           </Paper>
 
           <Paper sx={{ p: 2, mb: 2 }}>
@@ -741,11 +837,35 @@ function ProfilePage() {
                         <TableCell>
                           <TextField
                             size="small"
-                            type="password"
+                            type={aiKeyShowPassword[provider] ? 'text' : 'password'}
                             placeholder={`Enter ${provider.toUpperCase()} key`}
                             value={aiKeyDrafts?.[provider] || ''}
                             onChange={(e) => setAiDraft(provider, e.target.value)}
                             sx={{ minWidth: 260 }}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    aria-label={aiKeyShowPassword[provider] ? 'Hide API key' : 'Show API key'}
+                                    edge="end"
+                                    size="small"
+                                    onClick={() =>
+                                      setAiKeyShowPassword((prev) => ({
+                                        ...prev,
+                                        [provider]: !prev[provider],
+                                      }))
+                                    }
+                                    onMouseDown={(e) => e.preventDefault()}
+                                  >
+                                    {aiKeyShowPassword[provider] ? (
+                                      <MdVisibilityOff size={22} />
+                                    ) : (
+                                      <MdVisibility size={22} />
+                                    )}
+                                  </IconButton>
+                                </InputAdornment>
+                              ),
+                            }}
                           />
                         </TableCell>
                         <TableCell align="right">
@@ -846,10 +966,24 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'dhan' ? (
                 <>
                   <TextField size="small" label="Mobile Number (or Dhan Client ID)" value={activeBrokerRow.credentials?.mobile || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'mobile', e.target.value)} />
-                  <TextField size="small" type="password" label="PIN / Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                  <TextField
+                    size="small"
+                    type={brokerSecretVisible.pin ? 'text' : 'password'}
+                    label="PIN / Password"
+                    value={activeBrokerRow.credentials?.pin || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
+                    InputProps={brokerSecretAdornment('pin')}
+                  />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
                   <TextField size="small" label="API Key override (optional)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
-                  <TextField size="small" type="password" label="API Secret override (optional)" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} />
+                  <TextField
+                    size="small"
+                    type={brokerSecretVisible.api_secret ? 'text' : 'password'}
+                    label="API Secret override (optional)"
+                    value={activeBrokerRow.credentials?.api_secret || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)}
+                    InputProps={brokerSecretAdornment('api_secret')}
+                  />
                   <TextField size="small" label="tokenId (after Dhan redirect)" value={activeBrokerRow.credentials?.token_id || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'token_id', e.target.value)} />
                   <TextField
                     size="small"
@@ -862,7 +996,14 @@ function ProfilePage() {
               ) : null}
               {activeBrokerRow.broker === 'samco' ? (
                 <>
-                  <TextField size="small" type="password" label="PIN/Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                  <TextField
+                    size="small"
+                    type={brokerSecretVisible.pin ? 'text' : 'password'}
+                    label="PIN/Password"
+                    value={activeBrokerRow.credentials?.pin || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
+                    InputProps={brokerSecretAdornment('pin')}
+                  />
                   <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
                 </>
               ) : null}
@@ -870,7 +1011,14 @@ function ProfilePage() {
                 <>
                   <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
                   <TextField size="small" label="API Key" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
-                  <TextField size="small" type="password" label="PIN/Password" value={activeBrokerRow.credentials?.pin || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)} />
+                  <TextField
+                    size="small"
+                    type={brokerSecretVisible.pin ? 'text' : 'password'}
+                    label="PIN/Password"
+                    value={activeBrokerRow.credentials?.pin || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
+                    InputProps={brokerSecretAdornment('pin')}
+                  />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
                 </>
               ) : null}

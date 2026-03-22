@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { loginStart, loginWithEmailOtpStart } from '../api/auth';
+import { loginStart } from '../api/auth';
 import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
@@ -85,21 +86,21 @@ function LoginPage() {
   const { persistAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showConsentInfo, setShowConsentInfo] = useState(() =>
     hasAnyConsentLimitMarkerToday() || Boolean(location.state?.brokerConsentLimited)
   );
 
-  const canSubmit = useMemo(
+  const canSubmitPassword = useMemo(
     () => email.trim().length > 0 && password.length >= 8,
     [email, password]
   );
-  const canEmailOtp = useMemo(() => email.trim().length > 4, [email]);
 
-  const onSubmit = async (e) => {
+  const onPasswordLogin = async (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmitPassword) return;
     setLoading(true);
     setError('');
     try {
@@ -124,28 +125,6 @@ function LoginPage() {
       });
     } catch (err) {
       setError(err?.message || 'Login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onEmailOtpLogin = async () => {
-    if (!canEmailOtp) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await loginWithEmailOtpStart(email.trim());
-      navigate('/verify-otp', {
-        state: {
-          flowId: res?.flow_id,
-          purpose: 'login_email',
-          requires: res?.requires || ['email'],
-          email: email.trim(),
-          from: location.state?.from?.pathname || '/',
-        },
-      });
-    } catch (err) {
-      setError(err?.message || 'Unable to send email OTP.');
     } finally {
       setLoading(false);
     }
@@ -418,7 +397,7 @@ function LoginPage() {
                   Welcome Back
                 </Typography>
                 <Typography sx={{ opacity: 0.92, fontSize: 'clamp(13px, 0.8vw, 16px)' }}>
-                  Continue with secure email OTP verification
+                  Sign in with password, then verify with email OTP
                 </Typography>
               </Box>
               <CardContent sx={{ p: { xs: 2.2, md: 3 } }}>
@@ -443,7 +422,7 @@ function LoginPage() {
                   </Alert>
                 ) : null}
                 {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-                <Box component="form" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
+                <Box component="form" onSubmit={onPasswordLogin} sx={{ display: 'grid', gap: 1.2 }}>
                   <TextField
                     label="Email"
                     type="email"
@@ -455,17 +434,32 @@ function LoginPage() {
                   />
                   <TextField
                     label="Password"
-                    type="password"
+                    type={showLoginPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     size="small"
                     autoComplete="current-password"
                     sx={authInputSx}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                            edge="end"
+                            size="small"
+                            onClick={() => setShowLoginPassword((v) => !v)}
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            {showLoginPassword ? <MdVisibilityOff size={22} /> : <MdVisibility size={22} />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={!canSubmit || loading}
+                    disabled={!canSubmitPassword || loading}
                     sx={{
                       py: 1.1,
                       fontWeight: 700,
@@ -475,22 +469,7 @@ function LoginPage() {
                       '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
                     }}
                   >
-                    {loading ? 'Sending OTP...' : 'Continue with OTP'}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={onEmailOtpLogin}
-                    disabled={!canEmailOtp || loading}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      color: '#1d4ed8',
-                      borderColor: '#2563eb',
-                      '&:hover': { borderColor: '#1e40af', backgroundColor: '#eff6ff' },
-                      '&.Mui-disabled': { borderColor: '#cbd5e1', color: '#94a3b8' },
-                    }}
-                  >
-                    Login with Email OTP
+                    {loading ? 'Please wait…' : 'Login'}
                   </Button>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                     <Button variant="text" onClick={() => navigate('/forgot-user-id')} sx={{ textTransform: 'none', p: 0, color: '#1d4ed8', fontWeight: 700 }}>

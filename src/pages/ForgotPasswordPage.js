@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
 import { forgotPasswordComplete, forgotPasswordStart, resendOtp, verifyOtp } from '../api/auth';
 
@@ -17,6 +18,7 @@ function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const canStart = useMemo(
     () => identifier.trim().length > 3 && strongPasswordRegex.test(newPassword || ''),
@@ -40,9 +42,6 @@ function ForgotPasswordPage() {
       const res = await forgotPasswordStart(identifier.trim());
       setFlowId(res?.flow_id || '');
       setHint(`OTP sent to ${res?.masked_email || 'registered email'}`);
-      if (res?.debug_otp?.email) {
-        setHint((prev) => `${prev}. Test OTP: email=${res?.debug_otp?.email}`);
-      }
     } catch (err) {
       setError(err?.message || 'Unable to start password reset.');
     } finally {
@@ -73,11 +72,8 @@ function ForgotPasswordPage() {
     setError('');
     setMessage('');
     try {
-      const res = await resendOtp(flowId, 'reset_password', channel);
+      await resendOtp(flowId, 'reset_password', channel);
       setMessage('Email OTP resent.');
-      if (res?.debug_otp) {
-        setMessage((prev) => `${prev} Test OTP: ${res.debug_otp}`);
-      }
     } catch (err) {
       setError(err?.message || `Failed to resend ${channel} OTP.`);
     } finally {
@@ -147,12 +143,28 @@ function ForgotPasswordPage() {
               />
               <TextField
                 label="New Password"
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 size="small"
                 helperText="Min 8 chars with uppercase, lowercase, number and special character"
                 sx={authInputSx}
+                autoComplete="new-password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                        edge="end"
+                        size="small"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        {showNewPassword ? <MdVisibilityOff size={22} /> : <MdVisibility size={22} />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
               <Button
                 type="submit"

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { completeEmailOtpLogin, completeLogin, completeSignup, resendOtp, verifyOtp } from '../api/auth';
@@ -25,6 +25,31 @@ function OtpVerifyPage() {
 
   const canSubmitEmail = useMemo(() => flowId && purpose && emailOtp.length >= 4, [flowId, purpose, emailOtp]);
   const verificationReady = emailVerified;
+  /** Password + email OTP (`login`) or passwordless email OTP (`login_email`). */
+  const isEmailOtpLoginStep = purpose === 'login_email' || purpose === 'login';
+
+  /** Exchange tokens and route (after OTP consumed for login flows). */
+  const doCompleteLogin = useCallback(async () => {
+    if (purpose === 'login_email') {
+      const res = await completeEmailOtpLogin(flowId, trustDevice);
+      persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      await routeAfterLogin({
+        nextUser: res?.user || null,
+        fallbackPath: from || '/',
+        navigate,
+      });
+      return;
+    }
+    if (purpose === 'login') {
+      const res = await completeLogin(flowId, trustDevice);
+      persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      await routeAfterLogin({
+        nextUser: res?.user || null,
+        fallbackPath: from || '/',
+        navigate,
+      });
+    }
+  }, [flowId, purpose, trustDevice, from, navigate, persistAuth]);
 
   const onVerify = async (channel) => {
     const otpCode = emailOtp;
@@ -32,12 +57,33 @@ function OtpVerifyPage() {
     setLoading(true);
     setError('');
     setMessage('');
+    let otpAccepted = false;
     try {
       await verifyOtp(flowId, purpose, channel, otpCode);
-      if (channel === 'email') setEmailVerified(true);
+      if (channel === 'email') {
+        setEmailVerified(true);
+        otpAccepted = true;
+      }
+
+      if (purpose === 'signup') {
+        setMessage('Email OTP verified. Finish signup below.');
+        return;
+      }
+
+      if (purpose === 'login' || purpose === 'login_email') {
+        setMessage('Signing you in…');
+        await doCompleteLogin();
+        setMessage('');
+        return;
+      }
+
       setMessage('Email OTP verified.');
     } catch (err) {
-      setError(err?.message || `Failed to verify ${channel} OTP.`);
+      setMessage('');
+      setError(
+        err?.message
+          || (otpAccepted ? 'Unable to complete login.' : `Failed to verify ${channel} OTP.`)
+      );
     } finally {
       setLoading(false);
     }
@@ -58,53 +104,51 @@ function OtpVerifyPage() {
     }
   };
 
-  const onContinue = async () => {
-    if (!verificationReady || !flowId) return;
+  const onFinishSignup = async () => {
+    if (!verificationReady || !flowId || purpose !== 'signup') return;
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      if (purpose === 'signup') {
-        const res = await completeSignup(flowId, trustDevice);
-        persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-        const fallbackPath = from || '/';
-        const userId = String(res?.user?.id || res?.user?.user_id || res?.user?.email || '');
-        try {
-          if (userId) {
-            const rows = await fetchBrokerSetup({ userId });
-            const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
-            if (!hasSession) {
-              navigate('/profile', {
-                replace: true,
-                state: { openBrokerSetup: true, from: fallbackPath, showTelegramBotInfo: true },
-              });
-              return;
-            }
-          }
-        } catch (_) {
-          // continue to fallback path
-        }
-        navigate(fallbackPath, { replace: true, state: { showTelegramBotInfo: true } });
-        return;
-      }
-      if (purpose === 'login_email') {
-        const res = await completeEmailOtpLogin(flowId, trustDevice);
-        persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-        await routeAfterLogin({
-          nextUser: res?.user || null,
-          fallbackPath: from || '/',
-          navigate,
-        });
-        return;
-      }
-      const res = await completeLogin(flowId, trustDevice);
+      const res = await completeSignup(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
-      await routeAfterLogin({
-        nextUser: res?.user || null,
-        fallbackPath: from || '/',
-        navigate,
-      });
+      const fallbackPath = from || '/';
+      const userId = String(res?.user?.id || res?.user?.user_id || res?.user?.email || '');
+      try {
+        if (userId) {
+          const rows = await fetchBrokerSetup({ userId });
+          const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
+          if (!hasSession) {
+            navigate('/profile', {
+              replace: true,
+              state: { openBrokerSetup: true, from: fallbackPath, showTelegramBotInfo: true },
+            });
+            return;
+          }
+        }
+      } catch (_) {
+        // continue to fallback path
+      }
+      navigate(fallbackPath, { replace: true, state: { showTelegramBotInfo: true } });
     } catch (err) {
+      setMessage('');
+      setError(err?.message || 'Unable to complete signup.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** If verify succeeded but token exchange failed, OTP is already used — retry complete only. */
+  const onRetryCompleteLogin = async () => {
+    if (!flowId || !isEmailOtpLoginStep || !emailVerified) return;
+    setLoading(true);
+    setError('');
+    setMessage('Signing you in…');
+    try {
+      await doCompleteLogin();
+      setMessage('');
+    } catch (err) {
+      setMessage('');
       setError(err?.message || 'Unable to complete login.');
     } finally {
       setLoading(false);
@@ -178,15 +222,42 @@ function OtpVerifyPage() {
         >
           <Typography variant="h5" sx={{ fontWeight: 800 }}>Verify OTP</Typography>
           <Typography variant="body2" sx={{ opacity: 0.92 }}>
-            Secure sign-in with email verification
+            {isEmailOtpLoginStep
+              ? purpose === 'login'
+                ? 'Enter the email OTP after your password'
+                : 'Enter OTP sent to mail'
+              : 'Secure sign-in with email verification'}
           </Typography>
         </Box>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="body2" sx={{ color: '#475569', mb: 2 }}>
-            Enter the OTP sent to your email to continue.
+          <Typography variant="body2" sx={{ color: '#475569', mb: 2, fontWeight: isEmailOtpLoginStep ? 600 : 400 }}>
+            {isEmailOtpLoginStep
+              ? purpose === 'login'
+                ? 'Enter the one-time code sent to your email to finish signing in.'
+                : 'Enter OTP sent to mail.'
+              : 'Enter the OTP sent to your email to continue.'}
           </Typography>
           {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-          {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}
+          {message ? (
+            <Alert
+              severity={message.includes('Signing') ? 'info' : 'success'}
+              sx={{ mb: 2 }}
+            >
+              {message}
+            </Alert>
+          ) : null}
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={trustDevice}
+                onChange={(e) => setTrustDevice(e.target.checked)}
+                disabled={loading || (isEmailOtpLoginStep && emailVerified)}
+              />
+            }
+            label="Trust this device for 7 days (skip OTP on next login)"
+            sx={{ mb: 2, display: 'block', '& .MuiFormControlLabel-label': { color: '#1e293b' } }}
+          />
 
           <Box sx={{ display: 'grid', gap: 1.5, mb: 2 }}>
             <TextField
@@ -195,7 +266,15 @@ function OtpVerifyPage() {
               value={emailOtp}
               onChange={(e) => setEmailOtp(onlyDigits(e.target.value))}
               disabled={emailVerified}
-              helperText={emailVerified ? 'Email OTP verified' : 'Enter OTP sent to your email'}
+              helperText={
+                emailVerified
+                  ? 'Email OTP verified'
+                  : isEmailOtpLoginStep
+                    ? purpose === 'login'
+                      ? 'Code from email after password step'
+                      : 'Enter OTP sent to mail'
+                    : 'Enter OTP sent to your email'
+              }
               sx={{
                 '& .MuiInputBase-input': { color: '#0f172a', fontWeight: 500 },
                 '& .MuiFormLabel-root': { color: '#334155' },
@@ -235,33 +314,44 @@ function OtpVerifyPage() {
             </Box>
           </Box>
 
-          <Button
-            variant="contained"
-            color="success"
-            onClick={onContinue}
-            disabled={!verificationReady || loading}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 800,
-              mt: 0.5,
-              px: 2.5,
-              backgroundColor: '#16a34a',
-              '&:hover': { backgroundColor: '#15803d' },
-              '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
-            }}
-          >
-            {purpose === 'signup' ? 'Finish Signup' : 'Complete Login'}
-          </Button>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={trustDevice}
-                onChange={(e) => setTrustDevice(e.target.checked)}
-              />
-            }
-            label="Trust this device for 7 days (skip OTP on next login)"
-            sx={{ mt: 1, '& .MuiFormControlLabel-label': { color: '#1e293b' } }}
-          />
+          {purpose === 'signup' ? (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={onFinishSignup}
+              disabled={!verificationReady || loading}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 800,
+                mt: 0.5,
+                px: 2.5,
+                backgroundColor: '#16a34a',
+                '&:hover': { backgroundColor: '#15803d' },
+                '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
+              }}
+            >
+              Finish Signup
+            </Button>
+          ) : null}
+
+          {isEmailOtpLoginStep && emailVerified && error ? (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={onRetryCompleteLogin}
+              disabled={loading}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 800,
+                mt: 1,
+                px: 2.5,
+                backgroundColor: '#16a34a',
+                '&:hover': { backgroundColor: '#15803d' },
+              }}
+            >
+              Try signing in again
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
     </Box>

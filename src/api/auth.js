@@ -13,6 +13,7 @@ export const adminPasswordlessLogin = (email) =>
 export const loginStart = (email, password) =>
   apiPost('/auth/login/start', { email, password });
 
+/** Passwordless login: email OTP only (no password step). */
 export const loginWithEmailOtpStart = (email) =>
   apiPost('/auth/login/email-otp/start', { email });
 
