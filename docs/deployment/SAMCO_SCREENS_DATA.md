@@ -20,4 +20,4 @@ Symbols are matched **case-insensitively** to candles (`_norm_stock_symbol`).
 2. After deploy, restart the API (`systemctl restart ani-backend` or equivalent).
 3. If week and month still match, check for **missing or sparse candles** for those symbols—not a frontend issue.
 
-See also: [REPO_LAYOUT.md](./REPO_LAYOUT.md), [VPS_ENABLEMENT_CHECKLIST.md](./VPS_ENABLEMENT_CHECKLIST.md).
+See also: [REPO_LAYOUT.md](./REPO_LAYOUT.md), [VPS_ENABLEMENT_CHECKLIST.md](./VPS_ENABLEMENT_CHECKLIST.md), [VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md).

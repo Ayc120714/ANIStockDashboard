@@ -6,12 +6,22 @@ Use this when the **UI loads** but **FII/DII charts are empty**, **Trending is b
 
 ## 0. Startup: full data bootstrap on every restart (backend)
 
-By default (`STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=true` in `backend_stockdashboard/.env`), the API **runs `run_startup_data_bootstrap()` and waits for it** before starting the **orchestrator** on **every** process restart. That refreshes candles, indices, sector outlook, FII/DII attempt, etc., so you are less likely to serve empty/stale data right after a deploy.
+`run_startup_data_bootstrap()` (CandleSync → `historical_candles`, indices, FII/DII attempt, IPO fetch, etc.) runs on **exactly one** Uvicorn process via a **file lock** (`STARTUP_BOOTSTRAP_LOCK_PATH` or `/tmp/ani_backend_startup_bootstrap.lock`), so multiple `--workers` do **not** each run a full duplicate sync.
 
-- **First requests after restart** may lag until bootstrap finishes (Samco, DB work).  
-- **Timeout:** `STARTUP_BOOTSTRAP_TIMEOUT_SEC` (default **7200**). If bootstrap is still running, the server logs a warning and starts the orchestrator anyway.  
-- **Fast dev restarts:** set `STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=false` (bootstrap runs in background; orchestrator starts immediately).  
-- **Readiness:** `GET /api/system/readiness` → `bootstrap_complete: true` after the bootstrap gate releases (see `app/scheduler.py`).
+### Recommended on VPS: `STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=false`
+
+Set in `backend_stockdashboard/.env` (see `.env.production.example`):
+
+- **Orchestrator** starts on **all** workers as soon as the API is up (nginx returns 200 quickly).
+- **Leader** still runs the full bootstrap in a **background thread** until `readiness.bootstrap_complete` flips true.
+- The React app shows a **top banner** until `/api/system/readiness` reports `bootstrap_complete` (polls every few seconds).
+
+### Alternative: `STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=true` (default in code)
+
+- On the **leader** worker, **orchestrator** starts only **after** bootstrap finishes on that worker; the **follower** starts orchestrator immediately.
+- **Timeout:** `STARTUP_BOOTSTRAP_TIMEOUT_SEC` (default **7200**). If bootstrap is still running, scheduler may log a warning and continue.
+
+**Readiness:** `GET /api/system/readiness` → `bootstrap_complete: true` after the bootstrap gate releases (see `app/scheduler.py`).
 
 ---
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { TablePagination } from '@mui/material';
 import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
-import { useBootstrapReady } from '../hooks/useBootstrapReady';
+import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
 import {
   CardContainer,
   Card,
@@ -561,7 +561,7 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
 }
 
 function MarketOutlookPage() {
-  const { showData, apiReady, timedOut, bootstrapComplete } = useBootstrapReady();
+  const { showData, apiReady, timedOut, bootstrapComplete } = useBootstrapReadyState();
 
   if (!showData) {
     return (

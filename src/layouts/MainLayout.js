@@ -2,6 +2,8 @@ import React from 'react';
 import { Outlet } from 'react-router';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
+import BootstrapSyncBanner from '../components/BootstrapSyncBanner';
+import { BootstrapReadyProvider } from '../context/BootstrapReadyContext';
 import styled from 'styled-components';
 
 const LayoutContainer = styled.div`
@@ -89,15 +91,18 @@ const ContentArea = styled.div`
 
 function MainLayout() {
   return (
-    <LayoutContainer>
-      <Sidebar />
-      <MainContent>
-        <Header />
-        <ContentArea>
-          <Outlet />
-        </ContentArea>
-      </MainContent>
-    </LayoutContainer>
+    <BootstrapReadyProvider pollMs={3000} maxWaitForApiMs={60000}>
+      <LayoutContainer>
+        <Sidebar />
+        <MainContent>
+          <Header />
+          <BootstrapSyncBanner />
+          <ContentArea>
+            <Outlet />
+          </ContentArea>
+        </MainContent>
+      </LayoutContainer>
+    </BootstrapReadyProvider>
   );
 }
 

@@ -3,7 +3,7 @@
 Use this when **FII/DII, Market Insights, Screens, or SubSector data** look empty/wrong even after `git pull`.  
 Git is only half the story: the **production build**, **API base URL**, **Nginx → Uvicorn**, **database**, and **outbound jobs** must all line up.
 
-Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha).
+Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha), **[VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md)** (when Screens numbers are wrong — DB + Samco checklist).
 
 ---
 
@@ -146,6 +146,19 @@ Backend **`backend_stockdashboard/.env`** must include at least:
 - **`TOKEN_HASH_SECRET`** / auth secrets as you use in prod
 
 If the API cannot connect to the DB, tables stay empty and pages show no data.
+
+### 4b. Bootstrap vs orchestrator (Screens / candles saving)
+
+| Variable | Effect |
+|----------|--------|
+| **`STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=false`** | **Recommended VPS:** API + orchestrator up immediately; **one** worker runs full Samco/DB bootstrap in the **background** (file lock). Frontend shows a **sync banner** until `GET /api/system/readiness` → `bootstrap_complete: true`. |
+| **`STARTUP_BOOTSTRAP_BEFORE_ORCHESTRATOR=true`** | Leader worker starts orchestrator **after** bootstrap; use if you explicitly want the leader to delay orchestrator until sync completes. |
+
+Copy from **`backend_stockdashboard/.env.production.example`** after `git pull`.
+
+**Uvicorn workers:** `systemctl cat ani-backend` — if you use **`--workers 2`**, the log line *“Another worker holds bootstrap lock”* is **normal** (only one runs `run_startup_data_bootstrap`). For smallest VPS you may use **`--workers 1`** to avoid duplicate orchestrator instances.
+
+**Do not** restart `ani-backend` repeatedly during the first **30–60+ minutes** after deploy if CandleSync is still running, or `historical_candles` may never fully populate.
 
 ---
 
