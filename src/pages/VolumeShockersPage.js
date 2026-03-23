@@ -7,6 +7,7 @@ import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
+import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 
 function VolumeShockersPage() {
@@ -26,6 +27,11 @@ function VolumeShockersPage() {
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
+    () => getScreenDatePickerBounds(availableDates),
+    [availableDates],
+  );
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -61,7 +67,7 @@ function VolumeShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(searchTerm || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `volumeShockersData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `volumeShockersData_v2_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -85,14 +91,7 @@ function VolumeShockersPage() {
     return () => { isMounted = false; };
   }, [timeFrame, selectedDate, searchTerm]);
 
-  const defaultTableData = [
-    { id: '01', symbol: 'TATACHEM', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Mid Cap', volume: '2,100,000', avgVolume: '1,200,000', cmp: '₹1,050.00', chg: '8.50%', date: '2026-01-24' },
-    { id: '02', symbol: 'RELIANCE', sector: 'Oil & Gas', subSector: 'Integrated Oil & Gas', mc: 'Large Cap', volume: '5,000,000', avgVolume: '3,500,000', cmp: '₹2,450.00', chg: '5.20%', date: '2026-01-23' },
-    { id: '03', symbol: 'HDFCBANK', sector: 'Financial Services', subSector: 'Banking', mc: 'Large Cap', volume: '3,800,000', avgVolume: '2,900,000', cmp: '₹1,600.00', chg: '4.10%', date: '2026-01-22' },
-    { id: '04', symbol: 'ADANIPORTS', sector: 'Logistics', subSector: 'Port Services', mc: 'Large Cap', volume: '1,500,000', avgVolume: '900,000', cmp: '₹800.00', chg: '6.75%', date: '2026-01-21' },
-  ];
-
-  const dataToFilter = tableData.length ? tableData : defaultTableData;
+  const dataToFilter = tableData;
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
@@ -180,8 +179,8 @@ function VolumeShockersPage() {
           <DatePicker
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
-            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
-            maxDate={new Date()}
+            minDate={screenMinDate}
+            maxDate={screenMaxDate}
             slotProps={{ textField: { size: 'small', placeholder: 'Select Date' } }}
           />
           <ButtonGroup variant="contained" size="small">
@@ -248,6 +247,13 @@ function VolumeShockersPage() {
               </tr>
             </thead>
             <tbody>
+              {!isLoading && sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={1 + columnConfig.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                    No data. Ensure the API is up and Samco EOD volume history is synced (Vol Jump / Vol % need candle volume series).
+                  </td>
+                </tr>
+              ) : null}
               {paginatedData.map((row) => (
                 <tr key={row.id} className={row.chg && row.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>

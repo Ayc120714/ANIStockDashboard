@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Box, TextField, ButtonGroup, Button, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
@@ -7,6 +7,7 @@ import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchPriceShockers, fetchScreenDates } from '../api/stocks';
+import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 
 function PriceShockersPage() {
@@ -27,6 +28,11 @@ function PriceShockersPage() {
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
+    () => getScreenDatePickerBounds(availableDates),
+    [availableDates],
+  );
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -62,7 +68,7 @@ function PriceShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchQuery = String(searchTerm || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
-    const cacheKey = `priceShockersData_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `priceShockersData_v2_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -101,19 +107,7 @@ function PriceShockersPage() {
     return () => { isMounted = false; };
   }, [priceType, timeFrame, selectedDate, searchTerm]);
 
-  const defaultTableData = [
-    { id: '01', symbol: 'MUFIN', sector: 'Financial Services', subSector: 'Finance - Investment', mc: 'Small Cap', cmp: '₹117.73', chg: '19.43%', date: new Date('2026-01-24') },
-    { id: '02', symbol: 'NAVINFLUOR', sector: 'Chemicals', subSector: 'Bulk Chemicals', mc: 'Small Cap', cmp: '₹5,687.40', chg: '14.28%', date: new Date('2026-01-24') },
-    { id: '03', symbol: 'TDPOWERSYS', sector: 'Energy', subSector: 'Heavy Electrical Equipment', mc: 'Small Cap', cmp: '₹774.90', chg: '13.32%', date: new Date('2026-01-23') },
-    { id: '04', symbol: 'TARC', sector: 'Realty', subSector: 'Real Estate', mc: 'Small Cap', cmp: '₹159.21', chg: '11.24%', date: new Date('2026-01-22') },
-    { id: '05', symbol: 'CHENNPETRO', sector: 'Oil and Gas', subSector: 'Oil & Gas', mc: 'Small Cap', cmp: '₹979.35', chg: '10.66%', date: new Date('2026-01-20') },
-    { id: '06', symbol: 'STAR', sector: 'Pharma', subSector: 'Pharmaceuticals - Small', mc: 'Small Cap', cmp: '₹934.70', chg: '9.66%', date: new Date('2026-01-18') },
-    { id: '07', symbol: 'RPEL', sector: 'Consumption', subSector: 'Consumer Discretionary', mc: 'Small Cap', cmp: '₹781.65', chg: '9.21%', date: new Date('2026-01-17') },
-    { id: '08', symbol: 'GARUDA', sector: 'Core Housing', subSector: 'Infra & Construction', mc: 'Small Cap', cmp: '₹216.64', chg: '9.11%', date: new Date('2026-01-16') },
-    { id: '09', symbol: 'INTELLECT', sector: 'IT', subSector: 'IT Software', mc: 'Small Cap', cmp: '₹1,133.50', chg: '8.29%', date: new Date('2026-01-15') },
-  ];
-
-  const dataToFilter = tableData.length ? tableData : defaultTableData;
+  const dataToFilter = tableData;
 
   const filteredData = useMemo(() => {
     const filtered = dataToFilter.filter((row) => {
@@ -193,8 +187,8 @@ function PriceShockersPage() {
             label="Select Date"
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
-            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
-            maxDate={new Date()}
+            minDate={screenMinDate}
+            maxDate={screenMaxDate}
             inputFormat="dd/MM/yyyy"
             renderInput={(params) => (
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
@@ -282,6 +276,13 @@ function PriceShockersPage() {
               </tr>
             </thead>
             <tbody>
+              {!isLoading && sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={1 + columnConfig.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                    No data. Ensure the API is up and Samco EOD candles are synced for accurate 1D/1W/1M %.
+                  </td>
+                </tr>
+              ) : null}
               {paginatedData.map((row) => (
                 <tr key={row.id} className={row.chg && row.chg.startsWith('-') ? 'row-down' : 'row-up'}>
                   <td>

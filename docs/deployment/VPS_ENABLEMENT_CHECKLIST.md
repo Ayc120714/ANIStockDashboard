@@ -3,18 +3,34 @@
 Use this when **FII/DII, Market Insights, Screens, or SubSector data** look empty/wrong even after `git pull`.  
 Git is only half the story: the **production build**, **API base URL**, **Nginx → Uvicorn**, **database**, and **outbound jobs** must all line up.
 
-Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md).
+Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha).
 
 ---
 
-## 1. Two repos vs one folder — pull **both**
+## 0. Where is the backend? (one level up from `stockdashboard`)
+
+The backend is **`backend_stockdashboard`**, **next to** `stockdashboard` under the same parent — **not** inside `stockdashboard/`.
+
+| Context | Backend path |
+|---------|----------------|
+| **Local** (Cursor opens `.../stockdashboard`) | `../backend_stockdashboard` |
+| **VPS (recommended)** | `/opt/ani-stock/backend_stockdashboard` |
+| **Parent folder example** | `ANIStockProject/stockdashboard` + `ANIStockProject/backend_stockdashboard` |
+
+`.vscode` and `npm run dev:fullstack` already assume this sibling layout.
+
+---
+
+## 1. Two repos — pull **both** (recommended)
 
 | Repo | Typical path on VPS | Purpose |
 |------|---------------------|--------|
-| **Frontend** | `/opt/ani-stock/stockdashboard` | `ANIStockDashboard` — React, `npm run build` |
-| **Backend** | `/opt/ani-stock/backend_stockdashboard` | `backend_stockdashboard` — FastAPI, **separate** `git pull` |
+| **Frontend** | `/opt/ani-stock/stockdashboard` | React app — `npm run build` |
+| **Backend** | `/opt/ani-stock/backend_stockdashboard` | FastAPI — **separate** `git pull` (sibling of frontend) |
 
 If you only pull **stockdashboard**, **API code never updates** (no FII fixes, trending EMA, subsector trend strings, etc.).
+
+**Nested backend** (`/opt/ani-stock/stockdashboard/backend_stockdashboard`) is **legacy** — only use it if that path actually exists in your clone; otherwise always use the **sibling** path above.
 
 ```bash
 cd /opt/ani-stock/stockdashboard && git pull origin main

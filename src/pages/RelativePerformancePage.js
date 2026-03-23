@@ -177,8 +177,8 @@ function RelativePerformancePage() {
             label="Select Date"
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
-            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
-            maxDate={new Date()}
+            minDate={screenMinDate}
+            maxDate={screenMaxDate}
             inputFormat="dd/MM/yyyy"
             renderInput={(params) => (
               <TextField size="small" variant="outlined" {...params} style={{ minWidth: 120, background: '#fff' }} />
