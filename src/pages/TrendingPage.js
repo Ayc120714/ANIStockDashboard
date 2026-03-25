@@ -7,6 +7,7 @@ import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchTrending, fetchScreenDates } from '../api/stocks';
+import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 
 function TrendingPage() {
@@ -25,6 +26,11 @@ function TrendingPage() {
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
+    () => getScreenDatePickerBounds(availableDates),
+    [availableDates],
+  );
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -166,8 +172,8 @@ function TrendingPage() {
           <DatePicker
             value={selectedDate}
             onChange={(date) => setSelectedDate(date)}
-            minDate={availableDates.length ? new Date(availableDates[availableDates.length - 1]) : undefined}
-            maxDate={new Date()}
+            minDate={screenMinDate}
+            maxDate={screenMaxDate}
             renderInput={(params) => <TextField {...params} size="small" />}
           />
         </Box>
