@@ -5,16 +5,18 @@ For first-time install, see **[VPS_INSTALL_RUN_AYCINDUSTRIES.md](VPS_INSTALL_RUN
 
 If the UI loads but **FII/DII, screens, or other API data is empty**, see **[VPS_ENABLEMENT_CHECKLIST.md](VPS_ENABLEMENT_CHECKLIST.md)** (two-repo deploy, `REACT_APP_API_URL`, Nginx, DB, Trendlyne).
 
-**Typical layout**
+**Canonical layout:** backend is **sibling** of frontend (same parent folder) — see **[REPO_LAYOUT.md](./REPO_LAYOUT.md)**. Local: `../backend_stockdashboard` from `stockdashboard`.
+
+**Typical layout (VPS)**
 
 | Item | Path / name |
 |------|-------------|
-| App source | `/opt/ani-stock/stockdashboard` |
-| Backend (monorepo) | `/opt/ani-stock/backend_stockdashboard` |
+| Frontend source | `/opt/ani-stock/stockdashboard` |
+| **Backend source (recommended)** | `/opt/ani-stock/backend_stockdashboard` ← **not** under `stockdashboard/` |
 | Static site (Nginx `root`) | `/var/www/ani-stock` |
 | Backend service | `ani-backend` → Uvicorn `127.0.0.1:8000` |
 
-Adjust paths if your server differs.
+Adjust paths if your server differs. **Legacy:** if you still use a nested clone, backend may be `/opt/ani-stock/stockdashboard/backend_stockdashboard` — align **systemd** `WorkingDirectory` with the path that exists.
 
 ---
 
@@ -113,39 +115,31 @@ sudo systemctl enable ani-backend nginx
 
 Use after pulling **frontend and/or backend** changes.
 
-### Monorepo (backend inside `stockdashboard/backend_stockdashboard`)
+### Recommended: two separate repos (sibling folders)
+
+Backend lives at **`/opt/ani-stock/backend_stockdashboard`** (one level **up** from `stockdashboard`’s parent — **not** inside `stockdashboard`).
 
 ```bash
-cd /opt/ani-stock/stockdashboard
+# Backend
+cd /opt/ani-stock/backend_stockdashboard
 git pull origin main
-
-# Backend — venv + dependencies (if requirements changed)
-cd backend_stockdashboard
 source .venv/bin/activate
 pip install -r requirements.txt
 deactivate
-cd /opt/ani-stock/stockdashboard
 
-# Frontend — install + production build (Craco)
+# Frontend
+cd /opt/ani-stock/stockdashboard
+git pull origin main
 npm ci
 npm run build
-
-# Deploy static assets
 sudo rsync -av --delete build/ /var/www/ani-stock/
 
-# Restart API
 sudo systemctl restart ani-backend
 journalctl -u ani-backend -n 50 --no-pager
-
-# Reload Nginx
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### Two separate repos (frontend + backend clones)
-
-Set directories explicitly, then pull each repo, `pip install` in the backend venv, and run the same `npm ci`, `npm run build`, `rsync`, `systemctl restart`, `nginx` steps from the frontend app root.
-
-Example env for scripts:
+Example env for **`scripts/deploy.sh`**:
 
 ```bash
 export APP_DIR=/opt/ani-stock/stockdashboard
@@ -154,15 +148,35 @@ export BACKEND_DIR=/opt/ani-stock/backend_stockdashboard
 
 ### Optional: project deploy script
 
-From **`/opt/ani-stock/stockdashboard`** (adjust `BACKEND_DIR` for monorepo vs two-repo):
+From **`/opt/ani-stock/stockdashboard`** (set `BACKEND_DIR` to match your disk — **sibling** path above by default):
 
 ```bash
 export APP_DIR=/opt/ani-stock/stockdashboard
-export BACKEND_DIR=/opt/ani-stock/stockdashboard/backend_stockdashboard
+export BACKEND_DIR=/opt/ani-stock/backend_stockdashboard
 export BACKEND_SERVICE=ani-backend
 chmod +x scripts/deploy.sh scripts/post-deploy-check.sh 2>/dev/null || true
 ./scripts/deploy.sh
 ```
+
+### Legacy only: nested backend (`stockdashboard/backend_stockdashboard`)
+
+Use **only** if your clone actually has `backend_stockdashboard` **inside** `stockdashboard`:
+
+```bash
+cd /opt/ani-stock/stockdashboard
+git pull origin main
+cd backend_stockdashboard
+source .venv/bin/activate
+pip install -r requirements.txt
+deactivate
+cd /opt/ani-stock/stockdashboard
+npm ci && npm run build
+sudo rsync -av --delete build/ /var/www/ani-stock/
+sudo systemctl restart ani-backend
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then `export BACKEND_DIR=/opt/ani-stock/stockdashboard/backend_stockdashboard` for deploy scripts.
 
 ---
 

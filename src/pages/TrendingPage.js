@@ -174,6 +174,8 @@ function TrendingPage() {
             onChange={(date) => setSelectedDate(date)}
             minDate={screenMinDate}
             maxDate={screenMaxDate}
+            views={['year', 'month', 'day']}
+            openTo="day"
             renderInput={(params) => <TextField {...params} size="small" />}
           />
         </Box>

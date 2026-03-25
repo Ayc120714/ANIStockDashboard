@@ -1,9 +1,9 @@
 # VPS: full-stack enablement checklist (backend ↔ frontend)
 
-Use this when **FII/DII, Market Insights, Screens, or SubSector data** look empty/wrong even after `git pull`.  
+Use this when **FII/DII, Market Insights, Screens, or SubSector data** look empty/wrong even after `git pull`.
 Git is only half the story: the **production build**, **API base URL**, **Nginx → Uvicorn**, **database**, and **outbound jobs** must all line up.
 
-Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha), **[VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md)** (when Screens numbers are wrong — DB + Samco checklist).
+Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha), **[VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md)** (when Screens numbers are wrong — DB + Samco checklist), **[CURSOR_VPS_REMOTE.md](./CURSOR_VPS_REMOTE.md)** (open the VPS in Cursor via Remote-SSH).
 
 ---
 
@@ -199,7 +199,7 @@ curl -sS "http://127.0.0.1:8000/api/fii-dii/refresh"
 | **AdminRoute** | `src/routes/AdminRoute.js` — not logged in → `/login`; not super-admin → `/` (dashboard). |
 | **Backend** | `app/api/auth.py` — `AUTH_SUPER_ADMIN_EMAILS` (comma list); admin APIs call `_require_super_admin()`. |
 
-**Frontend** super-admin list: `REACT_APP_SUPER_ADMIN_EMAILS` (optional) merged with defaults in `src/auth/AuthContext.js`.  
+**Frontend** super-admin list: `REACT_APP_SUPER_ADMIN_EMAILS` (optional) merged with defaults in `src/auth/AuthContext.js`.
 **Backend** must list the **same** emails: `AUTH_SUPER_ADMIN_EMAILS` in `backend_stockdashboard/.env` (defaults include `gvc1990@gmail.com`, `admin@aycindustries.com`).
 
 If a normal user still **manually opens** `/admin-users`, they are redirected home; API calls from their token return **403** from protected admin routes.
@@ -241,10 +241,10 @@ If the request URL is still `localhost:8000`, **rebuild the frontend** with `.en
 
 ## Summary: “nothing works” order of operations
 
-1. **`git pull`** frontend **and** backend repos.  
-2. **Backend:** `.env`, `systemctl restart ani-backend`, `curl localhost:8000/api/system/status`.  
-3. **Frontend:** `.env.production` → **`npm run build`** → **rsync** to `/var/www/ani-stock/`.  
-4. **Nginx:** `start` if inactive, `nginx -t`, proxy test with `curl` to domain.  
+1. **`git pull`** frontend **and** backend repos.
+2. **Backend:** `.env`, `systemctl restart ani-backend`, `curl localhost:8000/api/system/status`.
+3. **Frontend:** `.env.production` → **`npm run build`** → **rsync** to `/var/www/ani-stock/`.
+4. **Nginx:** `start` if inactive, `nginx -t`, proxy test with `curl` to domain.
 5. **FII/DII:** `curl` API + Trendlyne from VPS + DB row count + logs.
 
 No separate Git branch is required for these features — **`main`** is fine as long as both repos are deployed and the **production build** uses the **public API base URL**.

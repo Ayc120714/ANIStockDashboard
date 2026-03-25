@@ -20,40 +20,41 @@ End state:
 
 **Email OTP:** create mailbox **`support@aycindustries.com`** in Hostinger and set backend **`SMTP_USER`**, **`SMTP_FROM_EMAIL`**, and **`SMTP_PASSWORD`** (see `backend_stockdashboard/.env.production.example`).
 
+**Folder layout:** The backend repo should live **next to** `stockdashboard`, not inside it — see **[REPO_LAYOUT.md](./REPO_LAYOUT.md)**. On disk: `/opt/ani-stock/stockdashboard` + `/opt/ani-stock/backend_stockdashboard`.
+
 ---
 
 ## Git clone on the VPS (get the code)
 
 SSH into the server, then choose **one** layout.
 
-### Monorepo (frontend + backend in one repo)
+### Recommended: two separate Git repositories (sibling folders)
 
-This project’s frontend repo includes **`backend_stockdashboard/`** under `stockdashboard`:
-
-```bash
-sudo mkdir -p /opt/ani-stock
-sudo chown -R "$USER:$USER" /opt/ani-stock
-cd /opt/ani-stock
-git clone https://github.com/Ayc120714/ANIStockDashboard.git stockdashboard
-```
-
-Backend path on disk: **`/opt/ani-stock/stockdashboard/backend_stockdashboard`**.  
-Adjust **`vps_bootstrap.sh`**, systemd `WorkingDirectory`, and **`scripts/deploy.sh`** env vars to that path (see **Option B** below).
-
-### Two separate Git repositories
-
-If backend is its own remote:
+Backend is **`backend_stockdashboard`** at the **same level** as `stockdashboard` (one directory up from inside `stockdashboard`):
 
 ```bash
 sudo mkdir -p /opt/ani-stock
 sudo chown -R "$USER:$USER" /opt/ani-stock
 cd /opt/ani-stock
 git clone https://github.com/Ayc120714/ANIStockDashboard.git stockdashboard
-git clone https://github.com/YOUR_ORG/backend_stockdashboard.git backend_stockdashboard
+git clone https://github.com/Ayc120714/backend_stockdashboard.git backend_stockdashboard
 ```
 
-Replace `YOUR_ORG/backend_stockdashboard.git` with your real backend URL.  
-Then use **Option A** bootstrap as-is (`FRONTEND_REPO` / `BACKEND_REPO`).
+Replace URLs with your real remotes if different.  
+**systemd** and **`.env`** use **`/opt/ani-stock/backend_stockdashboard`**.  
+Use **Option A** bootstrap as-is (`FRONTEND_REPO` / `BACKEND_REPO`).
+
+### Optional legacy: nested backend inside `stockdashboard/`
+
+Only if your **frontend** repository actually contains a full **`backend_stockdashboard/`** subtree (uncommon):
+
+```bash
+cd /opt/ani-stock
+git clone https://github.com/Ayc120714/ANIStockDashboard.git stockdashboard
+# Backend path would be: /opt/ani-stock/stockdashboard/backend_stockdashboard
+```
+
+Then set systemd `WorkingDirectory` and **`BACKEND_DIR`** to that **nested** path (see **Legacy Option B** below). Prefer the **sibling** layout above to avoid duplicate trees and wrong `git pull` targets.
 
 ### SSH deploy key (optional)
 

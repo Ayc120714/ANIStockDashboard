@@ -421,24 +421,24 @@ function LoginPage() {
                     </Box>
                   </Alert>
                 ) : null}
-                {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+          {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
                 <Box component="form" onSubmit={onPasswordLogin} sx={{ display: 'grid', gap: 1.2 }}>
-                  <TextField
-                    label="Email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    size="small"
-                    autoComplete="email"
+            <TextField
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              size="small"
+              autoComplete="email"
                     sx={authInputSx}
-                  />
-                  <TextField
-                    label="Password"
+            />
+              <TextField
+                label="Password"
                     type={showLoginPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    size="small"
-                    autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                size="small"
+                autoComplete="current-password"
                     sx={authInputSx}
                     InputProps={{
                       endAdornment: (
@@ -470,21 +470,21 @@ function LoginPage() {
                     }}
                   >
                     {loading ? 'Please wait…' : 'Login'}
-                  </Button>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+              </Button>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                     <Button variant="text" onClick={() => navigate('/forgot-user-id')} sx={{ textTransform: 'none', p: 0, color: '#1d4ed8', fontWeight: 700 }}>
-                      Forgot User ID?
-                    </Button>
+                Forgot User ID?
+              </Button>
                     <Button variant="text" onClick={() => navigate('/forgot-password')} sx={{ textTransform: 'none', p: 0, color: '#1d4ed8', fontWeight: 700 }}>
-                      Forgot Password?
-                    </Button>
-                  </Box>
+                Forgot Password?
+              </Button>
+            </Box>
                   <Button variant="text" onClick={() => navigate('/signup')} sx={{ textTransform: 'none', color: '#1d4ed8', fontWeight: 700 }}>
-                    New user? Sign up
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
+              New user? Sign up
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
 
             <Card
               sx={{
