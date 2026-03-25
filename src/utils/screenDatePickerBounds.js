@@ -15,21 +15,11 @@ export function parseScreenDateString(s) {
 
 /**
  * Earliest / latest selectable dates for MUI DatePicker.
- * When no snapshot dates exist, only maxDate is set (today) so past dates stay selectable;
- * the API will return live or empty data for un-snapshotted days.
+ * Keep minDate undefined so users can select older dates beyond currently snapshotted days.
+ * Backend will resolve exact/nearest snapshot or live fallback for those dates.
  */
 export function getScreenDatePickerBounds(availableDates) {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
-  if (!Array.isArray(availableDates) || availableDates.length === 0) {
-    return { minDate: undefined, maxDate: today };
-  }
-  const parsed = availableDates.map(parseScreenDateString).filter(Boolean);
-  if (!parsed.length) {
-    return { minDate: undefined, maxDate: today };
-  }
-  const times = parsed.map((d) => d.getTime());
-  const min = new Date(Math.min(...times));
-  min.setHours(0, 0, 0, 0);
-  return { minDate: min, maxDate: today };
+  return { minDate: undefined, maxDate: today };
 }
