@@ -23,10 +23,16 @@ function RelativePerformancePage() {
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 320);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
 
   const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
     () => getScreenDatePickerBounds(availableDates),
@@ -60,21 +66,26 @@ function RelativePerformancePage() {
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
     setLoadError(null);
     setPage(1);
     let cacheSet = false;
     const period = timeFrame === 'Short Term' ? '1w' : '6m';
     const dateStr = formatDateParam(selectedDate);
-    const searchMode = String(searchTerm || '').trim().length > 0;
+    const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
     const cacheKey = `relativePerformanceData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
-      const parsed = JSON.parse(cached);
-      setTableData(Array.isArray(parsed) ? parsed : []);
+      try {
+        const parsed = JSON.parse(cached);
+        setTableData(Array.isArray(parsed) ? parsed : []);
+      } catch (_) {
+        setTableData([]);
+      }
       setIsLoading(false);
       cacheSet = true;
+    } else {
+      setIsLoading(true);
     }
     fetchRelativePerformance(period, fetchLimit, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
@@ -90,7 +101,7 @@ function RelativePerformancePage() {
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame, selectedDate, searchTerm]);
+  }, [timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
 
@@ -110,7 +121,7 @@ function RelativePerformancePage() {
     if (typeof value === 'number') return value;
     if (value === null || value === undefined) return 0;
     let str = value.toString().replace(/,/g, '');
-    if (key === 'cmp' || key === 'chg' || key === 'rs' || key === 'rsi') str = str.replace(/[^\d.-]/g, '');
+    if (key === 'cmp' || key === 'chg' || key === 'rs') str = str.replace(/[^\d.-]/g, '');
     return parseFloat(str) || 0;
   };
 
@@ -119,7 +130,7 @@ function RelativePerformancePage() {
     const sorted = [...filteredData].sort((a, b) => {
       let aValue = a[sortConfig.key];
       let bValue = b[sortConfig.key];
-      if (['cmp', 'chg', 'rs', 'rsi'].includes(sortConfig.key)) {
+      if (['cmp', 'chg', 'rs'].includes(sortConfig.key)) {
         aValue = extractNumeric(aValue, sortConfig.key);
         bValue = extractNumeric(bValue, sortConfig.key);
       }
@@ -158,7 +169,6 @@ function RelativePerformancePage() {
     { key: 'cmp', label: 'CMP' },
     { key: 'chg', label: chgColumnLabel },
     { key: 'rs', label: 'RS% (vs NIFTY)' },
-    { key: 'rsi', label: 'RSI' },
   ];
 
   return (
@@ -219,7 +229,7 @@ function RelativePerformancePage() {
       <TableSection>
         <TableTitle>Alpha Tracker</TableTitle>
         <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mb: 1, maxWidth: 720 }}>
-          RS% = relative strength vs NIFTY for the selected horizon (not RSI).           RSI = Wilder oscillator (0–100), same length as technical_engine daily scans; shown when available.
+          RS% = relative strength vs NIFTY for the selected horizon.
         </Typography>
         <TableWrapper>
           <Table>
@@ -253,7 +263,7 @@ function RelativePerformancePage() {
             <tbody>
               {!isLoading && sortedData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
                     No data for this date / horizon. Pick another date or wait for market data.
                   </td>
                 </tr>
@@ -315,19 +325,6 @@ function RelativePerformancePage() {
                     <span className={(row.rs || '').toString().startsWith('-') ? 'trend-down' : 'trend-up'}>
                       {row.rs}
                     </span>
-                  </td>
-                  <td
-                    style={{
-                      fontWeight: 600,
-                      color:
-                        row.rsi !== '—' && parseFloat(row.rsi) > 70
-                          ? '#2e7d32'
-                          : row.rsi !== '—' && parseFloat(row.rsi) < 30
-                            ? '#c62828'
-                            : undefined,
-                    }}
-                  >
-                    {row.rsi}
                   </td>
                 </tr>
               ))}

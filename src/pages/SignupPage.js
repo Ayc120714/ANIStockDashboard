@@ -156,19 +156,49 @@ function SignupPage() {
               </Alert>
             ) : null}
             {emailHint ? <Alert severity={emailHint.includes('valid') ? 'success' : 'info'} sx={{ mb: 2 }}>{emailHint}</Alert> : null}
-            <Box component="form" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
-              <TextField label="Full name" value={form.full_name} onChange={onChange('full_name')} size="small" sx={authInputSx} />
-              <TextField label="Email" value={form.email} onChange={onChange('email')} size="small" sx={authInputSx} />
+            <Box component="form" autoComplete="off" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
+              <TextField
+                label="Full name"
+                value={form.full_name}
+                onChange={onChange('full_name')}
+                size="small"
+                name="signup_full_name_no_autofill"
+                autoComplete="off"
+                inputProps={{ autoComplete: 'off' }}
+                sx={authInputSx}
+              />
+              <TextField
+                label="Email"
+                value={form.email}
+                onChange={onChange('email')}
+                size="small"
+                name="signup_email_no_autofill"
+                autoComplete="off"
+                inputProps={{ autoComplete: 'off' }}
+                sx={authInputSx}
+              />
               <Button variant="text" onClick={checkEmail} sx={{ justifyContent: 'flex-start', p: 0, textTransform: 'none', fontWeight: 700, color: '#1d4ed8' }}>
                 Validate email
               </Button>
-              <TextField label="Mobile" value={form.mobile} onChange={onChange('mobile')} size="small" sx={authInputSx} />
+              <TextField
+                label="Mobile"
+                value={form.mobile}
+                onChange={onChange('mobile')}
+                size="small"
+                name="signup_mobile_no_autofill"
+                autoComplete="off"
+                inputProps={{ autoComplete: 'off' }}
+                sx={authInputSx}
+              />
               <TextField
                 label="Password"
                 type="password"
                 value={form.password}
                 onChange={onChange('password')}
                 size="small"
+                name="signup_password_no_autofill"
+                autoComplete="new-password"
+                inputProps={{ autoComplete: 'new-password' }}
                 helperText="Min 8 chars with uppercase, lowercase, number and special character"
                 sx={authInputSx}
               />

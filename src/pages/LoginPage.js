@@ -422,14 +422,16 @@ function LoginPage() {
                   </Alert>
                 ) : null}
           {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-                <Box component="form" onSubmit={onPasswordLogin} sx={{ display: 'grid', gap: 1.2 }}>
+                <Box component="form" autoComplete="off" onSubmit={onPasswordLogin} sx={{ display: 'grid', gap: 1.2 }}>
             <TextField
               label="Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               size="small"
-              autoComplete="email"
+              name="login_email_no_autofill"
+              autoComplete="off"
+              inputProps={{ autoComplete: 'off' }}
                     sx={authInputSx}
             />
               <TextField
@@ -438,7 +440,9 @@ function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 size="small"
-                autoComplete="current-password"
+                name="login_password_no_autofill"
+                autoComplete="new-password"
+                inputProps={{ autoComplete: 'new-password' }}
                     sx={authInputSx}
                     InputProps={{
                       endAdornment: (
