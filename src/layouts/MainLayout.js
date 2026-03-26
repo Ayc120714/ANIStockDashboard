@@ -2,7 +2,6 @@ import React from 'react';
 import { Outlet } from 'react-router';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
-import BootstrapSyncBanner from '../components/BootstrapSyncBanner';
 import { BootstrapReadyProvider } from '../context/BootstrapReadyContext';
 import styled from 'styled-components';
 
@@ -96,7 +95,6 @@ function MainLayout() {
         <Sidebar />
         <MainContent>
           <Header />
-          <BootstrapSyncBanner />
           <ContentArea>
             <Outlet />
           </ContentArea>
