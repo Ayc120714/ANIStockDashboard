@@ -74,9 +74,23 @@ function IPOsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
     setLoadError(null);
     setPage(1);
+    const cacheKey = `iposData_${statusFilter || 'all'}_200`;
+    let cacheSet = false;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setTableData(Array.isArray(parsed) ? parsed : []);
+      } catch (_) {
+        setTableData([]);
+      }
+      setIsLoading(false);
+      cacheSet = true;
+    } else {
+      setIsLoading(true);
+    }
     fetchIPOs(statusFilter, 200)
       .then((data) => {
         if (!isMounted) return;
@@ -102,11 +116,12 @@ function IPOsPage() {
           _issueStartTs: parseIpoDate(ipo.issue_start_date)?.getTime() || null,
           _listingTs: parseIpoDate(ipo.listing_date)?.getTime() || null,
         }));
+        sessionStorage.setItem(cacheKey, JSON.stringify(mapped));
         setTableData(mapped);
         setIsLoading(false);
       })
       .catch((err) => {
-        if (isMounted) {
+        if (isMounted && !cacheSet) {
           setLoadError(err?.message || 'Failed to load IPO data.');
           setIsLoading(false);
         }

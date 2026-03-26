@@ -1111,9 +1111,24 @@ function DashboardPage() {
   const [telegramStatusChecked, setTelegramStatusChecked] = useState(false);
   const [hasApprovedTelegramAccess, setHasApprovedTelegramAccess] = useState(false);
   const userId = String(user?.id || user?.user_id || user?.email || '');
+  const hasHydratedData = Boolean(
+    (watchlist && watchlist.length)
+    || (signals && signals.length)
+    || (weeklyData && weeklyData.length)
+    || (obData && obData.length)
+    || (sectors && sectors.length)
+    || (gainers && gainers.length)
+    || (losers && losers.length)
+    || (alerts && alerts.length)
+    || (ratings && ratings.length)
+    || indices
+  );
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async ({ forceSpinner = false } = {}) => {
     try {
+      if (forceSpinner && !hasHydratedData) {
+        setLoading(true);
+      }
       let cached = null;
       try {
         const raw = sessionStorage.getItem(DASHBOARD_CACHE_KEY);
@@ -1245,11 +1260,11 @@ function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, isAdmin]);
+  }, [userId, isAdmin, hasHydratedData]);
 
   useEffect(() => {
-    loadAll();
-    const timer = setInterval(loadAll, marketMode === 'websocket' ? 60000 : 180000);
+    loadAll({ forceSpinner: true });
+    const timer = setInterval(() => loadAll({ forceSpinner: false }), marketMode === 'websocket' ? 60000 : 180000);
     return () => clearInterval(timer);
   }, [loadAll, marketMode]);
 
@@ -1292,7 +1307,7 @@ function DashboardPage() {
         <Box sx={{ fontWeight: 700, fontSize: 22, color: '#1a3c5e' }}>Dashboard</Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastUpdated && <Box sx={{ fontSize: 11, color: '#999' }}>Updated {lastUpdated.toLocaleTimeString()}</Box>}
-          <IconButton size="small" onClick={() => { setLoading(true); loadAll(); }} disabled={loading}>
+          <IconButton size="small" onClick={() => loadAll({ forceSpinner: !hasHydratedData })} disabled={loading && !hasHydratedData}>
             <MdRefresh size={18} />
           </IconButton>
         </Box>

@@ -24,10 +24,16 @@ function PriceShockersPage() {
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 320);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
 
   const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
     () => getScreenDatePickerBounds(availableDates),
@@ -66,7 +72,7 @@ function PriceShockersPage() {
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const searchQuery = String(searchTerm || '').trim().toLowerCase();
+    const searchQuery = String(debouncedSearch || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
     const cacheKey = `priceShockersData_v2_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
@@ -105,7 +111,7 @@ function PriceShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [priceType, timeFrame, selectedDate, searchTerm]);
+  }, [priceType, timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
 

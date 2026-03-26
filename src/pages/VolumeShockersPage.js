@@ -23,10 +23,16 @@ function VolumeShockersPage() {
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 320);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
 
   const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
     () => getScreenDatePickerBounds(availableDates),
@@ -65,7 +71,7 @@ function VolumeShockersPage() {
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const searchMode = String(searchTerm || '').trim().length > 0;
+    const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
     const cacheKey = `volumeShockersData_v2_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
@@ -89,7 +95,7 @@ function VolumeShockersPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame, selectedDate, searchTerm]);
+  }, [timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
 

@@ -22,10 +22,16 @@ function TrendingPage() {
   const [added, setAdded] = useState({});
   const [availableDates, setAvailableDates] = useState([]);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     fetchScreenDates().then(setAvailableDates).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 320);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
 
   const { minDate: screenMinDate, maxDate: screenMaxDate } = useMemo(
     () => getScreenDatePickerBounds(availableDates),
@@ -63,7 +69,7 @@ function TrendingPage() {
     setLoadError(null);
     setPage(1);
     const dateStr = formatDateParam(selectedDate);
-    const searchMode = String(searchTerm || '').trim().length > 0;
+    const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 1000 : 50;
     const cacheKey = `trendingStocksData_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
@@ -87,7 +93,7 @@ function TrendingPage() {
       }
     });
     return () => { isMounted = false; };
-  }, [selectedDate, searchTerm]);
+  }, [selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
 
