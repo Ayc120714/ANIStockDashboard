@@ -63,28 +63,37 @@ function StockAlertsPage() {
   const [sortDir, setSortDir] = useState('desc');
   const rowsPerPage = 25;
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!userId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     setErrorMsg('');
-    fetchPriceAlertTriggers({ userId, limit: 500 })
-      .then((rows) => setData(Array.isArray(rows) ? rows : []))
-      .catch((e) => {
-        if (isMissingResourceError(e)) {
-          setData([]);
-          setErrorMsg('');
-          return;
-        }
-        setErrorMsg(e?.message || 'Failed to load alert history');
-      })
-      .finally(() => setLoading(false));
+    const [priceRes, specialRes] = await Promise.allSettled([
+      fetchPriceAlertTriggers({ userId, limit: 500 }),
+      fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: false }),
+    ]);
 
-    fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: false })
-      .then((rows) => setAdvisorAlerts(Array.isArray(rows) ? rows : []))
-      .catch(() => setAdvisorAlerts([]));
+    if (priceRes.status === 'fulfilled') {
+      setData(Array.isArray(priceRes.value) ? priceRes.value : []);
+    } else {
+      const e = priceRes.reason;
+      if (isMissingResourceError(e)) {
+        setData([]);
+      } else {
+        setErrorMsg(e?.message || 'Failed to load alert history');
+      }
+    }
+
+    if (specialRes.status === 'fulfilled') {
+      setAdvisorAlerts(Array.isArray(specialRes.value) ? specialRes.value : []);
+    } else {
+      // Do not silently blank the page when special-alert API fails.
+      const e = specialRes.reason;
+      setErrorMsg((prev) => prev || (e?.message || 'Failed to load weekly/divergence alerts'));
+    }
+    setLoading(false);
   }, [userId, symbolFilter]);
 
   useEffect(() => { load(); }, [load]);
