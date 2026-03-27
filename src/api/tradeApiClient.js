@@ -1,6 +1,13 @@
 import { apiRequest } from './apiClient';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const resolveDefaultApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/api`;
+  }
+  return '/api';
+};
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || resolveDefaultApiBaseUrl();
 const TRADE_BASE_URL = process.env.REACT_APP_TRADE_API_URL || API_BASE_URL;
 
 const buildUrlFromBase = (baseUrl, endpoint) => {

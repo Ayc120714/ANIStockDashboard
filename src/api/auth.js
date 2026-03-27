@@ -54,6 +54,20 @@ export const deleteAdminUser = (userId) =>
 export const blockAdminUser = (userId, blocked = true) =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/block`, { blocked: Boolean(blocked) });
 
+export const approveAdminUserAccessLink = (userId) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/approve-access-link`, {});
+
+export const rejectAdminUserRequest = (userId, reason = '') =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, { reason });
+
+export const completeAccessLinkSetup = (flowId, token, newPassword, trustDevice = true) =>
+  apiPost('/auth/access-link/complete', {
+    flow_id: flowId,
+    token,
+    new_password: newPassword,
+    trust_device: Boolean(trustDevice),
+  });
+
 export const fetchAiApiKeys = () => apiGet('/auth/ai-keys');
 
 export const saveAiApiKey = (provider, apiKey, isActive = true) =>

@@ -183,10 +183,16 @@ export const fetchAlerts = async (filters = {}) => {
   return data?.data ?? [];
 };
 
-export const fetchSpecialAlerts = async ({ limit = 1000, symbol = '', currentDayOnly = true } = {}) => {
+export const fetchSpecialAlerts = async ({
+  limit = 1000,
+  symbol = '',
+  currentDayOnly = true,
+  includeHistory = false,
+} = {}) => {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('current_day_only', currentDayOnly ? 'true' : 'false');
+  params.set('include_history', includeHistory ? 'true' : 'false');
   if (symbol && String(symbol).trim()) params.set('symbol', String(symbol).trim());
   const data = await apiGet(`/advisor/alerts/special?${params.toString()}`);
   return data?.data ?? [];

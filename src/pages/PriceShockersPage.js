@@ -64,6 +64,13 @@ function PriceShockersPage() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
+  const todayDateParam = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -72,16 +79,19 @@ function PriceShockersPage() {
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
+    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchQuery = String(debouncedSearch || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
     const cacheKey = `priceShockersData_v2_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      setTableData(Array.isArray(parsed) ? parsed : []);
-      setIsLoading(false);
-      cacheSet = true;
+    if (!isLiveTodayView) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setTableData(Array.isArray(parsed) ? parsed : []);
+        setIsLoading(false);
+        cacheSet = true;
+      }
     }
     const loadRows = async () => {
       if (searchMode) {

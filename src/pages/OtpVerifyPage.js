@@ -111,6 +111,12 @@ function OtpVerifyPage() {
     setMessage('');
     try {
       const res = await completeSignup(flowId, trustDevice);
+      if (res?.pending_approval) {
+        setMessage(res?.message || 'Email verified. Await admin approval email link.');
+        setError('');
+        setTimeout(() => navigate('/login', { replace: true }), 1200);
+        return;
+      }
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
       const fallbackPath = from || '/';
       const userId = String(res?.user?.id || res?.user?.user_id || res?.user?.email || '');

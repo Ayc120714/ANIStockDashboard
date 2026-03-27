@@ -24,6 +24,7 @@ import OtpVerifyPage from '../pages/OtpVerifyPage';
 import ForgotUserIdPage from '../pages/ForgotUserIdPage';
 import ForgotPasswordPage from '../pages/ForgotPasswordPage';
 import DhanCallbackPage from '../pages/DhanCallbackPage';
+import AccessLinkSetupPage from '../pages/AccessLinkSetupPage';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 
@@ -36,6 +37,7 @@ function AppRouter() {
         <Route path="/verify-otp" element={<OtpVerifyPage />} />
         <Route path="/forgot-user-id" element={<ForgotUserIdPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/access-link-setup" element={<AccessLinkSetupPage />} />
 
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
           <Route path="/" element={<DashboardPage />} />

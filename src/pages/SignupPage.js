@@ -4,22 +4,25 @@ import { useNavigate } from 'react-router';
 import { signup, validateEmail } from '../api/auth';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 function SignupPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     full_name: '',
     email: '',
-    password: '',
+    mobile: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [emailHint, setEmailHint] = useState('');
   const [existingUser, setExistingUser] = useState(false);
+  const [submittedMessage, setSubmittedMessage] = useState('');
 
   const canSubmit = useMemo(() => {
-    return form.email && form.mobile && strongPasswordRegex.test(form.password || '');
+    const em = (form.email || '').trim();
+    const digits = (form.mobile || '').replace(/\D/g, '');
+    const mobileOk = !digits || (digits.length >= 8 && digits.length <= 15);
+    return Boolean(em && emailRegex.test(em) && mobileOk);
   }, [form]);
   const authInputSx = {
     '& .MuiInputBase-input': { color: '#0f172a', fontWeight: 500 },
@@ -52,21 +55,17 @@ function SignupPage() {
     setLoading(true);
     setError('');
     setExistingUser(false);
+    setSubmittedMessage('');
     try {
       const res = await signup({
         full_name: form.full_name,
         email: form.email.trim(),
-        password: form.password,
+        ...(form.mobile.replace(/\D/g, '') ? { mobile: form.mobile.replace(/\D/g, '') } : {}),
       });
-      navigate('/verify-otp', {
-        state: {
-          flowId: res?.flow_id,
-          purpose: 'signup',
-          requires: res?.requires || ['email'],
-          email: res?.email || form.email.trim(),
-          mobile: res?.mobile ?? '',
-        },
-      });
+      setSubmittedMessage(
+        res?.message
+          || 'Registration received. You will receive an email with setup instructions after an administrator approves your account.',
+      );
     } catch (err) {
       const msg = err?.message || 'Signup failed.';
       setError(msg);
@@ -120,8 +119,8 @@ function SignupPage() {
             <Box sx={{ display: 'grid', gap: 1 }}>
               <Typography sx={{ color: '#bfdbfe' }}>- Real-time signals and alerts</Typography>
               <Typography sx={{ color: '#bfdbfe' }}>- Personalized watchlist tracking</Typography>
-              <Typography sx={{ color: '#bfdbfe' }}>- Secure email OTP verification flow</Typography>
-              <Typography sx={{ color: '#bfdbfe' }}>- Broker setup with controlled activation</Typography>
+              <Typography sx={{ color: '#bfdbfe' }}>- Admin approval before access</Typography>
+              <Typography sx={{ color: '#bfdbfe' }}>- Set your password from the approval email link</Typography>
             </Box>
           </CardContent>
         </Card>
@@ -145,17 +144,38 @@ function SignupPage() {
           >
             <Typography variant="h5" sx={{ fontWeight: 800 }}>Create Account</Typography>
             <Typography variant="body2" sx={{ opacity: 0.92 }}>
-              Fast onboarding with secure verification
+              Register — access after admin approval
             </Typography>
           </Box>
           <CardContent sx={{ p: 3 }}>
             {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+            {submittedMessage ? (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {submittedMessage}
+              </Alert>
+            ) : null}
             {existingUser ? (
               <Alert severity="info" sx={{ mb: 2 }}>
                 Account already exists. Please login or use forgot password.
               </Alert>
             ) : null}
             {emailHint ? <Alert severity={emailHint.includes('valid') ? 'success' : 'info'} sx={{ mb: 2 }}>{emailHint}</Alert> : null}
+            {submittedMessage ? (
+              <Button
+                variant="contained"
+                onClick={() => navigate('/login')}
+                sx={{
+                  py: 1.1,
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  backgroundColor: '#1d4ed8',
+                  '&:hover': { backgroundColor: '#1e40af' },
+                }}
+              >
+                Go to login
+              </Button>
+            ) : null}
+            {!submittedMessage ? (
             <Box component="form" autoComplete="off" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
               <TextField
                 label="Full name"
@@ -177,31 +197,20 @@ function SignupPage() {
                 inputProps={{ autoComplete: 'off' }}
                 sx={authInputSx}
               />
-              <Button variant="text" onClick={checkEmail} sx={{ justifyContent: 'flex-start', p: 0, textTransform: 'none', fontWeight: 700, color: '#1d4ed8' }}>
-                Validate email
-              </Button>
               <TextField
-                label="Mobile"
+                label="Mobile (optional)"
                 value={form.mobile}
                 onChange={onChange('mobile')}
                 size="small"
                 name="signup_mobile_no_autofill"
                 autoComplete="off"
-                inputProps={{ autoComplete: 'off' }}
+                inputProps={{ inputMode: 'tel', maxLength: 20, autoComplete: 'off' }}
+                helperText="8–15 digits with country code if provided; or leave blank"
                 sx={authInputSx}
               />
-              <TextField
-                label="Password"
-                type="password"
-                value={form.password}
-                onChange={onChange('password')}
-                size="small"
-                name="signup_password_no_autofill"
-                autoComplete="new-password"
-                inputProps={{ autoComplete: 'new-password' }}
-                helperText="Min 8 chars with uppercase, lowercase, number and special character"
-                sx={authInputSx}
-              />
+              <Button variant="text" onClick={checkEmail} sx={{ justifyContent: 'flex-start', p: 0, textTransform: 'none', fontWeight: 700, color: '#1d4ed8' }}>
+                Validate email
+              </Button>
               <Button
                 type="submit"
                 variant="contained"
@@ -215,7 +224,7 @@ function SignupPage() {
                   '&.Mui-disabled': { backgroundColor: '#cbd5e1', color: '#64748b' },
                 }}
               >
-                {loading ? 'Creating account...' : 'Sign up and send email OTP'}
+                {loading ? 'Creating account...' : 'Submit registration'}
               </Button>
               <Button variant="text" onClick={() => navigate('/login')} sx={{ textTransform: 'none', fontWeight: 700, color: '#1d4ed8' }}>
                 Already have an account? Login
@@ -226,6 +235,7 @@ function SignupPage() {
                 </Button>
               ) : null}
             </Box>
+            ) : null}
           </CardContent>
         </Card>
       </Box>

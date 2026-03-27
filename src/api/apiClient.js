@@ -1,4 +1,11 @@
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const resolveDefaultApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/api`;
+  }
+  return '/api';
+};
+
+const BASE_URL = process.env.REACT_APP_API_URL || resolveDefaultApiBaseUrl();
 
 const defaultHeaders = {
   'Content-Type': 'application/json'
@@ -65,6 +72,38 @@ const humanizeNonJsonError = (status, rawText) => {
     return 'The service returned an error page instead of the API. The backend may be down or misconfigured — try again shortly.';
   }
   return t.length > 400 ? `${t.slice(0, 400)}…` : t;
+};
+
+const extractApiErrorMessage = (payload) => {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload.trim();
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const msg = extractApiErrorMessage(item);
+      if (msg) return msg;
+    }
+    return '';
+  }
+  if (typeof payload === 'object') {
+    const direct =
+      extractApiErrorMessage(payload.message)
+      || extractApiErrorMessage(payload.error)
+      || extractApiErrorMessage(payload.reason)
+      || extractApiErrorMessage(payload.reason_code)
+      || extractApiErrorMessage(payload.detail);
+    if (direct) return direct;
+
+    // FastAPI/Pydantic validation shape: [{loc:[...], msg:'...', type:'...'}]
+    if (Array.isArray(payload.errors) && payload.errors.length) {
+      const firstMsg = extractApiErrorMessage(payload.errors[0]?.msg || payload.errors[0]);
+      if (firstMsg) return firstMsg;
+    }
+    if (Array.isArray(payload.detail) && payload.detail.length) {
+      const firstMsg = extractApiErrorMessage(payload.detail[0]?.msg || payload.detail[0]);
+      if (firstMsg) return firstMsg;
+    }
+  }
+  return '';
 };
 
 const getOrCreateDeviceId = () => {
@@ -147,9 +186,11 @@ export const apiRequest = async (endpoint, options = {}) => {
       if (typeof detail === 'string' && detail) {
         errorMessage = detail;
       } else if (detail && typeof detail === 'object') {
-        errorMessage = detail.message || detail.reason_code || JSON.stringify(detail);
+        errorMessage = extractApiErrorMessage(detail) || extractApiErrorMessage(data) || errorMessage;
       } else if (typeof data?.message === 'string' && data.message) {
         errorMessage = data.message;
+      } else {
+        errorMessage = extractApiErrorMessage(data) || errorMessage;
       }
     } else {
       const errorText = await interceptedResponse.text().catch(() => '');

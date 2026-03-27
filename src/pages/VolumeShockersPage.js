@@ -9,8 +9,11 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
+import { useAuth } from '../auth/AuthContext';
 
 function VolumeShockersPage() {
+  const { isAuthenticated, bootstrapping, user } = useAuth();
+  const userKey = String(user?.id || user?.user_id || user?.email || '');
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,8 +29,9 @@ function VolumeShockersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
+    if (bootstrapping || !isAuthenticated) return;
     fetchScreenDates().then(setAvailableDates).catch(() => {});
-  }, []);
+  }, [bootstrapping, isAuthenticated]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(searchTerm), 320);
@@ -63,39 +67,62 @@ function VolumeShockersPage() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
+  const todayDateParam = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
+    if (bootstrapping) return;
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      setTableData([]);
+      setLoadError('Please login to load screen data.');
+      return;
+    }
+
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
+    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `volumeShockersData_v2_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `volumeShockersData_v3_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      setTableData(Array.isArray(parsed) ? parsed : []);
-      setIsLoading(false);
-      cacheSet = true;
+    if (!isLiveTodayView) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setTableData(Array.isArray(parsed) ? parsed : []);
+        setIsLoading(false);
+        cacheSet = true;
+      }
     }
     fetchVolumeShockers(fetchLimit, period, dateStr).then((fresh) => {
-      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
+      } else if (!cacheSet) {
+        // Avoid preserving empty snapshots that can mask auth/startup failures.
+        sessionStorage.removeItem(cacheKey);
+      }
       if (isMounted) {
         setTableData(Array.isArray(fresh) ? fresh : []);
         setIsLoading(false);
       }
     }).catch((err) => {
-      if (isMounted && !cacheSet) {
+      if (isMounted) {
         setLoadError(err?.message || 'Failed to load volume shockers.');
         setIsLoading(false);
       }
     });
     return () => { isMounted = false; };
-  }, [timeFrame, selectedDate, debouncedSearch]);
+  }, [bootstrapping, isAuthenticated, userKey, timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
 

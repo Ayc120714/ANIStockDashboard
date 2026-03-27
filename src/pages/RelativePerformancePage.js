@@ -63,6 +63,13 @@ function RelativePerformancePage() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
+  const todayDateParam = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -71,19 +78,24 @@ function RelativePerformancePage() {
     let cacheSet = false;
     const period = timeFrame === 'Short Term' ? '1w' : '6m';
     const dateStr = formatDateParam(selectedDate);
+    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
     const cacheKey = `relativePerformanceData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        setTableData(Array.isArray(parsed) ? parsed : []);
-      } catch (_) {
-        setTableData([]);
+    if (!isLiveTodayView) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setTableData(Array.isArray(parsed) ? parsed : []);
+        } catch (_) {
+          setTableData([]);
+        }
+        setIsLoading(false);
+        cacheSet = true;
+      } else {
+        setIsLoading(true);
       }
-      setIsLoading(false);
-      cacheSet = true;
     } else {
       setIsLoading(true);
     }

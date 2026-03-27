@@ -18,6 +18,12 @@ const fmtNum = (v) => {
   return Number(v).toFixed(2);
 };
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
+const compactWrap = {
+  ...compact,
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+};
 const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
@@ -72,7 +78,7 @@ function StockAlertsPage() {
     setErrorMsg('');
     const [priceRes, specialRes] = await Promise.allSettled([
       fetchPriceAlertTriggers({ userId, limit: 500 }),
-      fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: false }),
+      fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: true }),
     ]);
 
     if (priceRes.status === 'fulfilled') {
@@ -511,8 +517,8 @@ function StockAlertsPage() {
                 <tr key={`grp_${r.alertType}`}>
                   <td style={{ ...compact, fontWeight: 600 }}>{r.alertType}</td>
                   <td style={compact}>{r.count}</td>
-                  <td style={{ ...compact, maxWidth: 640, whiteSpace: 'normal' }}>{r.csv || '—'}</td>
-                  <td style={compact}>
+                  <td style={{ ...compactWrap, maxWidth: 640 }}>{r.csv || '—'}</td>
+                  <td style={{ ...compact, whiteSpace: 'nowrap', width: 140 }}>
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button size="small" variant="text" onClick={() => handleCopyCsvText(r.csv)} sx={{ textTransform: 'none', fontSize: 12 }}>
                         Copy CSV

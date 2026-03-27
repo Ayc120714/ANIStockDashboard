@@ -63,22 +63,33 @@ function TrendingPage() {
     return `${y}-${m}-${day}`;
   };
 
+  const todayDateParam = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLoadError(null);
     setPage(1);
     const dateStr = formatDateParam(selectedDate);
+    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 1000 : 50;
     const cacheKey = `trendingStocksData_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cacheSet = false;
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      setTableData(Array.isArray(parsed) ? parsed : []);
-      setIsLoading(false);
-      cacheSet = true;
+    if (!isLiveTodayView) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setTableData(Array.isArray(parsed) ? parsed : []);
+        setIsLoading(false);
+        cacheSet = true;
+      }
     }
     fetchTrending(fetchLimit, dateStr).then((fresh) => {
       sessionStorage.setItem(cacheKey, JSON.stringify(fresh));

@@ -9,6 +9,9 @@ FRONTEND_SERVICE="${2:-}"
 NGINX_SERVICE="${3:-nginx}"
 BACKEND_HEALTH_URL="${4:-http://127.0.0.1:8000/docs}"
 FRONTEND_HEALTH_URL="${5:-http://127.0.0.1/}"
+HEALTH_MAX_RETRIES="${HEALTH_MAX_RETRIES:-30}"
+HEALTH_RETRY_DELAY_SEC="${HEALTH_RETRY_DELAY_SEC:-2}"
+HEALTH_CURL_TIMEOUT_SEC="${HEALTH_CURL_TIMEOUT_SEC:-5}"
 
 check_service() {
   local svc="$1"
@@ -26,13 +29,33 @@ check_service() {
 
 check_http() {
   local url="$1"
-  local code
-  code="$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)"
-  if [[ "$code" != "200" ]]; then
-    echo "ERROR: health check failed for $url (status=$code)"
-    return 1
+  local code=""
+  local attempt=1
+  local last_error=""
+
+  while [[ "$attempt" -le "$HEALTH_MAX_RETRIES" ]]; do
+    code="$(curl -sS --max-time "$HEALTH_CURL_TIMEOUT_SEC" -o /dev/null -w "%{http_code}" "$url" 2>/tmp/post_deploy_curl_err.$$ || true)"
+    last_error="$(tr '\n' ' ' </tmp/post_deploy_curl_err.$$ || true)"
+
+    if [[ "$code" == "200" ]]; then
+      echo "OK: $url responded with 200 (attempt $attempt/$HEALTH_MAX_RETRIES)"
+      rm -f /tmp/post_deploy_curl_err.$$
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$HEALTH_MAX_RETRIES" ]]; then
+      echo "WARN: health check not ready for $url (status=$code, attempt $attempt/$HEALTH_MAX_RETRIES), retrying in ${HEALTH_RETRY_DELAY_SEC}s..."
+      sleep "$HEALTH_RETRY_DELAY_SEC"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  rm -f /tmp/post_deploy_curl_err.$$
+  echo "ERROR: health check failed for $url after $HEALTH_MAX_RETRIES attempts (last status=$code)"
+  if [[ -n "$last_error" ]]; then
+    echo "ERROR: last curl message: $last_error"
   fi
-  echo "OK: $url responded with 200"
+  return 1
 }
 
 echo "==> Post-deploy validation started"

@@ -521,6 +521,15 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
               let status = '—';
               if (w.price && w.target_short_term && Math.abs(w.price - w.target_short_term) / w.target_short_term < 0.05) status = 'Near Target';
               else if (w.price && w.stop_loss && Math.abs(w.price - w.stop_loss) / w.stop_loss < 0.05) status = 'Near SL';
+              else if (w.signal_type) status = String(w.signal_type).replace(/_/g, ' ').toUpperCase();
+              else if (w.trend) status = String(w.trend).toUpperCase();
+              const statusColor =
+                status === 'Near SL' ? '#c62828'
+                  : status === 'Near Target' ? '#e65100'
+                    : status.includes('STRONG BUY') || status.includes('BUY') || status === 'BULLISH' ? '#2e7d32'
+                      : status.includes('STRONG SELL') || status.includes('SELL') || status === 'BEARISH' ? '#c62828'
+                        : status === 'SIDEWAYS' || status === 'HOLD' ? '#555'
+                          : '#888';
               return (
                 <tr key={w.symbol} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>{w.symbol}</td>
@@ -530,7 +539,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
                     {w.recommendation ? <Chip label={w.recommendation.toUpperCase()} size="small" sx={{ fontSize: 10, fontWeight: 700, height: 20, bgcolor: recoColors[w.recommendation.toUpperCase()] || '#888', color: '#fff' }} /> : '—'}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{w.composite_score ? fmt(w.composite_score, 0) : '—'}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11, color: status === 'Near SL' ? '#c62828' : status === 'Near Target' ? '#e65100' : '#888' }}>{status}</td>
+                  <td style={{ padding: '6px 8px', fontSize: 11, color: statusColor }}>{status}</td>
                 </tr>
               );
             })}

@@ -9,6 +9,16 @@ const gradeColor = { A: '#1b5e20', B: '#2e7d32', C: '#f57f17', D: '#c62828' };
 const gradeBg = { A: '#e8f5e9', B: '#f1f8e9', C: '#fff8e1', D: '#ffebee' };
 const compact = { fontSize: 11, padding: '4px 5px', whiteSpace: 'nowrap' };
 
+function resolveRecoLabel(row, isBullish) {
+  const raw = String(row?.recommendation || '').trim();
+  const up = raw.toUpperCase();
+  // Backend can emit HOLD/empty for some generated rows; keep page actionable.
+  if (!up || up === 'HOLD' || up === 'NEUTRAL') return isBullish ? 'BUY' : 'SELL';
+  if (up.includes('BUY')) return 'BUY';
+  if (up.includes('SELL')) return 'SELL';
+  return up;
+}
+
 function normalizePickTargets(row, isBullish) {
   const entry = Number(row?.entry_price);
   const sl = Number(row?.stop_loss);
@@ -191,6 +201,7 @@ function AiPicksPage() {
               {rows.map((r, i) => {
                 const pick = normalizePickTargets(r, isBullish);
                 const rr = computeRRTargets(pick, isBullish);
+                const reco = resolveRecoLabel(r, isBullish);
                 return (
                   <tr key={r.symbol}>
                     <td style={{ ...compact, fontWeight: 600, color: '#888' }}>{String(i + 1).padStart(2, '0')}</td>
@@ -235,14 +246,14 @@ function AiPicksPage() {
                     </td>
                     <td style={compact}>
                       <Chip
-                        label={(r.recommendation || '—').toUpperCase()}
+                        label={reco}
                         size="small"
                         sx={{
                           fontWeight: 700, fontSize: 10, height: 20,
-                          bgcolor: r.recommendation?.includes('buy') ? '#e8f5e9'
-                            : r.recommendation?.includes('sell') ? '#ffebee' : '#f5f5f5',
-                          color: r.recommendation?.includes('buy') ? '#1b5e20'
-                            : r.recommendation?.includes('sell') ? '#b71c1c' : '#333',
+                          bgcolor: reco.includes('BUY') ? '#e8f5e9'
+                            : reco.includes('SELL') ? '#ffebee' : '#f5f5f5',
+                          color: reco.includes('BUY') ? '#1b5e20'
+                            : reco.includes('SELL') ? '#b71c1c' : '#333',
                         }}
                       />
                     </td>
