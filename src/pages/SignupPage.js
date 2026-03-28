@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Link, TextField, Typography } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { signup, validateEmail } from '../api/auth';
+import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -151,7 +152,14 @@ function SignupPage() {
             {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
             {submittedMessage ? (
               <Alert severity="success" sx={{ mb: 2 }}>
-                {submittedMessage}
+                <Typography variant="body2" sx={{ mb: 1 }}>{submittedMessage}</Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  After you complete setup from the email link and log in, subscribe for alerts at{' '}
+                  <Link href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer" fontWeight={700}>
+                    {TELEGRAM_BOT_LABEL}
+                  </Link>
+                  {' '}(send <strong>/start</strong> in Telegram).
+                </Typography>
               </Alert>
             ) : null}
             {existingUser ? (

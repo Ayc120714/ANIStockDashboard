@@ -15,6 +15,7 @@ import {
   fetchOrderBlocks,
 } from '../api/watchlist';
 import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions, fetchDhanStatus } from '../api/dhan';
+import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 
@@ -23,7 +24,6 @@ const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return is
 const fmtPct = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`; };
 const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
-const TELEGRAM_BOT_URL = 'https://t.me/ani_120714_bot';
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const deriveDirectionFromRow = (row) => {
@@ -1278,7 +1278,7 @@ function DashboardPage() {
   }, [loadAll, marketMode]);
 
   useEffect(() => {
-    if (location.state?.showTelegramBotInfo || location.state?.brokerConsentLimited) {
+    if (location.state?.brokerConsentLimited) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.pathname, location.state, navigate]);
@@ -1291,10 +1291,13 @@ function DashboardPage() {
         const userId = Number(user?.id);
         const mobile = normalizeMobile(user?.mobile);
         const approved = (rows || []).some((row) => {
-          if (!row?.is_approved || !row?.is_identity_verified) return false;
-          const sameUserId = Number.isFinite(userId) && Number(row?.linked_user_id) === userId;
-          const sameMobile = Boolean(mobile) && normalizeMobile(row?.linked_mobile) === mobile;
-          return sameUserId || sameMobile;
+          if (!row?.is_approved) return false;
+          if (row.is_identity_verified === false) return false;
+          const sameUserId =
+            Number.isFinite(userId) && row?.linked_user_id != null && Number(row.linked_user_id) === userId;
+          const sameMobile =
+            Boolean(mobile) && row?.linked_mobile && normalizeMobile(row.linked_mobile) === mobile;
+          return Boolean(sameUserId || sameMobile);
         });
         if (mounted) setHasApprovedTelegramAccess(approved);
       } catch (_) {
@@ -1328,9 +1331,9 @@ function DashboardPage() {
         <>
           {location.state?.showTelegramBotInfo ? (
             <Alert severity="success" sx={{ mb: 2 }}>
-              Registration completed. To receive Telegram updates, open{' '}
-              <a href="https://t.me/ani_120714_bot" target="_blank" rel="noreferrer">t.me/ani_120714_bot</a>{' '}
-              and send <b>/start</b>.
+              You&apos;re signed in. To receive market alerts in Telegram, open{' '}
+              <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer">{TELEGRAM_BOT_LABEL}</a>
+              , tap <b>Start</b>, then an administrator can approve your chat in Telegram Admin.
             </Alert>
           ) : null}
           {location.state?.brokerConsentLimited ? (
@@ -1355,7 +1358,7 @@ function DashboardPage() {
                 </Button>
               }
             >
-              Get live approved alerts in Telegram by opening the bot and sending <b>/start &lt;your_registered_mobile&gt;</b>.
+              After login, subscribe for alerts: open the bot and send <b>/start</b>. Your chat must be approved in Telegram Admin before alerts are delivered.
             </Alert>
           ) : null}
           {/* Market Pulse Banner */}

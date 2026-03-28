@@ -28,6 +28,19 @@ export const fetchMonthlyMacdSetup = async (limit = 200) => {
   return data?.data ?? [];
 };
 
+/** Custom RS / MACD / PSAR / RVOL screen (`setup_mode`: strict | or_signal). */
+export const fetchCustomRsMacdSetup = async ({
+  limit = 400,
+  setup_mode = 'or_signal',
+  refresh = false,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('setup_mode', String(setup_mode || 'or_signal'));
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/custom-rs-macd-weekly-setup?${params.toString()}`);
+};
+
 export const fetchLiveScreenerSignals = async ({
   limit = 150,
   symbols = '',

@@ -29,7 +29,7 @@ const MIN_FII_DII_DAYS = 20;
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
-function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
+function MarketOutlookContent({ apiReady, timedOut }) {
   const defaultIndexCards = [
     { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
     { title: 'Next 50', trend: 'UP TREND', value: '69,852', change: '+0.00%', percentile: '79%', pe: '20 PE' },
@@ -308,11 +308,6 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
           Could not reach the API within 60s — check that the backend is running on port 8000, then refresh.
         </div>
       )}
-      {apiReady && !bootstrapComplete && (
-        <div style={{ marginBottom: '12px', color: '#0369a1', fontWeight: 600, fontSize: 13 }}>
-          Background data sync is still running — table shows current DB data and refreshes every 30s.
-        </div>
-      )}
       {loadError && (
         <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>
           {loadError}
@@ -561,7 +556,7 @@ function MarketOutlookContent({ apiReady, timedOut, bootstrapComplete }) {
 }
 
 function MarketOutlookPage() {
-  const { showData, apiReady, timedOut, bootstrapComplete } = useBootstrapReadyState();
+  const { showData, apiReady, timedOut } = useBootstrapReadyState();
 
   if (!showData) {
     return (
@@ -577,11 +572,7 @@ function MarketOutlookPage() {
   }
 
   return (
-    <MarketOutlookContent
-      apiReady={apiReady}
-      timedOut={timedOut}
-      bootstrapComplete={bootstrapComplete}
-    />
+    <MarketOutlookContent apiReady={apiReady} timedOut={timedOut} />
   );
 }
 

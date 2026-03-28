@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Link, TextField, Typography } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
 import { completeAccessLinkSetup } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
+import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
@@ -42,7 +43,10 @@ function AccessLinkSetupPage() {
       }
       persistAuth(res.access_token, res.refresh_token, res.user || null);
       setMessage('Password set successfully. Redirecting to dashboard...');
-      setTimeout(() => navigate('/'), 700);
+      setTimeout(
+        () => navigate('/', { replace: true, state: { showTelegramBotInfo: true } }),
+        700,
+      );
     } catch (err) {
       setError(err?.message || 'Unable to complete access setup.');
     } finally {
@@ -67,8 +71,17 @@ function AccessLinkSetupPage() {
             Set Your Password
           </Typography>
           <Typography sx={{ color: '#475569', mb: 2 }}>
-            Use your approved email link to activate account access.
+            Use the secure link from your approval email to set your password and sign in.
           </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              After you log in, you can get market alerts on Telegram: open{' '}
+              <Link href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer" fontWeight={700}>
+                {TELEGRAM_BOT_LABEL}
+              </Link>
+              {' '}and send <strong>/start</strong>. An admin must approve your chat before alerts are sent.
+            </Typography>
+          </Alert>
           {!linkReady ? (
             <Alert severity="error" sx={{ mb: 2 }}>
               Access link is missing required parameters. Ask admin to resend the link.

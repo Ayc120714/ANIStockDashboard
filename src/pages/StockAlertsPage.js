@@ -51,7 +51,7 @@ const SORTABLE_COLS = [
 ];
 
 function StockAlertsPage() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const userId = String(user?.id || user?.user_id || user?.email || '');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,16 +70,23 @@ function StockAlertsPage() {
   const rowsPerPage = 25;
 
   const load = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setErrorMsg('');
-    const [priceRes, specialRes] = await Promise.allSettled([
-      fetchPriceAlertTriggers({ userId, limit: 500 }),
-      fetchSpecialAlerts({ limit: 1200, symbol: symbolFilter, currentDayOnly: true }),
-    ]);
+    // Price triggers are per user_id; weekly/divergence use advisor JWT only.
+    const pricePromise = userId
+      ? fetchPriceAlertTriggers({ userId, limit: 500 })
+      : Promise.resolve([]);
+    // Backfilled weekly/RSI rows use the *event* date as timestamp, so "today only" hides almost everything.
+    const specialPromise = accessToken
+      ? fetchSpecialAlerts({
+        limit: 1200,
+        symbol: symbolFilter,
+        currentDayOnly: false,
+        includeHistory: true,
+      })
+      : Promise.resolve([]);
+
+    const [priceRes, specialRes] = await Promise.allSettled([pricePromise, specialPromise]);
 
     if (priceRes.status === 'fulfilled') {
       setData(Array.isArray(priceRes.value) ? priceRes.value : []);
@@ -95,12 +102,11 @@ function StockAlertsPage() {
     if (specialRes.status === 'fulfilled') {
       setAdvisorAlerts(Array.isArray(specialRes.value) ? specialRes.value : []);
     } else {
-      // Do not silently blank the page when special-alert API fails.
       const e = specialRes.reason;
       setErrorMsg((prev) => prev || (e?.message || 'Failed to load weekly/divergence alerts'));
     }
     setLoading(false);
-  }, [userId, symbolFilter]);
+  }, [userId, symbolFilter, accessToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -405,6 +411,9 @@ function StockAlertsPage() {
           <MenuItem value="bullish">Bullish Setups</MenuItem>
           <MenuItem value="bearish">Bearish Setups</MenuItem>
         </Select>
+        <Box sx={{ fontSize: 11, color: '#888', maxWidth: 420, lineHeight: 1.4 }}>
+          &quot;Setups&quot; here filters <strong>weekly cross</strong> / <strong>RSI divergence</strong> tables below (bullish vs bearish). Custom RS+MACD screen lives under <strong>Advisor → Signals</strong>.
+        </Box>
         <TextField size="small" placeholder="Symbol…" value={symbolFilter}
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
         <Box sx={{ flex: 1 }} />
@@ -542,6 +551,9 @@ function StockAlertsPage() {
 
       <Box sx={{ mt: 3 }}>
         <TableTitle>Weekly Level Cross Alerts (Backend)</TableTitle>
+        <Box sx={{ fontSize: 12, color: '#666', mb: 1 }}>
+          Shows recent alerts from the database (latest first). Use &quot;Generate From Old Data&quot; if this list is empty.
+        </Box>
         <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
           <Select
             size="small"
@@ -632,6 +644,9 @@ function StockAlertsPage() {
 
       <Box sx={{ mt: 3 }}>
         <TableTitle>Divergence Alerts (5m RSI)</TableTitle>
+        <Box sx={{ fontSize: 12, color: '#666', mb: 1 }}>
+          Same as weekly block: recent history, not limited to today&apos;s calendar date.
+        </Box>
         <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
           <Select
             size="small"

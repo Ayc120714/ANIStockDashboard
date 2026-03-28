@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox } from '@mui/material';
+import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox, Alert } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
@@ -97,6 +97,22 @@ function hasMonthlyMacdBullCondition(row) {
   const signal = parseMaybeNumber(row?.monthly_macd_signal ?? row?.monthly_signal ?? row?.monthly_signal_line);
   const crossUp = hasBullishMacdCross(row, 'monthly');
   return Boolean(macd != null && macd > 0 && ((signal != null && macd > signal) || crossUp));
+}
+
+function customScreenerSetupChips(row) {
+  const tags = [];
+  if (!row) return tags;
+  if (String(row.setup_mode || '') === 'or_signal') {
+    if (row.or_signal_macd_weekly) tags.push({ label: 'W-MACD', tone: 'bull' });
+    if (row.or_signal_macd_monthly) tags.push({ label: 'M-MACD', tone: 'bull' });
+    if (row.or_signal_psar) tags.push({ label: 'PSAR', tone: 'bull' });
+    if (row.or_signal_rvol) tags.push({ label: 'RVOL', tone: 'bull' });
+    return tags;
+  }
+  if (row.setup_mode === 'strict') {
+    tags.push({ label: 'Strict RS+MACD+PSAR', tone: 'bull' });
+  }
+  return tags;
 }
 
 function deriveStrategyTags(row) {
@@ -211,6 +227,54 @@ const ALERT_COLS = [
   { key: '_read', label: '' },
 ];
 
+const CUSTOM_RS_TABLE_DISPLAY_LIMIT = 20;
+
+function parseSortableNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Nulls / NaN last. mul +1 = ascending, -1 = descending */
+function cmpNullableNumber(a, b, mul) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return mul * (a - b);
+}
+
+/** Empty strings last */
+function cmpNullableString(a, b, mul) {
+  const sa = a != null ? String(a) : '';
+  const sb = b != null ? String(b) : '';
+  if (!sa && !sb) return 0;
+  if (!sa) return 1;
+  if (!sb) return -1;
+  return mul * sa.localeCompare(sb, undefined, { sensitivity: 'base' });
+}
+
+function TradingViewLink({ symbol }) {
+  const s = String(symbol || '').trim();
+  if (!s) return null;
+  return (
+    <a
+      href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View ${s} on TradingView`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 18, height: 18, borderRadius: '50%', background: '#131722',
+        textDecoration: 'none', flexShrink: 0,
+      }}
+    >
+      <svg width="10" height="10" viewBox="0 0 36 28" fill="none">
+        <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF" />
+        <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF" />
+      </svg>
+    </a>
+  );
+}
+
 function SignalsAlertsTab() {
   const SHOW_ALL_LIMIT = 300;
   const [view, setView] = useState('signals');
@@ -234,6 +298,13 @@ function SignalsAlertsTab() {
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const rowsPerPage = showAll ? SHOW_ALL_LIMIT : 25;
   const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [customSetupRows, setCustomSetupRows] = useState([]);
+  const [customSetupLoading, setCustomSetupLoading] = useState(false);
+  const [customSetupMode, setCustomSetupMode] = useState('or_signal');
+  const [customSetupPage, setCustomSetupPage] = useState(1);
+  const [customSortCol, setCustomSortCol] = useState('');
+  const [customSortDir, setCustomSortDir] = useState('desc');
+  const [customSetupError, setCustomSetupError] = useState(null);
   const deferredSymbolFilter = useDeferredValue(symbolFilter);
 
   const handleSort = (col) => {
@@ -254,6 +325,25 @@ function SignalsAlertsTab() {
     return sortDir === 'asc'
       ? <FaSortUp style={{ color: '#fff', marginLeft: 3, fontSize: 10 }} />
       : <FaSortDown style={{ color: '#fff', marginLeft: 3, fontSize: 10 }} />;
+  };
+
+  const CustomTableSortIcon = ({ col }) => {
+    if (customSortCol !== col) return <FaSort style={{ opacity: 0.35, marginLeft: 2, fontSize: 9 }} />;
+    return customSortDir === 'asc'
+      ? <FaSortUp style={{ color: '#fff', marginLeft: 2, fontSize: 9 }} />
+      : <FaSortDown style={{ color: '#fff', marginLeft: 2, fontSize: 9 }} />;
+  };
+
+  const handleCustomTableSort = (col) => {
+    if (!col) return;
+    if (customSortCol === col) {
+      setCustomSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setCustomSortCol(col);
+      const stringAsc = ['symbol', 'status', 'sector', 'buy_sell_tier', 'trend', 'weekly_trend'].includes(col);
+      setCustomSortDir(stringAsc ? 'asc' : 'desc');
+    }
+    setCustomSetupPage(1);
   };
 
   const loadMonthlySetup = useCallback(() => {
@@ -316,6 +406,44 @@ function SignalsAlertsTab() {
   useEffect(() => {
     loadSignals();
   }, [loadSignals]);
+
+  const loadCustomSetup = useCallback((refresh = false) => {
+    setCustomSetupLoading(true);
+    setCustomSetupError(null);
+    fetchCustomRsMacdSetup({ limit: 500, setup_mode: customSetupMode, refresh })
+      .then((payload) => {
+        setCustomSetupRows(Array.isArray(payload?.data) ? payload.data : []);
+        setCustomSetupError(null);
+      })
+      .catch((err) => {
+        setCustomSetupRows([]);
+        setCustomSetupError(err?.message || 'Could not load the custom RS / MACD screen.');
+      })
+      .finally(() => setCustomSetupLoading(false));
+  }, [customSetupMode]);
+
+  useEffect(() => {
+    if (view !== 'signals') return;
+    loadCustomSetup(false);
+  }, [view, loadCustomSetup]);
+
+  useEffect(() => {
+    setCustomSetupPage(1);
+  }, [customSetupMode]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(customSetupRows.length / CUSTOM_RS_TABLE_DISPLAY_LIMIT));
+    setCustomSetupPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [customSetupRows.length]);
+
+  useEffect(() => {
+    if (view !== 'signals') return;
+    if (strategyFilter !== 'custom_rs_or_signal' && strategyFilter !== 'custom_rs_strict') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('advisor-custom-rs-screen')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [view, strategyFilter]);
 
   useEffect(() => {
     if (view !== 'alerts') return;
@@ -465,8 +593,494 @@ function SignalsAlertsTab() {
     }
   };
 
+  const signalBySymbolForCustom = useMemo(() => {
+    const merged = dedupeSignalsBySymbol([...(signalData || []), ...(monthlySetupData || [])]);
+    const m = new Map();
+    for (const row of merged) {
+      const k = String(row?.symbol || '').toUpperCase();
+      if (k) m.set(k, row);
+    }
+    return m;
+  }, [signalData, monthlySetupData]);
+
+  const customSortedRows = useMemo(() => {
+    const rows = [...(customSetupRows || [])];
+    if (!customSortCol) return rows;
+    const mul = customSortDir === 'asc' ? 1 : -1;
+    rows.sort((ra, rb) => {
+      const symA = String(ra.symbol || '').toUpperCase();
+      const symB = String(rb.symbol || '').toUpperCase();
+      const sa = signalBySymbolForCustom.get(symA);
+      const sb = signalBySymbolForCustom.get(symB);
+      let c = 0;
+      switch (customSortCol) {
+        case 'symbol':
+          c = cmpNullableString(ra.symbol, rb.symbol, mul);
+          break;
+        case 'conviction_score':
+          c = cmpNullableNumber(parseSortableNumber(sa?.conviction_score), parseSortableNumber(sb?.conviction_score), mul);
+          break;
+        case 'status':
+          c = cmpNullableString(sa?.status, sb?.status, mul);
+          break;
+        case 'buy_sell_tier':
+          c = cmpNullableString(sa?.buy_sell_tier, sb?.buy_sell_tier, mul);
+          break;
+        case 'trend':
+          c = cmpNullableString(sa?.trend, sb?.trend, mul);
+          break;
+        case 'weekly_trend':
+          c = cmpNullableString(sa?.weekly_trend, sb?.weekly_trend, mul);
+          break;
+        case 'cmp':
+          c = cmpNullableNumber(parseSortableNumber(sa?.cmp ?? sa?.price), parseSortableNumber(sb?.cmp ?? sb?.price), mul);
+          break;
+        case 'entry_price':
+          c = cmpNullableNumber(parseSortableNumber(sa?.entry_price), parseSortableNumber(sb?.entry_price), mul);
+          break;
+        case 'stop_loss':
+          c = cmpNullableNumber(parseSortableNumber(sa?.stop_loss), parseSortableNumber(sb?.stop_loss), mul);
+          break;
+        case 'sl_pct':
+          c = cmpNullableNumber(parseSortableNumber(sa?.sl_pct), parseSortableNumber(sb?.sl_pct), mul);
+          break;
+        case 'target_1':
+          c = cmpNullableNumber(parseSortableNumber(sa?.target_1), parseSortableNumber(sb?.target_1), mul);
+          break;
+        case 'target_2':
+          c = cmpNullableNumber(parseSortableNumber(sa?.target_2), parseSortableNumber(sb?.target_2), mul);
+          break;
+        case 'next_scope_target':
+          c = cmpNullableNumber(parseSortableNumber(sa?.next_scope_target), parseSortableNumber(sb?.next_scope_target), mul);
+          break;
+        case 'sector':
+          c = cmpNullableString(sa?.sector, sb?.sector, mul);
+          break;
+        case 'rs_daily':
+          c = cmpNullableNumber(parseSortableNumber(ra.rs_daily_123), parseSortableNumber(rb.rs_daily_123), mul);
+          break;
+        case 'rs_weekly':
+          c = cmpNullableNumber(parseSortableNumber(ra.rs_weekly_52), parseSortableNumber(rb.rs_weekly_52), mul);
+          break;
+        case 'rs_monthly':
+          c = cmpNullableNumber(parseSortableNumber(ra.rs_monthly_12), parseSortableNumber(rb.rs_monthly_12), mul);
+          break;
+        case 'rvol':
+          c = cmpNullableNumber(parseSortableNumber(ra.relative_volume), parseSortableNumber(rb.relative_volume), mul);
+          break;
+        default:
+          c = 0;
+      }
+      if (c !== 0) return c;
+      return cmpNullableString(ra.symbol, rb.symbol, 1);
+    });
+    return rows;
+  }, [customSetupRows, customSortCol, customSortDir, signalBySymbolForCustom]);
+
+  const customSetupTotalPages = Math.max(
+    1,
+    Math.ceil(customSortedRows.length / CUSTOM_RS_TABLE_DISPLAY_LIMIT)
+  );
+  const customDisplayedRows = useMemo(() => {
+    const start = (customSetupPage - 1) * CUSTOM_RS_TABLE_DISPLAY_LIMIT;
+    return customSortedRows.slice(start, start + CUSTOM_RS_TABLE_DISPLAY_LIMIT);
+  }, [customSortedRows, customSetupPage]);
+  const customRangeStart = customSortedRows.length === 0
+    ? 0
+    : (customSetupPage - 1) * CUSTOM_RS_TABLE_DISPLAY_LIMIT + 1;
+  const customRangeEnd = Math.min(
+    customSetupPage * CUSTOM_RS_TABLE_DISPLAY_LIMIT,
+    customSortedRows.length
+  );
+
   return (
     <>
+      {view === 'signals' && (
+        <Box id="advisor-custom-rs-screen" sx={{ mb: 2 }}>
+          {customSetupError && (
+            <Alert severity="warning" onClose={() => setCustomSetupError(null)} sx={{ mb: 1.5, '& .MuiAlert-message': { fontSize: 13 } }}>
+              {customSetupError}
+            </Alert>
+          )}
+          <TableTitle style={{ fontSize: 15, marginBottom: 8, color: '#0b3d91' }}>Custom RS / MACD / PSAR screen</TableTitle>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
+            <Chip
+              size="small"
+              label={
+                customSortedRows.length === 0
+                  ? '0 names'
+                  : customSortedRows.length > CUSTOM_RS_TABLE_DISPLAY_LIMIT
+                    ? `${customRangeStart}–${customRangeEnd} of ${customSortedRows.length} (${CUSTOM_RS_TABLE_DISPLAY_LIMIT}/page)`
+                    : `${customSortedRows.length} names`
+              }
+              sx={{ fontWeight: 700, borderColor: '#1a3c5e', color: '#1a3c5e' }}
+              variant="outlined"
+            />
+            <Select
+              size="small"
+              value={customSetupMode}
+              onChange={(e) => { setCustomSetupMode(e.target.value); }}
+              sx={{ minWidth: 120, fontSize: 12, bgcolor: '#fff' }}
+            >
+              <MenuItem value="or_signal">or_signal</MenuItem>
+              <MenuItem value="strict">strict</MenuItem>
+            </Select>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={customSetupLoading}
+              onClick={() => loadCustomSetup(true)}
+              sx={{ textTransform: 'none', fontSize: 12, borderColor: '#1a3c5e', color: '#1a3c5e' }}
+            >
+              Refresh
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              disabled={!customSortCol}
+              onClick={() => { setCustomSortCol(''); setCustomSortDir('desc'); setCustomSetupPage(1); }}
+              sx={{ textTransform: 'none', fontSize: 11, color: '#666', minWidth: 0 }}
+            >
+              Reset sort
+            </Button>
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
+            <Tooltip title="Select all symbols on this page of the custom screener">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdSelectAll />}
+                onClick={() => {
+                  const visibleSyms = customDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                  setCheckedSymbols((prev) => {
+                    const allChecked = visibleSyms.length > 0 && visibleSyms.every((s) => prev.has(s));
+                    const next = new Set(prev);
+                    if (allChecked) visibleSyms.forEach((s) => next.delete(s));
+                    else visibleSyms.forEach((s) => next.add(s));
+                    return next;
+                  });
+                }}
+                sx={{
+                  textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: '#1a3c5e', color: '#1a3c5e',
+                  '&:hover': { bgcolor: '#e3f2fd' },
+                }}
+              >
+                {checkedSymbols.size > 0 ? `${checkedSymbols.size} selected` : 'Select All'}
+              </Button>
+            </Tooltip>
+            <Tooltip title={copied ? 'Copied!' : 'Copy selected symbols, or full custom screener list if none selected (TradingView CSV)'}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={copied ? <MdCheck /> : <MdContentCopy />}
+                onClick={() => {
+                  const syms = checkedSymbols.size > 0
+                    ? [...checkedSymbols]
+                    : customSortedRows.map((row) => row.symbol).filter(Boolean);
+                  const csv = syms.map((s) => `NSE:${s}`).join(',');
+                  navigator.clipboard.writeText(csv).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+                sx={{
+                  textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: copied ? '#2e7d32' : '#1a3c5e',
+                  color: copied ? '#2e7d32' : '#1a3c5e',
+                  '&:hover': { borderColor: '#0b3d91', bgcolor: '#e3f2fd' },
+                }}
+              >
+                {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : customSortedRows.length})`}
+              </Button>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('short_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#1565c0' }}
+            >
+              {`Add ST (${checkedSymbols.size})`}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('long_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#2e7d32' }}
+            >
+              {`Add LT (${checkedSymbols.size})`}
+            </Button>
+            {checkedSymbols.size > 0 && (
+              <Button
+                size="small"
+                onClick={() => setCheckedSymbols(new Set())}
+                sx={{ textTransform: 'none', fontSize: 11, px: 1, color: '#888', minWidth: 0 }}
+              >
+                Clear
+              </Button>
+            )}
+          </Box>
+          {customSetupLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={28} /></Box>
+          ) : (
+            <TableWrapper>
+              <Table style={{ fontSize: 12, minWidth: 1500 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...compact, width: 30, padding: '4px', cursor: 'default' }}>
+                      <Checkbox
+                        size="small"
+                        sx={{ p: 0, color: '#fff', '&.Mui-checked': { color: '#fff' } }}
+                        checked={
+                          customDisplayedRows.length > 0
+                          && customDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                        }
+                        indeterminate={
+                          customDisplayedRows.some((row) => checkedSymbols.has(row.symbol))
+                          && !customDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                        }
+                        onChange={() => {
+                          const visible = customDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                          setCheckedSymbols((prev) => {
+                            const allChecked = visible.length > 0 && visible.every((sym) => prev.has(sym));
+                            const next = new Set(prev);
+                            if (allChecked) visible.forEach((sym) => next.delete(sym));
+                            else visible.forEach((sym) => next.add(sym));
+                            return next;
+                          });
+                        }}
+                      />
+                    </th>
+                    {SIG_COLS.map((col) => (
+                      <th
+                        key={`custom-h-${col.key}`}
+                        style={{
+                          ...compact,
+                          cursor: col.key === 'strategies' ? 'default' : 'pointer',
+                          userSelect: 'none',
+                          color: '#fff',
+                        }}
+                        onClick={() => col.key !== 'strategies' && handleCustomTableSort(col.key)}
+                      >
+                        {col.label}
+                        {col.key !== 'strategies' && <CustomTableSortIcon col={col.key} />}
+                      </th>
+                    ))}
+                    <th style={{ ...compact, userSelect: 'none', color: '#fff', fontWeight: 600 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                        <span
+                          role="presentation"
+                          onClick={() => handleCustomTableSort('rs_daily')}
+                          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          RS D<CustomTableSortIcon col="rs_daily" />
+                        </span>
+                        <span style={{ opacity: 0.7 }}>/</span>
+                        <span
+                          role="presentation"
+                          onClick={() => handleCustomTableSort('rs_weekly')}
+                          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          W<CustomTableSortIcon col="rs_weekly" />
+                        </span>
+                        <span style={{ opacity: 0.7 }}>/</span>
+                        <span
+                          role="presentation"
+                          onClick={() => handleCustomTableSort('rs_monthly')}
+                          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          M<CustomTableSortIcon col="rs_monthly" />
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      style={{ ...compact, cursor: 'pointer', userSelect: 'none', color: '#fff' }}
+                      onClick={() => handleCustomTableSort('rvol')}
+                    >
+                      RVOL
+                      <CustomTableSortIcon col="rvol" />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customDisplayedRows.map((r, i) => {
+                    const sym = r.symbol;
+                    const s = sym ? signalBySymbolForCustom.get(String(sym).toUpperCase()) : null;
+                    const isChecked = sym && checkedSymbols.has(sym);
+                    let rowBg;
+                    if (isChecked) rowBg = '#e3f2fd';
+                    else if (s) {
+                      rowBg = s.high_conviction ? '#e8f5e9' : s.weekly_aligned ? '#f0f8ff' : s.actionable ? '#fafffe' : undefined;
+                    }
+                    const cmp = s?.cmp;
+                    const pctEntry = s?.pct_from_entry;
+                    const pctColor = pctEntry != null
+                      ? (Math.abs(pctEntry) <= 2 ? '#1b5e20' : Math.abs(pctEntry) <= 5 ? '#f57f17' : '#c62828')
+                      : '#888';
+                    const tColor = s ? (trendColors[s.trend] || '#666') : '#888';
+                    const isBull = s?.trend === 'bullish';
+                    const tgtColor = isBull ? '#1b5e20' : '#c62828';
+                    const slColor = isBull ? '#c62828' : '#1b5e20';
+                    const tier = s?.buy_sell_tier;
+                    const tierColor = tier?.startsWith('B') ? '#1b5e20' : tier?.startsWith('S') ? '#c62828' : '#666';
+                    const tierBg = tier?.startsWith('B') ? '#e8f5e9' : tier?.startsWith('S') ? '#ffebee' : '#f5f5f5';
+                    const wkColor = s?.weekly_trend === 'bullish' ? '#1b5e20' : s?.weekly_trend === 'bearish' ? '#c62828' : '#888';
+                    const signalStrategyTags = s ? deriveStrategyTags(s) : [];
+                    const customTags = customScreenerSetupChips(r);
+                    const displayStrategyTags = [...signalStrategyTags, ...customTags];
+                    const rvolNum = r.relative_volume != null ? Number(r.relative_volume) : null;
+                    const rvolStrong = rvolNum != null && !Number.isNaN(rvolNum) && rvolNum >= 2;
+                    return (
+                      <tr
+                        key={`custom-${sym}-${(customSetupPage - 1) * CUSTOM_RS_TABLE_DISPLAY_LIMIT + i}`}
+                        style={{ background: rowBg }}
+                      >
+                        <td style={{ padding: '4px', textAlign: 'center' }}>
+                          <Checkbox
+                            size="small"
+                            sx={{ p: 0 }}
+                            checked={Boolean(sym && isChecked)}
+                            onChange={() => {
+                              if (!sym) return;
+                              setCheckedSymbols((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(sym)) next.delete(sym);
+                                else next.add(sym);
+                                return next;
+                              });
+                            }}
+                          />
+                        </td>
+                        <td style={{ ...compact, fontWeight: 700 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {sym}
+                            <TradingViewLink symbol={sym} />
+                            {s?.high_conviction && (
+                              <span style={{
+                                fontSize: 8, padding: '1px 4px', borderRadius: 2,
+                                background: '#1b5e20', color: '#fff', fontWeight: 700, verticalAlign: 'super',
+                              }}>HC</span>
+                            )}
+                          </span>
+                        </td>
+                        <td style={{ ...compact, fontWeight: 700, color: s?.conviction_score >= 100 ? '#1b5e20' : s?.conviction_score >= 80 ? '#2e7d32' : '#333' }}>
+                          {s?.conviction_score != null ? s.conviction_score.toFixed(0) : '—'}
+                        </td>
+                        <td style={compact}>
+                          {s ? (
+                            <Chip
+                              label={String(s.status || 'in_trade').replace(/_/g, ' ')}
+                              size="small"
+                              sx={{
+                                fontSize: 9,
+                                height: 17,
+                                textTransform: 'uppercase',
+                                fontWeight: 700,
+                                bgcolor: s.status === 'done' ? '#efebe9' : s.status === 'entry_ready' ? '#e3f2fd' : '#f1f8e9',
+                                color: s.status === 'done' ? '#6d4c41' : s.status === 'entry_ready' ? '#1565c0' : '#33691e',
+                              }}
+                            />
+                          ) : (
+                            <span style={{ color: '#bbb', fontSize: 10 }}>—</span>
+                          )}
+                        </td>
+                        <td style={compact}>
+                          {tier ? (
+                            <Chip label={tier} size="small" sx={{ fontSize: 10, height: 18, fontWeight: 700,
+                              bgcolor: tierBg, color: tierColor, minWidth: 28 }} />
+                          ) : <span style={{ color: '#ccc', fontSize: 10 }}>—</span>}
+                        </td>
+                        <td style={{ ...compact, color: tColor, fontWeight: 600 }}>
+                          {s ? trendLabel(s.trend, s.signal_type) : '—'}
+                        </td>
+                        <td style={{ ...compact, minWidth: 190 }}>
+                          {displayStrategyTags.length ? (
+                            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
+                              {displayStrategyTags.map((tag, ti) => (
+                                <Chip
+                                  key={`${sym}-${tag.label}-${ti}`}
+                                  label={tag.label}
+                                  size="small"
+                                  sx={{
+                                    fontSize: 9,
+                                    height: 17,
+                                    fontWeight: 700,
+                                    bgcolor: tag.tone === 'bear' ? '#ffebee' : '#e8f5e9',
+                                    color: tag.tone === 'bear' ? '#b71c1c' : '#1b5e20',
+                                  }}
+                                />
+                              ))}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#bbb', fontSize: 10 }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ ...compact, color: wkColor, fontWeight: 600 }}>
+                          {s?.weekly_trend ? (s.weekly_trend.charAt(0).toUpperCase() + s.weekly_trend.slice(1)) : '—'}
+                          {s?.weekly_aligned && <span style={{ fontSize: 8, marginLeft: 2, color: '#1b5e20' }}>✓</span>}
+                        </td>
+                        <td style={{ ...compact, fontWeight: 600 }}>
+                          {cmp ? fmt(cmp) : '—'}
+                          {pctEntry != null && (
+                            <span style={{ fontSize: 9, color: pctColor, marginLeft: 2 }}>
+                              ({pctEntry > 0 ? '+' : ''}{pctEntry}%)
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ ...compact, fontWeight: 600, color: '#1565c0' }}>{s?.entry_price != null ? fmt(s.entry_price) : '—'}</td>
+                        <td style={{ ...compact }}>
+                          {s ? (() => {
+                            const trail = getTrailingState(s);
+                            if (trail.effectiveStopLoss == null) return '—';
+                            return (
+                              <span style={{ color: trail.costExit ? '#c62828' : trail.t1Hit ? '#1565c0' : slColor, fontWeight: trail.t1Hit ? 700 : 400 }}>
+                                ₹{trail.effectiveStopLoss.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {trail.costExit ? ' (C2C Exit)' : trail.t1Hit ? ' (Trail @ Cost)' : ''}
+                              </span>
+                            );
+                          })() : '—'}
+                        </td>
+                        <td style={{ ...compact, color: slColor, fontSize: 10 }}>{s?.sl_pct != null ? `${s.sl_pct}%` : '—'}</td>
+                        <td style={{ ...compact, fontWeight: 600, color: tgtColor }}>{s?.target_1 != null ? fmt(s.target_1) : '—'}</td>
+                        <td style={compact}>{s?.target_2 != null ? fmt(s.target_2) : '—'}</td>
+                        <td style={{ ...compact, fontWeight: s?.further_scope ? 700 : 400, color: s?.further_scope ? '#2e7d32' : '#888' }}>
+                          {s?.further_scope ? fmt(s.next_scope_target) : (s?.target_done ? 'Done' : '—')}
+                        </td>
+                        <td style={{ ...compact, fontSize: 10, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s?.sector || '—'}</td>
+                        <td style={{ ...compact, fontSize: 11, color: '#37474f' }}>
+                          {[r.rs_daily_123, r.rs_weekly_52, r.rs_monthly_12].map((x) => (x != null && !Number.isNaN(Number(x)) ? Number(x).toFixed(2) : '—')).join(' / ')}
+                        </td>
+                        <td style={{ ...compact, fontWeight: rvolStrong ? 700 : 400, color: rvolStrong ? '#1b5e20' : '#333' }}>
+                          {r.relative_volume != null ? r.relative_volume : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {customSortedRows.length === 0 && !customSetupError && (
+                    <tr><td colSpan={SIG_COLS.length + 3} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No symbols match this setup.</td></tr>
+                  )}
+                </tbody>
+              </Table>
+            </TableWrapper>
+          )}
+          {!customSetupLoading && customSortedRows.length > CUSTOM_RS_TABLE_DISPLAY_LIMIT && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5 }}>
+              <Pagination
+                count={customSetupTotalPages}
+                page={customSetupPage}
+                onChange={(_, v) => setCustomSetupPage(v)}
+                color="primary"
+                size="small"
+                siblingCount={1}
+                boundaryCount={1}
+              />
+            </Box>
+          )}
+        </Box>
+      )}
+
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
           {['signals', 'alerts'].map(v => (
@@ -496,10 +1110,18 @@ function SignalsAlertsTab() {
             <Select
               size="small"
               value={strategyFilter}
-              onChange={e => { setStrategyFilter(e.target.value); setPage(1); }}
-              sx={{ minWidth: 180, fontSize: 12 }}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'custom_rs_or_signal') setCustomSetupMode('or_signal');
+                if (v === 'custom_rs_strict') setCustomSetupMode('strict');
+                setStrategyFilter(v);
+                setPage(1);
+              }}
+              sx={{ minWidth: 200, fontSize: 12 }}
             >
               <MenuItem value="all">All Strategies</MenuItem>
+              <MenuItem value="custom_rs_or_signal">RS+EMA + (MACD W|M | PSAR | RVOL)</MenuItem>
+              <MenuItem value="custom_rs_strict">Strict: RS cross + MACD W&amp;M + PSAR + RVOL</MenuItem>
               <MenuItem value="monthly_psar_macd">Monthly MACD+PSAR</MenuItem>
               <MenuItem value="macd_cross_up_weekly">Weekly MACD Cross + Red-&gt;Green Hist</MenuItem>
               <MenuItem value="macd_cross_up_monthly">Monthly MACD Cross + Red-&gt;Green Hist</MenuItem>
