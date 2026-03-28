@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox, Alert } from '@mui/material';
+import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox, Alert, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
@@ -276,7 +276,7 @@ function TradingViewLink({ symbol }) {
 }
 
 function SignalsAlertsTab() {
-  const SHOW_ALL_LIMIT = 300;
+  const SIGNAL_PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
   const [view, setView] = useState('signals');
   const [signalData, setSignalData] = useState([]);
   const [signalPayload, setSignalPayload] = useState(null);
@@ -294,9 +294,8 @@ function SignalsAlertsTab() {
   const [recoFilter, setRecoFilter] = useState('all');
   const [strategyFilter, setStrategyFilter] = useState('all');
   const [copied, setCopied] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
-  const rowsPerPage = showAll ? SHOW_ALL_LIMIT : 25;
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   const [customSetupRows, setCustomSetupRows] = useState([]);
   const [customSetupLoading, setCustomSetupLoading] = useState(false);
@@ -566,8 +565,17 @@ function SignalsAlertsTab() {
     });
   }, [view, filteredSignals, alertData, sortCol, sortDir]);
 
-  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / rowsPerPage));
   const paged = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const listRangeStart = sortedData.length === 0 ? 0 : (page - 1) * rowsPerPage + 1;
+  const listRangeEnd = Math.min(page * rowsPerPage, sortedData.length);
+  const listLoading = view === 'signals' ? signalsLoading : alertsLoading;
+  const safeListPage = Math.min(Math.max(1, page), totalPages);
+
+  useEffect(() => {
+    const tp = Math.max(1, Math.ceil(sortedData.length / rowsPerPage));
+    setPage((p) => (p > tp ? tp : p));
+  }, [sortedData.length, rowsPerPage]);
 
   const handleAdd = async (symbol, listType) => {
     const key = `${symbol}_${listType}`;
@@ -822,6 +830,36 @@ function SignalsAlertsTab() {
               </Button>
             )}
           </Box>
+          {!customSetupLoading && customSortedRows.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                mb: 1,
+              }}
+            >
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
+                Custom screener: {customRangeStart}–{customRangeEnd} of {customSortedRows.length}
+                {customSortedRows.length > CUSTOM_RS_TABLE_DISPLAY_LIMIT
+                  ? ` (${CUSTOM_RS_TABLE_DISPLAY_LIMIT} per page)`
+                  : ''}
+              </Typography>
+              {customSortedRows.length > CUSTOM_RS_TABLE_DISPLAY_LIMIT && (
+                <Pagination
+                  count={customSetupTotalPages}
+                  page={customSetupPage}
+                  onChange={(_, v) => setCustomSetupPage(v)}
+                  color="primary"
+                  size="small"
+                  siblingCount={1}
+                  boundaryCount={1}
+                />
+              )}
+            </Box>
+          )}
           {customSetupLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={28} /></Box>
           ) : (
@@ -1066,7 +1104,19 @@ function SignalsAlertsTab() {
             </TableWrapper>
           )}
           {!customSetupLoading && customSortedRows.length > CUSTOM_RS_TABLE_DISPLAY_LIMIT && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                mt: 1.5,
+              }}
+            >
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
+                {customRangeStart}–{customRangeEnd} of {customSortedRows.length}
+              </Typography>
               <Pagination
                 count={customSetupTotalPages}
                 page={customSetupPage}
@@ -1176,14 +1226,21 @@ function SignalsAlertsTab() {
                 sx={{ fontSize: 10, bgcolor: '#e3f2fd', color: '#0d47a1' }}
               />
             )}
-            <Button size="small" variant={showAll ? 'contained' : 'outlined'}
-              onClick={() => { setShowAll(p => !p); setPage(1); }}
-              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
-                bgcolor: showAll ? '#1a3c5e' : 'transparent',
-                color: showAll ? '#fff' : '#1a3c5e', borderColor: '#1a3c5e',
-                '&:hover': { bgcolor: showAll ? '#0b3d91' : '#e3f2fd' } }}>
-              {showAll ? 'Paged' : `Show Top ${SHOW_ALL_LIMIT}`}
-            </Button>
+            <Select
+              size="small"
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setPage(1);
+              }}
+              sx={{ minWidth: 118, fontSize: 12 }}
+            >
+              {SIGNAL_PAGE_SIZE_OPTIONS.map((n) => (
+                <MenuItem key={n} value={n}>
+                  {n === 300 ? '300 / page (max)' : `${n} / page`}
+                </MenuItem>
+              ))}
+            </Select>
             <Tooltip title="Select all visible symbols">
               <Button size="small" variant="outlined" startIcon={<MdSelectAll />}
                 onClick={() => {
@@ -1269,6 +1326,35 @@ function SignalsAlertsTab() {
         <TextField size="small" placeholder="Symbol…" value={symbolFilter}
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
       </Box>
+
+      {!listLoading && (view === 'signals' || view === 'alerts') && sortedData.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            mb: 1,
+            px: 0.5,
+          }}
+        >
+          <Typography component="div" variant="body2" sx={{ color: 'text.secondary', fontSize: 13 }}>
+            Showing {listRangeStart}–{listRangeEnd} of {sortedData.length}
+          </Typography>
+          {totalPages > 1 && (
+            <Pagination
+              count={totalPages}
+              page={safeListPage}
+              onChange={(_, v) => setPage(v)}
+              color="primary"
+              size="small"
+              siblingCount={1}
+              boundaryCount={1}
+            />
+          )}
+        </Box>
+      )}
 
       {(view === 'signals' ? signalsLoading : alertsLoading) ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
@@ -1478,9 +1564,32 @@ function SignalsAlertsTab() {
         </TableWrapper>
       )}
 
-      {totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-          <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" />
+      {!listLoading && (view === 'signals' || view === 'alerts') && sortedData.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            mt: 2,
+            px: 0.5,
+          }}
+        >
+          <Typography component="div" variant="body2" sx={{ color: 'text.secondary', fontSize: 13 }}>
+            Showing {listRangeStart}–{listRangeEnd} of {sortedData.length}
+          </Typography>
+          {totalPages > 1 && (
+            <Pagination
+              count={totalPages}
+              page={safeListPage}
+              onChange={(_, v) => setPage(v)}
+              color="primary"
+              size="small"
+              siblingCount={1}
+              boundaryCount={1}
+            />
+          )}
         </Box>
       )}
     </>
