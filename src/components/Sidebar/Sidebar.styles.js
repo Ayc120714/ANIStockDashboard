@@ -1,5 +1,5 @@
 // ...existing code...
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 const mobileBreakpoint = '768px';
@@ -126,7 +126,36 @@ export const SectionTitle = styled.h3`
   }
 `;
 
-export const NavLink = styled(Link)`
+/** Same pill as inactive ``:hover`` — current page uses this at rest so it matches the hover highlighter. */
+const navLinkHoverHighlight = css`
+  background: rgba(147, 197, 253, 0.22);
+  border-color: rgba(186, 230, 253, 0.38);
+  border-left-color: rgba(191, 219, 254, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+`;
+
+const navLinkActive = css`
+  ${navLinkHoverHighlight}
+  font-weight: 800;
+
+  svg {
+    color: #ffffff;
+  }
+
+  &:hover {
+    background: rgba(147, 197, 253, 0.28);
+    border-color: rgba(186, 230, 253, 0.45);
+    border-left-color: rgba(191, 219, 254, 0.6);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.24);
+  }
+`;
+
+/** ``$active`` is set from ``useLocation()`` so highlight tracks route changes without relying on RR NavLink + SC class merge. */
+export const NavLink = styled(Link).withConfig({
+  shouldForwardProp: (prop) => prop !== 'collapsed' && prop !== '$active',
+})`
   display: flex;
   align-items: center;
   justify-content: ${(p) => (p.collapsed ? 'center' : 'flex-start')};
@@ -134,9 +163,16 @@ export const NavLink = styled(Link)`
   padding: ${(p) => (p.collapsed ? '10px' : '13px')} ;
   margin: 10px 0;
   text-decoration: none;
-  color: rgba(255,255,255,0.98);
-  border-radius: 10px;
-  transition: background-color 0.15s, color 0.15s, transform 0.08s;
+  color: rgba(255, 255, 255, 0.96);
+  border-radius: 8px;
+  border: 1px solid transparent;
+  border-left: 4px solid transparent;
+  transition:
+    background 0.18s ease,
+    color 0.15s ease,
+    transform 0.12s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
   font-size: ${(p) => (p.collapsed ? '0' : '14px')};
   font-weight: 700;
   width: 100%;
@@ -175,17 +211,16 @@ export const NavLink = styled(Link)`
     }
   }
 
+  /* Inactive only: same pill as current page (active uses ``navLinkHoverHighlight`` at rest). */
   &:hover {
-    background-color: rgba(255,255,255,0.12);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(5, 12, 31, 0.25);
+    ${(p) => (p.$active ? css`` : navLinkHoverHighlight)}
   }
 
-  &.active {
-    background: linear-gradient(110deg, rgba(59, 130, 246, 0.32), rgba(56, 189, 248, 0.2));
-    color: #ffffff;
-    border: 1px solid rgba(147, 197, 253, 0.35);
-    box-shadow: 0 8px 18px rgba(8, 16, 40, 0.28);
+  &:focus-visible {
+    outline: 2px solid rgba(191, 219, 254, 0.95);
+    outline-offset: 2px;
   }
+
+  ${(p) => p.$active && navLinkActive}
 `;
 // ...existing code...

@@ -1,11 +1,44 @@
 import React, { useState } from 'react';
+import { matchPath, useLocation } from 'react-router-dom';
 import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
 import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdVideoLibrary } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
+function normalizePath(pathname) {
+  if (!pathname) return '/';
+  const trimmed = pathname.replace(/\/+$/, '') || '/';
+  return trimmed;
+}
+
+/**
+ * Whether this sidebar target is the current page. Uses React Router’s matchPath so
+ * “/” never matches “/advisor” (programmatic navigate from Dashboard → Advisor updates correctly).
+ */
+function routeActive(pathname, to) {
+  const p = normalizePath(pathname);
+  const pattern = normalizePath(to);
+  return matchPath({ path: pattern, end: true, caseSensitive: false }, p) != null;
+}
+
+function SidebarItem({ to, collapsed, title, pathname, children }) {
+  const on = routeActive(pathname, to);
+  return (
+    <NavLink
+      to={to}
+      collapsed={collapsed}
+      $active={on}
+      aria-current={on ? 'page' : undefined}
+      title={title}
+    >
+      {children}
+    </NavLink>
+  );
+}
+
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { isSuperAdmin } = useAuth();
+  const { pathname } = useLocation();
 
   return (
     <SidebarContainer collapsed={collapsed}>
@@ -22,100 +55,100 @@ function Sidebar() {
         )}
       </div>
 
-      <nav>
-        <NavLink to="/" collapsed={collapsed} title={collapsed ? 'Dashboard' : undefined}>
+      <nav aria-label="Main navigation">
+        <SidebarItem to="/" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Dashboard' : undefined}>
           <MdDashboard />
           <span className="label">Dashboard</span>
-        </NavLink>
+        </SidebarItem>
 
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Stocks</SectionTitle>
 
-          <NavLink to="/outlook" collapsed={collapsed} title={collapsed ? 'Overview' : undefined}>
+          <SidebarItem to="/outlook" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Overview' : undefined}>
             <MdOutlineShowChart />
             <span className="label">Overview</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/long-term" collapsed={collapsed} title={collapsed ? 'Long Term' : undefined}>
+          <SidebarItem to="/long-term" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Long Term' : undefined}>
             <MdTrendingUp />
             <span className="label">Long Term</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/short-term" collapsed={collapsed} title={collapsed ? 'Short Term' : undefined}>
+          <SidebarItem to="/short-term" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Short Term' : undefined}>
             <MdSpeed />
             <span className="label">Short Term</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/screens" collapsed={collapsed} title={collapsed ? 'Screens' : undefined}>
+          <SidebarItem to="/screens" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Screens' : undefined}>
             <MdGridView />
             <span className="label">Screens</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/advisor" collapsed={collapsed} title={collapsed ? 'Advisor' : undefined}>
+          <SidebarItem to="/advisor" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Advisor' : undefined}>
             <MdAutoGraph />
             <span className="label">Advisor</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/video-screener" collapsed={collapsed} title={collapsed ? 'Video Screener' : undefined}>
+          <SidebarItem to="/video-screener" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Video Screener' : undefined}>
             <MdVideoLibrary />
             <span className="label">Video Screener</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/portfolio-manager" collapsed={collapsed} title={collapsed ? 'Portfolio Manager' : undefined}>
+          <SidebarItem to="/portfolio-manager" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Portfolio Manager' : undefined}>
             <MdAccountBalanceWallet />
             <span className="label">Portfolio Manager</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/alerts" collapsed={collapsed} title={collapsed ? 'Alerts' : undefined}>
+          <SidebarItem to="/alerts" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Alerts' : undefined}>
             <MdNotifications />
             <span className="label">Alerts</span>
-          </NavLink>
+          </SidebarItem>
         </Section>
 
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Derivatives</SectionTitle>
 
-          <NavLink to="/fno" collapsed={collapsed} title={collapsed ? 'F&O' : undefined}>
+          <SidebarItem to="/fno" collapsed={collapsed} pathname={pathname} title={collapsed ? 'F&O' : undefined}>
             <MdBarChart />
             <span className="label">F&O</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/commodities" collapsed={collapsed} title={collapsed ? 'Commodities' : undefined}>
+          <SidebarItem to="/commodities" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Commodities' : undefined}>
             <MdDiamond />
             <span className="label">Commodities</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/forex" collapsed={collapsed} title={collapsed ? 'Forex' : undefined}>
+          <SidebarItem to="/forex" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Forex' : undefined}>
             <MdCurrencyExchange />
             <span className="label">Forex</span>
-          </NavLink>
+          </SidebarItem>
         </Section>
 
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Resources</SectionTitle>
 
-          <NavLink to="/profile" collapsed={collapsed} title={collapsed ? 'Profile' : undefined}>
+          <SidebarItem to="/profile" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Profile' : undefined}>
             <MdPerson />
             <span className="label">Profile</span>
-          </NavLink>
+          </SidebarItem>
 
-          <NavLink to="/events" collapsed={collapsed} title={collapsed ? 'Events' : undefined}>
+          <SidebarItem to="/events" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Events' : undefined}>
             <MdEventNote />
             <span className="label">Events</span>
-          </NavLink>
+          </SidebarItem>
 
           {isSuperAdmin ? (
-            <NavLink to="/admin-users" collapsed={collapsed} title={collapsed ? 'Admin Users' : undefined}>
+            <SidebarItem to="/admin-users" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Admin Users' : undefined}>
               <MdVerifiedUser />
               <span className="label">Admin Users</span>
-            </NavLink>
+            </SidebarItem>
           ) : null}
 
           {isSuperAdmin ? (
-            <NavLink to="/telegram-admin" collapsed={collapsed} title={collapsed ? 'Telegram Admin' : undefined}>
+            <SidebarItem to="/telegram-admin" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Telegram Admin' : undefined}>
               <MdVerifiedUser />
               <span className="label">Telegram Admin</span>
-            </NavLink>
+            </SidebarItem>
           ) : null}
         </Section>
       </nav>

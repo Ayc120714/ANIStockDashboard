@@ -801,12 +801,14 @@ function ShortTermPage() {
           getOptionLabel={opt => typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || 'N/A'}`}
           isOptionEqualToValue={(opt, val) => (opt.symbol || opt) === (val.symbol || val)}
           filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.toLowerCase();
-            return opts.filter(o =>
-              o.symbol.toLowerCase().includes(q) ||
-              (o.sector || '').toLowerCase().includes(q) ||
-              (o.subsector || '').toLowerCase().includes(q)
-            ).slice(0, 50);
+            const q = inputValue.trim().toLowerCase();
+            if (!q) return opts;
+            return opts.filter(
+              (o) =>
+                o.symbol.toLowerCase().includes(q) ||
+                (o.sector || '').toLowerCase().includes(q) ||
+                (o.subsector || '').toLowerCase().includes(q)
+            );
           }}
           value={selectedStocks}
           onChange={(_, newVal) => setSelectedStocks(newVal)}
