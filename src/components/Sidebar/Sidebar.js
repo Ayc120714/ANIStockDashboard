@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
-import { SidebarContainer, NavLink, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
+import { SidebarContainer, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
+import { SidebarNavLink } from './SidebarNavLink';
 import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdVideoLibrary } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -23,15 +24,9 @@ function routeActive(pathname, to) {
 function SidebarItem({ to, collapsed, title, pathname, children }) {
   const on = routeActive(pathname, to);
   return (
-    <NavLink
-      to={to}
-      collapsed={collapsed}
-      $active={on}
-      aria-current={on ? 'page' : undefined}
-      title={title}
-    >
+    <SidebarNavLink to={to} collapsed={collapsed} active={on} title={title}>
       {children}
-    </NavLink>
+    </SidebarNavLink>
   );
 }
 

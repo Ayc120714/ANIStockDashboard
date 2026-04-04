@@ -260,6 +260,13 @@ export const Table = styled.table`
           background-color: #fde1e5;
         }
       }
+      &.row-sideways,
+      &.row-sideways:nth-child(even) {
+        background-color: #e8eef5;
+        &:hover {
+          background-color: #dde6f0;
+        }
+      }
       td {
         padding: 6px 10px;
         font-size: 12px;
@@ -279,6 +286,11 @@ export const Table = styled.table`
       }
       .trend-down {
         color: #c62828;
+        font-weight: 600;
+        caret-color: transparent;
+      }
+      .trend-sideways {
+        color: #1565c0;
         font-weight: 600;
         caret-color: transparent;
       }

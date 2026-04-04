@@ -74,10 +74,22 @@ const extractNumeric = (value) => {
     return match ? parseFloat(match[0]) : 0;
   };
 
-  const getDailySignClass = (value) => {
-    const n = extractNumeric(value);
-    if (!Number.isFinite(n) || n === 0) return '';
-    return n > 0 ? 'up' : 'down';
+  const getSectorRowClass = (row) => {
+    if (row.trendDirection === 'up') return 'row-up';
+    if (row.trendDirection === 'down') return 'row-down';
+    return 'row-sideways';
+  };
+
+  const getSectorTrendCellClass = (row) => {
+    if (row.trendDirection === 'up') return 'trend-up';
+    if (row.trendDirection === 'down') return 'trend-down';
+    return 'trend-sideways';
+  };
+
+  const perfCellClassName = (cell) => {
+    const s = (cell ?? '').toString().trim();
+    if (!s || s === '—') return '';
+    return s.includes('-') ? 'trend-down' : 'trend-up';
   };
 
   // sort after filtering
@@ -157,25 +169,22 @@ const extractNumeric = (value) => {
             </thead>
             <tbody>
               {paginatedData.map((row) => ( 
-                <tr
-                  key={row.id}
-                  className={getDailySignClass(row.day1d) === 'up' ? 'row-up' : getDailySignClass(row.day1d) === 'down' ? 'row-down' : ''}
-                >
+                <tr key={row.id} className={getSectorRowClass(row)}>
                   <td className="index">{row.id}</td>
                   <td
                     style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
                     onClick={() => onSectorClick && onSectorClick(row.name)}
                   >{row.name}</td>
-                  <td className={getDailySignClass(row.day1d) === 'up' ? 'trend-up' : getDailySignClass(row.day1d) === 'down' ? 'trend-down' : ''}>{row.trend}</td>
+                  <td className={getSectorTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
-                  <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>
-                  <td className={(row.week1w || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.week1w}</td>
-                  <td className={(row.month1m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month1m}</td>
-                  <td className={(row.month3m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month3m}</td>
-                  <td className={(row.month6m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month6m}</td>
-                  <td className={(row.year1y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year1y}</td>
-                  <td className={(row.year3y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year3y}</td>
+                  <td className={perfCellClassName(row.day1d)}>{row.day1d}</td>
+                  <td className={perfCellClassName(row.week1w)}>{row.week1w}</td>
+                  <td className={perfCellClassName(row.month1m)}>{row.month1m}</td>
+                  <td className={perfCellClassName(row.month3m)}>{row.month3m}</td>
+                  <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
+                  <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
+                  <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
                 </tr>
               ))}
             </tbody>

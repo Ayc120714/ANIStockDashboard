@@ -167,7 +167,10 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   let response;
   try {
-    response = await fetch(buildUrl(endpoint), config);
+    response = await fetch(buildUrl(endpoint), {
+      ...config,
+      cache: options.cache ?? config.cache,
+    });
   } catch (_) {
     throw new Error('Unable to reach server. Please check backend and network.');
   }

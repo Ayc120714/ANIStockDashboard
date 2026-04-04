@@ -11,11 +11,6 @@ const extractRows = (payload) => {
   return [];
 };
 
-const toNum = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-};
-
 const parsePercentLike = (value) => {
   if (value == null) return null;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -28,41 +23,51 @@ const parsePercentLike = (value) => {
 
 const fmtPct = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 
+/** Format % for table cells; missing data → em dash (never fake +0.00%). */
+const fmtPctOpt = (n) => (n == null || !Number.isFinite(n) ? '—' : fmtPct(n));
+
 const normalizeRow = (row, index) => {
   if (!row || typeof row !== 'object') return null;
   const name = String(row?.name || row?.sector || row?.title || '').trim();
   if (!name) return null;
 
-  const day = toNum(
+  const day =
     parsePercentLike(row?.day1d)
-    ?? row?.avg_day_change
-    ?? row?.day_change
-    ?? row?.change_1d
-    ?? row?.perf_1d
-  );
-  const week = toNum(parsePercentLike(row?.week1w) ?? row?.change_1w ?? row?.perf_1w);
-  const month = toNum(parsePercentLike(row?.month1m) ?? row?.change_1m ?? row?.perf_1m);
-  const month3 = toNum(parsePercentLike(row?.month3m) ?? row?.change_3m ?? row?.perf_3m);
-  const month6 = toNum(parsePercentLike(row?.month6m) ?? row?.change_6m ?? row?.perf_6m);
-  const year = toNum(parsePercentLike(row?.year1y) ?? row?.change_1y ?? row?.perf_1y);
-  const year3 = toNum(parsePercentLike(row?.year3y) ?? row?.change_3y ?? row?.perf_3y);
-  const trend = day >= 0 ? '↗' : '↘';
+    ?? parsePercentLike(row?.avg_day_change)
+    ?? parsePercentLike(row?.day_change)
+    ?? parsePercentLike(row?.change_1d)
+    ?? parsePercentLike(row?.perf_1d);
+  const week = parsePercentLike(row?.week1w) ?? parsePercentLike(row?.change_1w) ?? parsePercentLike(row?.perf_1w);
+  const month = parsePercentLike(row?.month1m) ?? parsePercentLike(row?.change_1m) ?? parsePercentLike(row?.perf_1m);
+  const month3 = parsePercentLike(row?.month3m) ?? parsePercentLike(row?.change_3m) ?? parsePercentLike(row?.perf_3m);
+  const month6 = parsePercentLike(row?.month6m) ?? parsePercentLike(row?.change_6m) ?? parsePercentLike(row?.perf_6m);
+  const year = parsePercentLike(row?.year1y) ?? parsePercentLike(row?.change_1y) ?? parsePercentLike(row?.perf_1y);
+  const year3 = parsePercentLike(row?.year3y) ?? parsePercentLike(row?.change_3y) ?? parsePercentLike(row?.perf_3y);
+
+  let trendDirection = 'sideways';
+  if (day != null && Number.isFinite(day)) {
+    if (day > 0.05) trendDirection = 'up';
+    else if (day < -0.05) trendDirection = 'down';
+  }
+  const trend =
+    day == null || !Number.isFinite(day) ? '→' : day > 0.05 ? '↗' : day < -0.05 ? '↘' : '→';
 
   return {
     id: row?.id ?? index + 1,
     name,
     sector: name,
     trend,
+    trendDirection,
     value: row?.value ?? row?.cmp ?? row?.close ?? row?.last ?? '—',
     percentile: row?.percentile ?? row?.percentile_value ?? row?.percentileValue ?? '—',
-    day1d: typeof row?.day1d === 'string' ? row.day1d : fmtPct(day),
-    week1w: typeof row?.week1w === 'string' ? row.week1w : fmtPct(week),
-    month1m: typeof row?.month1m === 'string' ? row.month1m : fmtPct(month),
-    month3m: typeof row?.month3m === 'string' ? row.month3m : fmtPct(month3),
-    month6m: typeof row?.month6m === 'string' ? row.month6m : fmtPct(month6),
-    year1y: typeof row?.year1y === 'string' ? row.year1y : fmtPct(year),
-    year3y: typeof row?.year3y === 'string' ? row.year3y : fmtPct(year3),
-    avg_day_change: day,
+    day1d: typeof row?.day1d === 'string' ? row.day1d : fmtPctOpt(day),
+    week1w: typeof row?.week1w === 'string' ? row.week1w : fmtPctOpt(week),
+    month1m: typeof row?.month1m === 'string' ? row.month1m : fmtPctOpt(month),
+    month3m: typeof row?.month3m === 'string' ? row.month3m : fmtPctOpt(month3),
+    month6m: typeof row?.month6m === 'string' ? row.month6m : fmtPctOpt(month6),
+    year1y: typeof row?.year1y === 'string' ? row.year1y : fmtPctOpt(year),
+    year3y: typeof row?.year3y === 'string' ? row.year3y : fmtPctOpt(year3),
+    avg_day_change: day != null && Number.isFinite(day) ? day : 0,
     stock_count: Number.isFinite(Number(row?.stock_count ?? row?.stocks ?? row?.count))
       ? Number(row?.stock_count ?? row?.stocks ?? row?.count)
       : null,

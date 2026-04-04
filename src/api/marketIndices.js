@@ -1,6 +1,8 @@
 import { apiGet } from './apiClient';
 
 const MARKET_INDICES_ENDPOINT = '/market-indices/';
+/** Avoid browser/CDN serving a stale JSON snapshot after auth/session changes. */
+const FETCH_NO_STORE = { cache: 'no-store' };
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return '';
@@ -32,10 +34,17 @@ const formatPE = (pe) => {
 };
 
 const deriveTrend = (item) => {
-  const chg = item.percentage_change ?? item.percentageChange ?? item.change_pct ?? item.changePercent ?? item.perf_1d;
+  const chg =
+    item.perf_1d ??
+    item.percentage_change ??
+    item.percentageChange ??
+    item.change_pct ??
+    item.changePercent;
   const num = typeof chg === 'number' ? chg : parseFloat(chg);
-  if (isNaN(num) || num === 0) return { label: 'SIDEWAYS', direction: 'sideways' };
-  if (num > 0) return { label: 'UP TREND', direction: 'up' };
+  if (isNaN(num)) return { label: 'SIDEWAYS', direction: 'sideways' };
+  // Trend badge dead zone (does not alter the numeric 1D cell — that uses `perf_1d` only below).
+  if (Math.abs(num) <= 0.05) return { label: 'SIDEWAYS', direction: 'sideways' };
+  if (num > 0.05) return { label: 'UP TREND', direction: 'up' };
   return { label: 'DOWN TREND', direction: 'down' };
 };
 
@@ -50,6 +59,7 @@ const mapCard = (item) => {
     trendDirection: trend.direction,
     value: formatValue(item.value ?? item.cmp ?? item.close ?? item.last ?? item.level),
     change: formatChange(
+      item.perf_1d ??
       item.percentage_change ??
       item.percentageChange ??
       item.change_pct ??
@@ -115,7 +125,7 @@ const normalizeMarketIndicesResponse = (payload) => {
 };
 
 export const fetchMarketIndices = async () => {
-  const data = await apiGet(MARKET_INDICES_ENDPOINT);
+  const data = await apiGet(MARKET_INDICES_ENDPOINT, FETCH_NO_STORE);
   return normalizeMarketIndicesResponse(data);
 };
 
@@ -135,16 +145,16 @@ const mapTableRow = (item, idx) => {
   if (!name) return null;
   const trend = deriveTrend(item);
 
-  const dailyChange =
-    item.percentage_change ??
-    item.percentageChange ??
-    item.change_pct ??
-    item.changePercent ??
-    item.change_percent ??
-    item.perf_1d ??
-    item.day1d ??
-    item['1d'];
+  const perf1dTitle =
+    item.perf_1d_source != null
+      ? [
+          `source: ${item.perf_1d_source}`,
+          `eod (candle merge): ${fmtPerf(item.perf_1d_eod)}`,
+          `live numerator merge: ${fmtPerf(item.perf_1d_live)}`,
+        ].join('\n')
+      : undefined;
 
+  // 1D column: show API `perf_1d` only (no coalescing / threshold filtering in the UI).
   return {
     id: item.id ?? idx + 1,
     name,
@@ -153,7 +163,8 @@ const mapTableRow = (item, idx) => {
     value: formatValue(item.value ?? item.cmp ?? item.close ?? item.last),
     // Do not fall back to percentage_change — that breaks India VIX "Percentile" vs daily %.
     percentile: formatPercentile(item.percentile),
-    day1d: fmtPerf(dailyChange),
+    day1d: fmtPerf(item.perf_1d),
+    perf1dTitle,
     week1w: fmtPerf(item.perf_1w ?? item.week1w ?? item['1w']),
     month1m: fmtPerf(item.perf_1m ?? item.month1m ?? item['1m']),
     month3m: fmtPerf(item.perf_3m ?? item.month3m ?? item['3m']),
@@ -163,8 +174,10 @@ const mapTableRow = (item, idx) => {
   };
 };
 
-export const fetchMarketIndicesTable = async () => {
-  const data = await apiGet(MARKET_INDICES_ENDPOINT);
+export const fetchMarketIndicesTable = async (options = {}) => {
+  const { diagnose1d = false } = options;
+  const q = diagnose1d ? '?diagnose_1d=true' : '';
+  const data = await apiGet(`${MARKET_INDICES_ENDPOINT}${q}`, FETCH_NO_STORE);
   const source = extractArray(data);
   return source.map(mapTableRow).filter(Boolean);
 };
@@ -174,6 +187,6 @@ export const fetchMarketIndexByName = async (name) => {
     throw new Error('Index name is required.');
   }
   const endpoint = `${MARKET_INDICES_ENDPOINT}${encodeURIComponent(name)}`;
-  const data = await apiGet(endpoint);
+  const data = await apiGet(endpoint, FETCH_NO_STORE);
   return normalizeMarketIndicesResponse(data);
 };

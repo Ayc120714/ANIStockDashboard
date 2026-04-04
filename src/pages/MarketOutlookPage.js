@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TablePagination } from '@mui/material';
 import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
@@ -30,6 +31,8 @@ const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
 function MarketOutlookContent({ apiReady, timedOut }) {
+  const [searchParams] = useSearchParams();
+  const miDiag = searchParams.get('mi_diag') === '1';
   const defaultIndexCards = [
     { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
     { title: 'Next 50', trend: 'UP TREND', value: '69,852', change: '+0.00%', percentile: '79%', pe: '20 PE' },
@@ -63,7 +66,10 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         setLoadError(null);
       }
       try {
-        const [normalized, tableRows] = await Promise.all([fetchMarketIndices(), fetchMarketIndicesTable()]);
+        const [normalized, tableRows] = await Promise.all([
+          fetchMarketIndices(),
+          fetchMarketIndicesTable({ diagnose1d: miDiag }),
+        ]);
         if (!isMounted) return;
         if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
         if (normalized.smallcapCards?.length) {
@@ -107,7 +113,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
       isMounted = false;
       clearInterval(marketTimer);
     };
-  }, []);
+  }, [miDiag]);
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [tablePage, setTablePage] = useState(0);
@@ -293,6 +299,25 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     const n = extractSignedNumber(value);
     if (n == null || n === 0) return '';
     return n > 0 ? 'up' : 'down';
+  };
+
+  /** Row background follows trend bucket (SIDEWAYS gets a tint; avoids “missing” highlight on ~0% days). */
+  const getMarketIndexRowClass = (row) => {
+    if (row.trendDirection === 'up') return 'row-up';
+    if (row.trendDirection === 'down') return 'row-down';
+    return 'row-sideways';
+  };
+
+  const getMarketIndexTrendCellClass = (row) => {
+    if (row.trendDirection === 'up') return 'trend-up';
+    if (row.trendDirection === 'down') return 'trend-down';
+    return 'trend-sideways';
+  };
+
+  const perfCellClassName = (cell) => {
+    const s = (cell ?? '').toString().trim();
+    if (!s || s === '—') return '';
+    return s.includes('-') ? 'trend-down' : 'trend-up';
   };
 
   // Sort arrow helper similar to SectorOutlookPage.js
@@ -519,19 +544,24 @@ function MarketOutlookContent({ apiReady, timedOut }) {
             </thead>
             <tbody>
               {paginatedTableRows.map((row) => (
-                <tr key={row.id} className={getDailySignClass(row.day1d) === 'up' ? 'row-up' : getDailySignClass(row.day1d) === 'down' ? 'row-down' : ''}>
+                <tr key={row.id} className={getMarketIndexRowClass(row)}>
                   <td className="index">{row.id}</td>
                   <td>{row.name}</td>
-                  <td className={getDailySignClass(row.day1d) === 'up' ? 'trend-up' : getDailySignClass(row.day1d) === 'down' ? 'trend-down' : ''}>{row.trend}</td>
+                  <td className={getMarketIndexTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
-                  <td className={(row.day1d || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.day1d}</td>
-                  <td className={(row.week1w || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.week1w}</td>
-                  <td className={(row.month1m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month1m}</td>
-                  <td className={(row.month3m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month3m}</td>
-                  <td className={(row.month6m || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.month6m}</td>
-                  <td className={(row.year1y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year1y}</td>
-                  <td className={(row.year3y || '').toString().includes('-') ? 'trend-down' : 'trend-up'}>{row.year3y}</td>
+                  <td
+                    className={perfCellClassName(row.day1d)}
+                    title={row.perf1dTitle || undefined}
+                  >
+                    {row.day1d}
+                  </td>
+                  <td className={perfCellClassName(row.week1w)}>{row.week1w}</td>
+                  <td className={perfCellClassName(row.month1m)}>{row.month1m}</td>
+                  <td className={perfCellClassName(row.month3m)}>{row.month3m}</td>
+                  <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
+                  <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
+                  <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
                 </tr>
               ))}
             </tbody>
