@@ -35,15 +35,6 @@ const deriveDirectionFromRow = (row) => {
   return 1;
 };
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
-const hasLocalBrokerSessionMarker = (userId) => {
-  if (!userId) return false;
-  try {
-    const prefixes = ['dhan', 'samco', 'angelone', 'upstox'].map((b) => `broker_session_auth_${userId}_${b}`);
-    return prefixes.some((k) => Boolean(localStorage.getItem(k)));
-  } catch (_) {
-    return false;
-  }
-};
 const getCachedBrokerRows = (userId) => {
   if (!userId) return [];
   try {
@@ -1195,8 +1186,7 @@ function DashboardPage() {
       setAlerts(nextAlerts);
       setRatings(nextRatings);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
-      const localSessionMarker = hasLocalBrokerSessionMarker(userId);
-      setBrokerAuthenticated(localSessionMarker);
+      setBrokerAuthenticated(false);
       setLastUpdated(new Date());
       try {
         sessionStorage.setItem(
@@ -1227,9 +1217,8 @@ function DashboardPage() {
       } catch (_) {
         authenticated = false;
       }
-      // Keep using local marker as fallback trigger to fetch live data;
-      // backend status remains the source of truth for final auth state.
-      const effectiveAuthenticated = authenticated || hasLocalBrokerSessionMarker(userId);
+      // Dhan ``connected`` requires today's IST PIN+TOTP session; do not bypass with local markers.
+      const effectiveAuthenticated = authenticated;
 
       let liveBrokerPositions = [];
       if (effectiveAuthenticated) {
@@ -1257,14 +1246,14 @@ function DashboardPage() {
           liveBrokerPositions = [];
         }
       }
-      if (!liveBrokerPositions.length) {
+      if (!liveBrokerPositions.length && effectiveAuthenticated) {
         const cachedRows = getCachedBrokerRows(userId);
         if (cachedRows.length) {
           liveBrokerPositions = normalizeBrokerRows(cachedRows);
         }
       }
       const finalHoldings = liveBrokerPositions;
-      setBrokerAuthenticated(authenticated || finalHoldings.length > 0);
+      setBrokerAuthenticated(authenticated);
       setHoldings(finalHoldings);
     } finally {
       setLoading(false);

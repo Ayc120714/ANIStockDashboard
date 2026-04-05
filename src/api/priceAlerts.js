@@ -44,7 +44,7 @@ export const checkPriceAlerts = async ({ userId, listType, prices }) => {
 export const fetchPriceAlertTriggers = async ({ userId, limit = 50 }) => {
   if (!userId) return [];
   const query = withUser(userId, { limit });
-  const data = await tradeApiGet(`/price-alerts/triggers?${query}`);
+  const data = await tradeApiGet(`/price-alerts/triggers?${query}`, { cache: 'no-store' });
   return data?.data ?? [];
 };
 

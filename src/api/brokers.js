@@ -15,9 +15,11 @@ export const fetchBrokerSetup = async ({ userId } = {}) => {
   return [{
     broker: 'dhan',
     client_id: String(status?.client_id || ''),
-    is_enabled: connected,
+    is_enabled: Boolean(status?.token_stored ?? connected),
     has_session: connected,
     live_enabled: connected,
+    daily_session_ok: Boolean(status?.daily_session_ok),
+    token_stored: Boolean(status?.token_stored ?? connected),
     last_auth_at: status?.last_auth_at || null,
   }];
 };
@@ -74,7 +76,11 @@ export const validateBrokerSetup = ({
   });
 };
 
-export const clearBrokerSession = ({ user_id, broker }) =>
-  (String(broker || '').toLowerCase() === 'dhan'
-    ? tradeApiPost('/dhan/disconnect', { user_id })
-    : tradeApiPost('/brokers/session/clear', { user_id, ...(broker ? { broker } : {}) }));
+export const clearBrokerSession = ({ user_id, broker }) => {
+  const b = String(broker || '').toLowerCase();
+  if (b === 'dhan') return tradeApiPost('/dhan/disconnect', { user_id });
+  if (b === 'angelone') return tradeApiPost('/angelone/disconnect', { user_id });
+  if (b === 'samco') return tradeApiPost('/samco/disconnect', { user_id });
+  if (b === 'upstox') return tradeApiPost('/upstox/disconnect', { user_id });
+  return tradeApiPost('/brokers/session/clear', { user_id, ...(broker ? { broker } : {}) });
+};

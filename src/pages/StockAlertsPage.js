@@ -5,7 +5,12 @@ import Pagination from '@mui/material/Pagination';
 import { MdDelete } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { clearPriceAlertTriggers, deletePriceAlertTrigger, fetchPriceAlertTriggers } from '../api/priceAlerts';
-import { backfillLevelDivergenceAlerts, fetchSpecialAlerts, triggerLiveSignalScanNow } from '../api/advisor';
+import {
+  backfillLevelDivergenceAlerts,
+  fetchSpecialAlerts,
+  syncLatestEodWeeklyCrossAlerts,
+  triggerLiveSignalScanNow,
+} from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
 
@@ -28,16 +33,69 @@ const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
 };
-const isTodayTimestamp = (value) => {
+/** NSE calendar day in IST — matches how the backend thinks about "today" for market alerts. */
+const dateKeyIST = (d) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+
+const isTodayInIST = (value) => {
   if (!value) return false;
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return false;
-  const now = new Date();
-  return (
-    dt.getFullYear() === now.getFullYear()
-    && dt.getMonth() === now.getMonth()
-    && dt.getDate() === now.getDate()
-  );
+  return dateKeyIST(dt) === dateKeyIST(new Date());
+};
+
+/** Parse API ``timestamp`` (naive ``YYYY-MM-DD HH:mm:ss``, ISO, etc.) for sorting. */
+const parseAdvisorAlertMs = (ts) => {
+  if (ts == null || ts === '') return 0;
+  const s = String(ts).trim();
+  const normalized = s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/** Show alert time in IST (matches NSE session context). */
+const formatAlertTimeIST = (ts) => {
+  const ms = parseAdvisorAlertMs(ts);
+  if (!ms) return ts ? String(ts).replace('T', ' ').slice(0, 19) : '—';
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+      .format(new Date(ms))
+      .replace(', ', ' ');
+  } catch (_) {
+    return String(ts).slice(0, 19);
+  }
+};
+
+/**
+ * One row per (symbol, alert_type) — keep the row with the latest ``timestamp`` (not string order).
+ */
+const dedupeAdvisorRowsByLatestTime = (rows) => {
+  const byKey = new Map();
+  for (const row of rows) {
+    const sym = String(row.symbol || '').toUpperCase();
+    const at = String(row.alert_type || '').toLowerCase();
+    const key = `${sym}|${at}`;
+    const t = parseAdvisorAlertMs(row.timestamp);
+    const prev = byKey.get(key);
+    if (!prev || t >= parseAdvisorAlertMs(prev.timestamp)) {
+      byKey.set(key, row);
+    }
+  }
+  return [...byKey.values()];
 };
 
 const SORTABLE_COLS = [
@@ -67,6 +125,8 @@ function StockAlertsPage() {
   const [page, setPage] = useState(1);
   const [sortCol, setSortCol] = useState('');
   const [sortDir, setSortDir] = useState('desc');
+  const [weeklyBackendTsSort, setWeeklyBackendTsSort] = useState('desc');
+  const [divergenceBackendTsSort, setDivergenceBackendTsSort] = useState('desc');
   const rowsPerPage = 25;
 
   const load = useCallback(async () => {
@@ -79,7 +139,7 @@ function StockAlertsPage() {
     // Backfilled weekly/RSI rows use the *event* date as timestamp, so "today only" hides almost everything.
     const specialPromise = accessToken
       ? fetchSpecialAlerts({
-        limit: 1200,
+        limit: 5000,
         symbol: symbolFilter,
         currentDayOnly: false,
         includeHistory: true,
@@ -123,7 +183,7 @@ function StockAlertsPage() {
 
   const filteredData = useMemo(() => {
     return data.filter((row) => {
-      if (!isTodayTimestamp(row.triggered_at)) return false;
+      if (!isTodayInIST(row.triggered_at)) return false;
       if (listTypeFilter && String(row.list_type || '').toLowerCase() !== listTypeFilter.toLowerCase()) return false;
       if (symbolFilter && !String(row.symbol || '').toLowerCase().includes(symbolFilter.toLowerCase())) return false;
       return true;
@@ -191,12 +251,36 @@ function StockAlertsPage() {
     }
   };
 
+  const handleSyncEodWeeklyCross = async () => {
+    try {
+      setLoading(true);
+      const res = await syncLatestEodWeeklyCrossAlerts({ limitSymbols: 3000, maxStaleDays: 14 });
+      const created = Number(res?.created || 0);
+      const refSess = res?.reference_session_ist ? ` (session ${res.reference_session_ist})` : '';
+      setStatusMsg(
+        created > 0
+          ? `Synced ${created} weekly cross alert(s) from latest daily bars${refSess}.`
+          : `No new weekly crosses on the latest bar${refSess}. Ensure daily candles are up to date.`
+      );
+      await load();
+    } catch (e) {
+      setErrorMsg(e?.message || 'Failed to sync EOD weekly cross alerts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <FaSort style={{ opacity: 0.3, marginLeft: 2, fontSize: 10 }} />;
     return sortDir === 'asc'
       ? <FaSortUp style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />
       : <FaSortDown style={{ color: '#1565c0', marginLeft: 2, fontSize: 10 }} />;
   };
+
+  const BackendTimeSortIcon = ({ dir }) =>
+    dir === 'asc'
+      ? <FaSortUp style={{ color: '#1565c0', marginLeft: 4, fontSize: 10 }} />
+      : <FaSortDown style={{ color: '#1565c0', marginLeft: 4, fontSize: 10 }} />;
 
   const getAlertSide = (alertType) => {
     const t = String(alertType || '').toLowerCase();
@@ -213,48 +297,35 @@ function StockAlertsPage() {
       ?? null;
   };
 
-  const weeklyCrossRows = useMemo(
-    () => {
-      const filtered = advisorAlerts
-        .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
-        .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
-        .filter((a) => weeklyAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === weeklyAlertTypeFilter)
-        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+  const weeklyCrossRows = useMemo(() => {
+    const filtered = advisorAlerts
+      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('weekly_cross_'))
+      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+      .filter((a) => weeklyAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === weeklyAlertTypeFilter);
 
-      // Keep only latest alert per symbol+type to avoid duplicate flooding.
-      const seen = new Set();
-      const deduped = [];
-      for (const row of filtered) {
-        const key = `${String(row.symbol || '').toUpperCase()}|${String(row.alert_type || '').toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(row);
-      }
-      return deduped.slice(0, 100);
-    },
-    [advisorAlerts, setupSideFilter, weeklyAlertTypeFilter]
-  );
+    const deduped = dedupeAdvisorRowsByLatestTime(filtered);
+    deduped.sort((a, b) => {
+      const ta = parseAdvisorAlertMs(a.timestamp);
+      const tb = parseAdvisorAlertMs(b.timestamp);
+      return weeklyBackendTsSort === 'desc' ? tb - ta : ta - tb;
+    });
+    return deduped.slice(0, 500);
+  }, [advisorAlerts, setupSideFilter, weeklyAlertTypeFilter, weeklyBackendTsSort]);
 
-  const divergenceRows = useMemo(
-    () => {
-      const filtered = advisorAlerts
-        .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('rsi_divergence_'))
-        .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
-        .filter((a) => rsiAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === rsiAlertTypeFilter)
-        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+  const divergenceRows = useMemo(() => {
+    const filtered = advisorAlerts
+      .filter((a) => String(a.alert_type || '').toLowerCase().startsWith('rsi_divergence_'))
+      .filter((a) => setupSideFilter === 'all' || getAlertSide(a.alert_type) === setupSideFilter)
+      .filter((a) => rsiAlertTypeFilter === 'all' || String(a.alert_type || '').toLowerCase() === rsiAlertTypeFilter);
 
-      const seen = new Set();
-      const deduped = [];
-      for (const row of filtered) {
-        const key = `${String(row.symbol || '').toUpperCase()}|${String(row.alert_type || '').toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(row);
-      }
-      return deduped.slice(0, 100);
-    },
-    [advisorAlerts, setupSideFilter, rsiAlertTypeFilter]
-  );
+    const deduped = dedupeAdvisorRowsByLatestTime(filtered);
+    deduped.sort((a, b) => {
+      const ta = parseAdvisorAlertMs(a.timestamp);
+      const tb = parseAdvisorAlertMs(b.timestamp);
+      return divergenceBackendTsSort === 'desc' ? tb - ta : ta - tb;
+    });
+    return deduped.slice(0, 500);
+  }, [advisorAlerts, setupSideFilter, rsiAlertTypeFilter, divergenceBackendTsSort]);
 
 
   const groupedAlertRows = useMemo(() => {
@@ -423,6 +494,9 @@ function StockAlertsPage() {
         <Button size="small" variant="outlined" onClick={handleGenerateFromOldData} sx={{ textTransform: 'none', fontSize: 12 }}>
           Generate From Old Data
         </Button>
+        <Button size="small" variant="outlined" onClick={handleSyncEodWeeklyCross} sx={{ textTransform: 'none', fontSize: 12 }}>
+          Sync Latest EOD Weekly Crosses
+        </Button>
         <Button size="small" variant="outlined" onClick={handleRun5mScanNow} sx={{ textTransform: 'none', fontSize: 12 }}>
           Run 5m Scan Now
         </Button>
@@ -552,7 +626,8 @@ function StockAlertsPage() {
       <Box sx={{ mt: 3 }}>
         <TableTitle>Weekly Level Cross Alerts (Backend)</TableTitle>
         <Box sx={{ fontSize: 12, color: '#666', mb: 1 }}>
-          Shows recent alerts from the database (latest first). Use &quot;Generate From Old Data&quot; if this list is empty.
+          Recent alerts from the database; times shown in <strong>IST</strong>. Click <strong>Time</strong> to toggle newest-first vs oldest-first.
+          One row per symbol+alert type (latest occurrence). Use &quot;Sync Latest EOD Weekly Crosses&quot; after daily candles refresh, or &quot;Generate From Old Data&quot; for a longer backfill. Refresh after deploy for new live alerts.
         </Box>
         <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
           <Select
@@ -598,7 +673,14 @@ function StockAlertsPage() {
                     onChange={(e) => toggleSymbolsSelection(weeklyVisibleSymbols, e.target.checked)}
                   />
                 </th>
-                <th style={compact}>Time</th>
+                <th
+                  style={{ ...compact, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setWeeklyBackendTsSort((d) => (d === 'desc' ? 'asc' : 'desc'))}
+                  title="Sort by time"
+                >
+                  Time
+                  <BackendTimeSortIcon dir={weeklyBackendTsSort} />
+                </th>
                 <th style={compact}>Symbol</th>
                 <th style={compact}>Alert</th>
                 <th style={compact}>Entry</th>
@@ -620,7 +702,7 @@ function StockAlertsPage() {
                         onChange={() => toggleSymbolSelection(a.symbol)}
                       />
                     </td>
-                    <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                    <td style={compact}>{formatAlertTimeIST(a.timestamp)}</td>
                     <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
                     <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
                     <td style={compact}>{fmtNum(getAlertLevel(a, 'entry'))}</td>
@@ -645,7 +727,7 @@ function StockAlertsPage() {
       <Box sx={{ mt: 3 }}>
         <TableTitle>Divergence Alerts (5m RSI)</TableTitle>
         <Box sx={{ fontSize: 12, color: '#666', mb: 1 }}>
-          Same as weekly block: recent history, not limited to today&apos;s calendar date.
+          Same as weekly block: click <strong>Time</strong> to sort; times in IST.
         </Box>
         <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
           <Select
@@ -687,7 +769,14 @@ function StockAlertsPage() {
                     onChange={(e) => toggleSymbolsSelection(divergenceVisibleSymbols, e.target.checked)}
                   />
                 </th>
-                <th style={compact}>Time</th>
+                <th
+                  style={{ ...compact, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setDivergenceBackendTsSort((d) => (d === 'desc' ? 'asc' : 'desc'))}
+                  title="Sort by time"
+                >
+                  Time
+                  <BackendTimeSortIcon dir={divergenceBackendTsSort} />
+                </th>
                 <th style={compact}>Symbol</th>
                 <th style={compact}>Type</th>
                 <th style={compact}>Entry</th>
@@ -709,7 +798,7 @@ function StockAlertsPage() {
                       onChange={() => toggleSymbolSelection(a.symbol)}
                     />
                   </td>
-                  <td style={compact}>{a.timestamp?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                  <td style={compact}>{formatAlertTimeIST(a.timestamp)}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.symbol || '—'}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.alert_type || '—'}</td>
                   <td style={compact}>{fmtNum(getAlertLevel(a, 'entry'))}</td>

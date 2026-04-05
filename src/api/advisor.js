@@ -192,7 +192,7 @@ export const fetchAlerts = async (filters = {}) => {
   if (filters.symbol) params.set('symbol', filters.symbol);
   if (filters.limit) params.set('limit', filters.limit);
   const qs = params.toString();
-  const data = await apiGet(`/advisor/alerts${qs ? '?' + qs : ''}`);
+  const data = await apiGet(`/advisor/alerts${qs ? '?' + qs : ''}`, { cache: 'no-store' });
   return data?.data ?? [];
 };
 
@@ -207,7 +207,7 @@ export const fetchSpecialAlerts = async ({
   params.set('current_day_only', currentDayOnly ? 'true' : 'false');
   params.set('include_history', includeHistory ? 'true' : 'false');
   if (symbol && String(symbol).trim()) params.set('symbol', String(symbol).trim());
-  const data = await apiGet(`/advisor/alerts/special?${params.toString()}`);
+  const data = await apiGet(`/advisor/alerts/special?${params.toString()}`, { cache: 'no-store' });
   return data?.data ?? [];
 };
 
@@ -221,8 +221,19 @@ export const backfillLevelDivergenceAlerts = async ({
   return apiPost(`/advisor/alerts/backfill-level-divergence?${params.toString()}`, {});
 };
 
+/** Sync weekly level-cross alerts from the latest daily bar (EOD path; fresh row timestamps). */
+export const syncLatestEodWeeklyCrossAlerts = async ({
+  limitSymbols = 3000,
+  maxStaleDays = 14,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit_symbols', String(limitSymbols));
+  params.set('max_stale_days', String(maxStaleDays));
+  return apiPost(`/advisor/alerts/sync-latest-eod-weekly-cross?${params.toString()}`, {}, { cache: 'no-store' });
+};
+
 export const triggerLiveSignalScanNow = async () => {
-  return apiGet('/advisor/signals/live-scan-now');
+  return apiGet('/advisor/signals/live-scan-now', { cache: 'no-store' });
 };
 
 export const markAlertRead = async (alertId) => {

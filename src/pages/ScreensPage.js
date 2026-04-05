@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import AiPicksPage from './AiPicksPage';
 import IPOsPage from './IPOsPage';
-import LiveScreenerPage from './LiveScreenerPage';
 import PriceShockersPage from './PriceShockersPage';
 import RelativePerformancePage from './RelativePerformancePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
@@ -30,9 +29,6 @@ function ScreensPage() {
         <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
           Alpha Tracker
         </Tab>
-        <Tab active={activeTab === 'Live Screener'} onClick={() => setActiveTab('Live Screener')}>
-          Live Screener
-        </Tab>
         <Tab active={activeTab === 'IPOs'} onClick={() => setActiveTab('IPOs')} last>
           IPOs
         </Tab>
@@ -56,10 +52,6 @@ function ScreensPage() {
 
       <TabContent active={activeTab === 'Alpha Tracker'}>
         {activeTab === 'Alpha Tracker' ? <RelativePerformancePage /> : null}
-      </TabContent>
-
-      <TabContent active={activeTab === 'Live Screener'}>
-        {activeTab === 'Live Screener' ? <LiveScreenerPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>

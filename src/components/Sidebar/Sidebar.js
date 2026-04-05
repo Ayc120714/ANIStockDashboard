@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { SidebarContainer, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
 import { SidebarNavLink } from './SidebarNavLink';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdVideoLibrary } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
 function normalizePath(pathname) {
@@ -82,11 +82,6 @@ function Sidebar() {
           <SidebarItem to="/advisor" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Advisor' : undefined}>
             <MdAutoGraph />
             <span className="label">Advisor</span>
-          </SidebarItem>
-
-          <SidebarItem to="/video-screener" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Video Screener' : undefined}>
-            <MdVideoLibrary />
-            <span className="label">Video Screener</span>
           </SidebarItem>
 
           <SidebarItem to="/portfolio-manager" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Portfolio Manager' : undefined}>

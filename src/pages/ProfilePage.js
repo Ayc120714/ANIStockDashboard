@@ -28,11 +28,27 @@ import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
 import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';
 import {
+  fetchAngeloneHoldings,
+  fetchAngeloneOrders,
+  fetchAngelonePositions,
+  ensureAngeloneSession,
+} from '../api/angelone';
+import {
   fetchDhanHoldings,
   connectDhan,
   fetchDhanOrders,
   fetchDhanPositions,
 } from '../api/dhan';
+import {
+  fetchSamcoBrokerHoldings,
+  fetchSamcoBrokerOrders,
+  fetchSamcoBrokerPositions,
+} from '../api/samcoBroker';
+import {
+  fetchUpstoxBrokerHoldings,
+  fetchUpstoxBrokerOrders,
+  fetchUpstoxBrokerPositions,
+} from '../api/upstoxBroker';
 
 const pickArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -77,8 +93,35 @@ const deriveOpenPositionsFromOrders = (orders) => {
 };
 
 const AI_KEY_PROVIDERS = ['groq', 'gemini', 'cerebras', 'perplexity'];
+const BROKER_LABELS = { dhan: 'Dhan', angelone: 'Angel One', samco: 'Samco', upstox: 'Upstox' };
 const DHAN_DAILY_CONSENT_LIMIT = 25;
 const consentBlockKeyForToday = (userId) => `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
+
+/** Backend sends RFC3339 ``Z`` or legacy naive UTC; always show wall time in IST. */
+const formatLastAuthIST = (value) => {
+  if (value == null || value === '') return '';
+  const s = String(value).trim();
+  let ms = Date.parse(s);
+  if (!Number.isFinite(ms)) {
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})[\sT](\d{2}:\d{2}:\d{2})/);
+    if (m) ms = Date.parse(`${m[1]}T${m[2]}Z`);
+  }
+  if (!Number.isFinite(ms)) return s;
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    }).format(new Date(ms));
+  } catch (_) {
+    return s;
+  }
+};
 
 function ProfilePage() {
   const { user, isAdmin } = useAuth();
@@ -128,7 +171,6 @@ function ProfilePage() {
     [userId]
   );
 
-  const connectedDhan = rows.find((r) => r.broker === 'dhan')?.is_enabled;
   const liveEnabledCount = rows.filter((r) => isLiveExecution(r)).length;
   const displayName = user?.name || user?.full_name || '—';
   const displayEmail = user?.email || '—';
@@ -200,37 +242,111 @@ function ProfilePage() {
     }
   }, [userId]);
 
-  const loadLiveData = async () => {
+  const loadLiveData = useCallback(async () => {
     setError('');
+    const b = String(selectedBroker || 'dhan').toLowerCase();
+    const lsKey = (kind) => `broker_live_${kind}_${b}_${userId}`;
     try {
-      const [posResult, holdResult, ordResult] = await Promise.allSettled([
-        fetchDhanPositions({ userId }),
-        fetchDhanHoldings({ userId }),
-        fetchDhanOrders({ userId }),
-      ]);
-      const parsedPositions = posResult.status === 'fulfilled' ? pickArray(posResult.value) : [];
-      const parsedHoldings = holdResult.status === 'fulfilled' ? pickArray(holdResult.value) : [];
-      const parsedOrders = ordResult.status === 'fulfilled' ? pickArray(ordResult.value) : [];
-      const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
-      const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
-      setPositions(mergedPositions);
-      setOrders(parsedOrders);
-      try {
-        localStorage.setItem(`dhan_live_positions_${userId}`, JSON.stringify(mergedPositions));
-        localStorage.setItem(`dhan_live_orders_${userId}`, JSON.stringify(parsedOrders));
-        localStorage.setItem(`dhan_live_sync_${userId}`, String(Date.now()));
-      } catch (_) {
-        // ignore localStorage failures
+      if (b === 'dhan') {
+        const [posResult, holdResult, ordResult] = await Promise.allSettled([
+          fetchDhanPositions({ userId }),
+          fetchDhanHoldings({ userId }),
+          fetchDhanOrders({ userId }),
+        ]);
+        const parsedPositions = posResult.status === 'fulfilled' ? pickArray(posResult.value) : [];
+        const parsedHoldings = holdResult.status === 'fulfilled' ? pickArray(holdResult.value) : [];
+        const parsedOrders = ordResult.status === 'fulfilled' ? pickArray(ordResult.value) : [];
+        const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
+        const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
+        setPositions(mergedPositions);
+        setOrders(parsedOrders);
+        try {
+          localStorage.setItem(lsKey('positions'), JSON.stringify(mergedPositions));
+          localStorage.setItem(lsKey('orders'), JSON.stringify(parsedOrders));
+          localStorage.setItem(`${lsKey('sync')}`, String(Date.now()));
+        } catch (_) {
+          // ignore localStorage failures
+        }
+        if (!mergedPositions.length && !parsedOrders.length) {
+          setMessage('Session active. No open positions/holdings found for this account.');
+        } else if (!mergedPositionsRaw.length && mergedPositions.length) {
+          setMessage(`Session active. Positions reconstructed from ${parsedOrders.length} Dhan orders.`);
+        }
+        return;
       }
-      if (!mergedPositions.length && !parsedOrders.length) {
-        setMessage('Session active. No open positions/holdings found for this account.');
-      } else if (!mergedPositionsRaw.length && mergedPositions.length) {
-        setMessage(`Session active. Positions reconstructed from ${parsedOrders.length} Dhan orders.`);
+
+      if (b === 'angelone') {
+        const [posResult, holdResult, ordResult] = await Promise.allSettled([
+          fetchAngelonePositions({ userId }),
+          fetchAngeloneHoldings({ userId }),
+          fetchAngeloneOrders({ userId }),
+        ]);
+        const parsedPositions = posResult.status === 'fulfilled' ? pickArray(posResult.value) : [];
+        const parsedHoldings = holdResult.status === 'fulfilled' ? pickArray(holdResult.value) : [];
+        const parsedOrders = ordResult.status === 'fulfilled' ? pickArray(ordResult.value) : [];
+        const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
+        const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
+        setPositions(mergedPositions);
+        setOrders(parsedOrders);
+        try {
+          localStorage.setItem(lsKey('positions'), JSON.stringify(mergedPositions));
+          localStorage.setItem(lsKey('orders'), JSON.stringify(parsedOrders));
+        } catch (_) {
+          // ignore
+        }
+        if (!mergedPositions.length && !parsedOrders.length) {
+          setMessage('Session active. No open positions/holdings found for this Angel One account.');
+        } else if (!mergedPositionsRaw.length && mergedPositions.length) {
+          setMessage(`Session active. Positions reconstructed from ${parsedOrders.length} Angel One orders.`);
+        }
+        return;
       }
+
+      if (b === 'samco' || b === 'upstox') {
+        const fetchPos = b === 'samco' ? fetchSamcoBrokerPositions : fetchUpstoxBrokerPositions;
+        const fetchHold = b === 'samco' ? fetchSamcoBrokerHoldings : fetchUpstoxBrokerHoldings;
+        const fetchOrd = b === 'samco' ? fetchSamcoBrokerOrders : fetchUpstoxBrokerOrders;
+        const [posResult, holdResult, ordResult] = await Promise.allSettled([
+          fetchPos({ userId }),
+          fetchHold({ userId }),
+          fetchOrd({ userId }),
+        ]);
+        const pv = posResult.status === 'fulfilled' ? posResult.value : {};
+        const hv = holdResult.status === 'fulfilled' ? holdResult.value : {};
+        const ov = ordResult.status === 'fulfilled' ? ordResult.value : {};
+        const parsedPositions = pickArray(pv?.data ?? pv);
+        const parsedHoldings = pickArray(hv?.data ?? hv);
+        const parsedOrders = pickArray(ov?.data ?? ov);
+        const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
+        const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
+        setPositions(mergedPositions);
+        setOrders(parsedOrders);
+        const note = String(pv?.message || hv?.message || ov?.message || '').trim();
+        if (note) {
+          setMessage(note);
+        } else if (!mergedPositions.length && !parsedOrders.length) {
+          setMessage(`No portfolio rows returned for ${BROKER_LABELS[b] || b}.`);
+        }
+        return;
+      }
+
+      setPositions([]);
+      setOrders([]);
     } catch (e) {
-      setError(e?.message || 'Failed to fetch Dhan live data');
+      setError(e?.message || `Failed to fetch live data for ${BROKER_LABELS[b] || b}`);
     }
-  };
+  }, [selectedBroker, userId]);
+
+  useEffect(() => {
+    if (!userId || activeTab !== 'broker') return;
+    const r = rows.find((x) => String(x.broker) === String(selectedBroker));
+    if (!r?.has_session) {
+      setPositions([]);
+      setOrders([]);
+      return;
+    }
+    loadLiveData();
+  }, [selectedBroker, userId, activeTab, rows, loadLiveData]);
 
   useEffect(() => {
     loadBrokerRows();
@@ -524,7 +640,7 @@ function ProfilePage() {
       }
 
       await loadBrokerRows();
-      if (validated && row.broker === 'dhan') {
+      if (validated) {
         await loadLiveData();
       }
       if (validated && onboardingBrokerSetup) {
@@ -548,26 +664,33 @@ function ProfilePage() {
   };
 
   const onRenewBrokerToken = async (row) => {
-    if (!row || row.broker !== 'dhan') return;
+    if (!row) return;
+    const b = String(row.broker || '').toLowerCase();
+    if (b !== 'dhan' && b !== 'angelone') return;
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      const res = await connectDhan({
-        user_id: userId,
-        client_id: String(row.client_id || '').trim(),
-        access_token: String(row.credentials?.access_token || '').trim(),
-        renew_token: true,
-      });
-      const renewedToken = String(res?.session_token || '').trim();
-      if (renewedToken) {
-        updateRowCredential(row.broker, 'access_token', renewedToken);
+      if (b === 'dhan') {
+        const res = await connectDhan({
+          user_id: userId,
+          client_id: String(row.client_id || '').trim(),
+          access_token: String(row.credentials?.access_token || '').trim(),
+          renew_token: true,
+        });
+        const renewedToken = String(res?.session_token || '').trim();
+        if (renewedToken) {
+          updateRowCredential(row.broker, 'access_token', renewedToken);
+        }
+        setMessage('Dhan access token renewed successfully.');
+      } else {
+        await ensureAngeloneSession({ user_id: userId });
+        setMessage('Angel One session refreshed (token rotation when supported).');
       }
-      setMessage('Dhan access token renewed successfully.');
       await loadBrokerRows();
       await loadLiveData();
     } catch (e) {
-      setError(e?.message || 'Failed to renew Dhan token');
+      setError(e?.message || `Failed to refresh ${BROKER_LABELS[b] || b} session`);
     } finally {
       setBusy(false);
     }
@@ -596,6 +719,8 @@ function ProfilePage() {
       is_enabled: false,
       has_session: false,
       live_enabled: false,
+      daily_session_ok: false,
+      token_stored: false,
       credentials: emptyCredentials(broker),
     }));
     if (!rows.length) return fallback.map((row) => applyDraftToRow(row));
@@ -610,6 +735,8 @@ function ProfilePage() {
             is_enabled: false,
             has_session: false,
             live_enabled: false,
+            daily_session_ok: false,
+            token_stored: false,
             credentials: emptyCredentials(broker),
           });
     });
@@ -1045,9 +1172,15 @@ function ProfilePage() {
               >
                 Validate & Create Session
               </Button>
-              {activeBrokerRow.broker === 'dhan' ? (
-                <Button size="small" variant="outlined" onClick={() => onRenewBrokerToken(activeBrokerRow)} disabled={busy} sx={{ textTransform: 'none' }}>
-                  Renew Token
+              {activeBrokerRow.broker === 'dhan' || activeBrokerRow.broker === 'angelone' ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => onRenewBrokerToken(activeBrokerRow)}
+                  disabled={busy || !activeBrokerRow.has_session}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {activeBrokerRow.broker === 'dhan' ? 'Renew Token' : 'Refresh session'}
                 </Button>
               ) : null}
               {activeBrokerRow.doc_url ? (
@@ -1056,9 +1189,12 @@ function ProfilePage() {
                 </Button>
               ) : null}
             </Stack>
+            <Typography sx={{ fontSize: 12, color: '#666', mb: 1 }}>
+              Each <b>IST calendar day</b>, run <b>Validate &amp; Create Session</b> once (PIN, TOTP, or tokens as required by the broker) so the integration is active for that India calendar day. <b>Last auth</b> is always shown in <b>IST</b>.
+            </Typography>
             {activeBrokerRow.broker === 'dhan' ? (
               <Typography sx={{ fontSize: 12, color: '#666', mb: 1 }}>
-                Enter mobile/client id, PIN and TOTP, then click <b>Validate &amp; Create Session</b>. If consent redirect is needed, complete it and return to <code>https://localhost:3000/callback</code>.
+                If Dhan shows a consent redirect, complete it and return to <code>https://localhost:3000/callback</code>.
               </Typography>
             ) : null}
             {!Boolean(activeBrokerRow?.is_enabled) ? (
@@ -1076,6 +1212,11 @@ function ProfilePage() {
                 Dhan allows maximum {DHAN_DAILY_CONSENT_LIMIT} consent logins per day. Reuse the existing session whenever possible.
               </Alert>
             ) : null}
+            {activeBrokerRow.token_stored && activeBrokerRow.daily_session_ok === false ? (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                A broker session is on file, but today&apos;s <b>IST</b> window is not active. Use <b>Validate &amp; Create Session</b> again for the current calendar day in India (credentials / TOTP as your broker requires).
+              </Alert>
+            ) : null}
 
             <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
               <Chip size="small" label={activeBrokerRow.has_session ? 'Session active' : 'No session'} color={activeBrokerRow.has_session ? 'success' : 'default'} variant={activeBrokerRow.has_session ? 'filled' : 'outlined'} />
@@ -1083,7 +1224,9 @@ function ProfilePage() {
                 <Chip size="small" label={isLiveExecution(activeBrokerRow) ? 'LIVE enabled' : 'Session required'} color={isLiveExecution(activeBrokerRow) ? 'error' : 'primary'} variant={isLiveExecution(activeBrokerRow) ? 'filled' : 'outlined'} />
               ) : null}
               <Typography sx={{ fontSize: 12, color: '#666', ml: 0.5 }}>
-                {activeBrokerRow.last_auth_at ? `Last auth: ${new Date(activeBrokerRow.last_auth_at).toLocaleString()}` : 'Validate to create broker session.'}
+                {activeBrokerRow.last_auth_at
+                  ? `Last auth (IST): ${formatLastAuthIST(activeBrokerRow.last_auth_at)}`
+                  : 'Validate to create broker session.'}
               </Typography>
             </Stack>
           </>
@@ -1097,7 +1240,9 @@ function ProfilePage() {
         <Typography variant="h6" sx={{ mb: 1 }}>Live Positions</Typography>
         {!positions.length ? (
           <Typography sx={{ fontSize: 13, color: '#666' }}>
-            {connectedDhan ? 'No open positions found.' : 'Validate Dhan setup to load positions.'}
+            {activeBrokerRow?.has_session
+              ? 'No open positions found.'
+              : `Validate ${BROKER_LABELS[selectedBroker] || selectedBroker} setup to load positions.`}
           </Typography>
         ) : (
           <TableContainer>
@@ -1125,7 +1270,9 @@ function ProfilePage() {
         <Typography variant="h6" sx={{ mb: 1 }}>Recent Orders</Typography>
         {!orders.length ? (
           <Typography sx={{ fontSize: 13, color: '#666' }}>
-            {connectedDhan ? 'No orders found.' : 'Validate Dhan setup to load orders.'}
+            {activeBrokerRow?.has_session
+              ? 'No orders found.'
+              : `Validate ${BROKER_LABELS[selectedBroker] || selectedBroker} setup to load orders.`}
           </Typography>
         ) : (
           <TableContainer>
