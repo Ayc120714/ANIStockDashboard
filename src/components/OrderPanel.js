@@ -11,6 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { brokerRowHasLiveTradingSession, fetchBrokerSetup } from '../api/brokers';
 import { approveTrailSlToCost, placeOrder, updateSuperTargetWithOco } from '../api/orders';
 import { useAuth } from '../auth/AuthContext';
 
@@ -34,6 +35,7 @@ const BROKER_LEVERAGE = {
   samco: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
   upstox: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
 };
+const BROKER_LABELS = { dhan: 'Dhan', angelone: 'Angel One', samco: 'Samco', upstox: 'Upstox' };
 
 const toPositiveNumber = (value) => {
   const n = Number(value);
@@ -112,6 +114,37 @@ function OrderPanel({
   const [trailHandled, setTrailHandled] = useState({});
 
   const capabilities = useMemo(() => BROKER_CAPABILITIES[broker] || BROKER_CAPABILITIES.dhan, [broker]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+    (async () => {
+      try {
+        const rows = await fetchBrokerSetup({ userId });
+        const arr = Array.isArray(rows) ? rows : [];
+        const order = ['dhan', 'angelone', 'samco', 'upstox'];
+        let pick = order
+          .map((b) => arr.find((r) => String(r.broker || '').toLowerCase() === b && brokerRowHasLiveTradingSession(r)))
+          .find(Boolean);
+        if (!pick) {
+          pick = order
+            .map((b) => arr.find((r) => {
+              if (String(r.broker || '').toLowerCase() !== b) return false;
+              return Boolean(r.is_enabled || r.token_stored);
+            }))
+            .find(Boolean);
+        }
+        if (!cancelled && pick?.broker) {
+          setBroker(String(pick.broker).toLowerCase());
+        }
+      } catch (_) {
+        /* keep defaultBroker */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
   const effectiveOrderType = orderType === 'SUPER' ? superEntryType : orderType;
   const requiresFundsCheckPrice =
     side === 'BUY' || (side === 'SELL' && productType === 'INTRADAY');
@@ -469,7 +502,7 @@ function OrderPanel({
       </Stack>
 
       {hideBrokerSelector ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1.2, gap: 0.75 }}>
           <Button
             variant={side === 'BUY' ? 'contained' : 'outlined'}
             color="success"
@@ -493,6 +526,12 @@ function OrderPanel({
           >
             Set Alert
           </Button>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Broker: ${BROKER_LABELS[broker] || broker}`}
+            sx={{ fontWeight: 600, borderColor: '#1a3c5e', color: '#1a3c5e' }}
+          />
         </Stack>
       ) : null}
 

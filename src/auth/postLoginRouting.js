@@ -1,3 +1,5 @@
+import { fetchBrokerSetup, hasAnyBrokerLiveSession } from '../api/brokers';
+
 export const DHAN_DAILY_CONSENT_LIMIT = 25;
 export const consentBlockKeyForToday = (userId) =>
   `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
@@ -70,8 +72,37 @@ export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }
     return;
   }
 
-  // Strict flow: after email login, always enter Dhan callback consent flow.
-  // Callback page will reuse active session, or generate consent URL using
-  // existing backend env credentials (client_id/api_key/api_secret).
-  navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
+  let pendingDhanLogin = false;
+  try {
+    const raw = sessionStorage.getItem(`dhan_pending_connect_${userId}`);
+    const p = raw ? JSON.parse(raw) : {};
+    const url = String(p?.login_url || '').trim();
+    const createdAt = Number(p?.created_at || 0);
+    pendingDhanLogin = Boolean(url && (!createdAt || (Date.now() - createdAt) < 30 * 60 * 1000));
+  } catch (_) {
+    pendingDhanLogin = false;
+  }
+
+  if (pendingDhanLogin) {
+    navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
+    return;
+  }
+
+  try {
+    const rows = await fetchBrokerSetup({ userId });
+    if (hasAnyBrokerLiveSession(rows)) {
+      navigate(fallback, { replace: true });
+      return;
+    }
+  } catch (_) {
+    navigate(fallback, { replace: true });
+    return;
+  }
+
+  const isAdminUser = Boolean(nextUser?.is_admin);
+  if (!isAdminUser) {
+    navigate('/profile', { replace: true, state: { openBrokerSetup: true, from: fallback } });
+    return;
+  }
+  navigate(fallback, { replace: true });
 };

@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, TextField, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router';
 import { completeEmailOtpLogin, completeLogin, completeSignup, resendOtp, verifyOtp } from '../api/auth';
-import { fetchBrokerSetup } from '../api/brokers';
+import { fetchBrokerSetup, hasAnyBrokerLiveSession } from '../api/brokers';
 import { routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
@@ -123,8 +123,7 @@ function OtpVerifyPage() {
       try {
         if (userId) {
           const rows = await fetchBrokerSetup({ userId });
-          const hasSession = (Array.isArray(rows) ? rows : []).some((r) => Boolean(r?.has_session));
-          if (!hasSession) {
+          if (!hasAnyBrokerLiveSession(rows)) {
             navigate('/profile', {
               replace: true,
               state: { openBrokerSetup: true, from: fallbackPath, showTelegramBotInfo: true },

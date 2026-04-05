@@ -263,7 +263,7 @@ const normalizeTradeLevels = (row) => {
 function ShortTermPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAdmin, user } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState([]);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -296,13 +296,13 @@ function ShortTermPage() {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetchWatchlist('short_term', { includeAll: isAdmin }),
-      fetchWatchlistSignals({ includeAll: isAdmin, timeframe: 'intraday' }),
+      fetchWatchlist('short_term'),
+      fetchWatchlistSignals({ timeframe: 'intraday' }),
     ]).then(([wl, sigs]) => {
       setData(wl);
       setSignals(sigs);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -436,7 +436,7 @@ function ShortTermPage() {
     if (!window.confirm(`Delete ${syms.length} stock(s) from Short Term?\n\n${syms.join(', ')}`)) return;
     setDeleting(true);
     try {
-      await bulkDeleteFromWatchlist(syms, 'short_term', { includeAll: isAdmin });
+      await bulkDeleteFromWatchlist(syms, 'short_term');
       setCheckedSymbols(new Set());
       load();
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }

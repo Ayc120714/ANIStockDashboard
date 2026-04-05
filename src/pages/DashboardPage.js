@@ -14,7 +14,23 @@ import {
   fetchWeeklyIndicators,
   fetchOrderBlocks,
 } from '../api/watchlist';
-import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions, fetchDhanStatus } from '../api/dhan';
+import { fetchBrokerSetup } from '../api/brokers';
+import {
+  fetchAngeloneHoldings,
+  fetchAngeloneOrders,
+  fetchAngelonePositions,
+} from '../api/angelone';
+import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
+import {
+  fetchSamcoBrokerHoldings,
+  fetchSamcoBrokerOrders,
+  fetchSamcoBrokerPositions,
+} from '../api/samcoBroker';
+import {
+  fetchUpstoxBrokerHoldings,
+  fetchUpstoxBrokerOrders,
+  fetchUpstoxBrokerPositions,
+} from '../api/upstoxBroker';
 import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
@@ -25,6 +41,8 @@ const fmtPct = (v) => { if (v == null) return '—'; const n = +v; return isNaN(
 const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
+/** First match wins: Dhan, then Angel One, then Samco, Upstox (same family as Profile). */
+const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox'];
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const deriveDirectionFromRow = (row) => {
   const reco = String(row?.recommendation || '').toLowerCase();
@@ -63,7 +81,9 @@ const normalizeBrokerRows = (payload) => {
   const rows = pickArrayRows(payload);
   const normalized = rows
     .map((row) => {
-      const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
+      const symbol = String(
+        row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
+      ).trim().toUpperCase();
       const buyQty = toNumber(row?.buyQty ?? row?.buy_qty ?? row?.buyQuantity);
       const sellQty = toNumber(row?.sellQty ?? row?.sell_qty ?? row?.sellQuantity);
       const computedHoldingQty = toNumber(
@@ -75,6 +95,8 @@ const normalizeBrokerRows = (payload) => {
         row?.netQty
         ?? row?.net_qty
         ?? row?.netQuantity
+        ?? row?.authorisedquantity
+        ?? row?.authorisedQuantity
         ?? row?.quantity
         ?? row?.qty
         ?? row?.availableQty
@@ -86,29 +108,52 @@ const normalizeBrokerRows = (payload) => {
         ?? row?.totalQty
         ?? row?.total_qty
         ?? row?.totalQuantity
-        ?? row?.netQuantity
         ?? computedHoldingQty
         ?? (buyQty - sellQty)
       );
       if (!symbol || netQty === 0) return null;
-      const avgPrice = toNumber(row?.buyAvg ?? row?.avgPrice ?? row?.averagePrice ?? row?.avg_price ?? row?.costPrice ?? row?.avgCostPrice);
-      const ltp = toNumber(row?.ltp ?? row?.lastPrice ?? row?.lastTradedPrice ?? row?.price);
+      const avgPrice = toNumber(
+        row?.buyAvg
+        ?? row?.buyavg
+        ?? row?.buyAvgPrice
+        ?? row?.buyavgprice
+        ?? row?.buyaverageprice
+        ?? row?.avgPrice
+        ?? row?.averagePrice
+        ?? row?.averageprice
+        ?? row?.avg_price
+        ?? row?.costPrice
+        ?? row?.avgCostPrice
+      );
+      const ltp = toNumber(
+        row?.ltp
+        ?? row?.Ltp
+        ?? row?.lastPrice
+        ?? row?.lastTradedPrice
+        ?? row?.close
+        ?? row?.price
+      );
       const unrealized = toNumber(
         row?.pnl
         ?? row?.unrealizedPnl
         ?? row?.unrealized_pnl
         ?? row?.holdingPnl
         ?? row?.holding_pnl
+        ?? row?.profitandloss
+        ?? row?.profitAndLoss
+        ?? row?.profit_and_loss
         ?? row?.mtm
+        ?? row?.m2m
       );
-      const fallbackUnrealized = unrealized || (avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0);
+      const computedUnrealized = avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0;
+      const unrealizedPnl = unrealized || computedUnrealized;
       return {
         symbol,
         product_type: String(row?.productType || row?.product_type || row?.product || 'INTRADAY').toUpperCase(),
         net_qty: netQty,
         avg_price: avgPrice,
         ltp,
-        unrealized_pnl: fallbackUnrealized,
+        unrealized_pnl: unrealizedPnl,
         realized_pnl: toNumber(row?.realizedPnl ?? row?.realized_pnl),
         state: 'OPEN',
       };
@@ -127,7 +172,9 @@ const deriveRowsFromDhanOrders = (payload) => {
   rows.forEach((row) => {
     const status = String(row?.orderStatus || row?.status || '').toUpperCase();
     if (!['FILLED', 'PARTIAL', 'COMPLETE'].includes(status)) return;
-    const symbol = String(row?.tradingSymbol || row?.symbol || row?.securityId || '').trim().toUpperCase();
+    const symbol = String(
+      row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
+    ).trim().toUpperCase();
     if (!symbol) return;
     const side = String(row?.transactionType || row?.side || '').toUpperCase();
     const qty = toNumber(row?.filledQty ?? row?.quantity ?? row?.qty);
@@ -157,6 +204,30 @@ const deriveRowsFromDhanOrders = (payload) => {
       realized_pnl: 0,
       state: 'OPEN',
     }));
+};
+
+const mergePositionsHoldingsOrders = (livePositionsResult, liveHoldingsResult, liveOrdersResult) => {
+  const fromPositions = livePositionsResult.status === 'fulfilled'
+    ? normalizeBrokerRows(livePositionsResult.value)
+    : [];
+  const fromHoldings = liveHoldingsResult.status === 'fulfilled'
+    ? normalizeBrokerRows(liveHoldingsResult.value)
+    : [];
+  const fromOrders = liveOrdersResult?.status === 'fulfilled'
+    ? deriveRowsFromDhanOrders(liveOrdersResult.value)
+    : [];
+  const merged = new Map();
+  [...fromPositions, ...fromHoldings, ...fromOrders].forEach((row) => {
+    merged.set(`${row.symbol}_${row.product_type}`, row);
+  });
+  return [...merged.values()];
+};
+
+const brokerRowDrivesDashboardHoldings = (row) => {
+  if (!row) return false;
+  const b = String(row.broker || '').toLowerCase();
+  if (b === 'dhan') return Boolean(row.has_session);
+  return Boolean(row.live_enabled ?? row.has_session);
 };
 
 const Card = ({ children, sx, ...props }) => (
@@ -1149,13 +1220,12 @@ function DashboardPage() {
         setRatings(Array.isArray(cached.ratings) ? cached.ratings : []);
       }
 
-      const watchlistOptions = isAdmin ? { includeAll: true } : undefined;
       const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys] = await Promise.allSettled([
         fetchMarketIndices(),
-        fetchWatchlist(null, watchlistOptions),
-        fetchWatchlistSignals({ ...(watchlistOptions || {}), timeframe: 'intraday' }),
-        fetchWeeklyIndicators(watchlistOptions),
-        fetchOrderBlocks(watchlistOptions),
+        fetchWatchlist(null),
+        fetchWatchlistSignals({ timeframe: 'intraday' }),
+        fetchWeeklyIndicators(),
+        fetchOrderBlocks(),
         fetchSectorOutlook(),
         fetchPriceShockers('gainers', 8, 'day'),
         fetchPriceShockers('losers', 8, 'day'),
@@ -1211,42 +1281,62 @@ function DashboardPage() {
       setLoading(false);
 
       let authenticated = false;
-      try {
-        const status = await fetchDhanStatus({ userId });
-        authenticated = Boolean(status?.connected);
-      } catch (_) {
-        authenticated = false;
+      let activeBroker = null;
+      if (userId) {
+        try {
+          const setupRows = await fetchBrokerSetup({ userId });
+          activeBroker = DASHBOARD_BROKER_PRIORITY.find((b) => {
+            const r = setupRows.find((x) => String(x.broker || '').toLowerCase() === b);
+            return brokerRowDrivesDashboardHoldings(r);
+          }) || null;
+          authenticated = Boolean(activeBroker);
+        } catch (_) {
+          authenticated = false;
+          activeBroker = null;
+        }
       }
-      // Dhan ``connected`` requires today's IST PIN+TOTP session; do not bypass with local markers.
-      const effectiveAuthenticated = authenticated;
 
       let liveBrokerPositions = [];
-      if (effectiveAuthenticated) {
+      if (authenticated && userId && activeBroker) {
         try {
-          const [livePositionsResult, liveHoldingsResult] = await Promise.allSettled([
-            fetchDhanPositions({ userId }),
-            fetchDhanHoldings({ userId }),
-          ]);
-          const liveOrdersResult = await Promise.allSettled([fetchDhanOrders({ userId })]);
-          const fromPositions = livePositionsResult.status === 'fulfilled'
-            ? normalizeBrokerRows(livePositionsResult.value)
-            : [];
-          const fromHoldings = liveHoldingsResult.status === 'fulfilled'
-            ? normalizeBrokerRows(liveHoldingsResult.value)
-            : [];
-          const fromOrders = liveOrdersResult[0]?.status === 'fulfilled'
-            ? deriveRowsFromDhanOrders(liveOrdersResult[0].value)
-            : [];
-          const merged = new Map();
-          [...fromPositions, ...fromHoldings, ...fromOrders].forEach((row) => {
-            merged.set(`${row.symbol}_${row.product_type}`, row);
-          });
-          liveBrokerPositions = [...merged.values()];
+          if (activeBroker === 'dhan') {
+            const [livePositionsResult, liveHoldingsResult] = await Promise.allSettled([
+              fetchDhanPositions({ userId }),
+              fetchDhanHoldings({ userId }),
+            ]);
+            const [ord0] = await Promise.allSettled([fetchDhanOrders({ userId })]);
+            liveBrokerPositions = mergePositionsHoldingsOrders(
+              livePositionsResult,
+              liveHoldingsResult,
+              ord0,
+            );
+          } else if (activeBroker === 'angelone') {
+            const [p, h] = await Promise.allSettled([
+              fetchAngelonePositions({ userId }),
+              fetchAngeloneHoldings({ userId }),
+            ]);
+            const [o] = await Promise.allSettled([fetchAngeloneOrders({ userId })]);
+            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
+          } else if (activeBroker === 'samco') {
+            const [p, h] = await Promise.allSettled([
+              fetchSamcoBrokerPositions({ userId }),
+              fetchSamcoBrokerHoldings({ userId }),
+            ]);
+            const [o] = await Promise.allSettled([fetchSamcoBrokerOrders({ userId })]);
+            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
+          } else if (activeBroker === 'upstox') {
+            const [p, h] = await Promise.allSettled([
+              fetchUpstoxBrokerPositions({ userId }),
+              fetchUpstoxBrokerHoldings({ userId }),
+            ]);
+            const [o] = await Promise.allSettled([fetchUpstoxBrokerOrders({ userId })]);
+            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
+          }
         } catch (_) {
           liveBrokerPositions = [];
         }
       }
-      if (!liveBrokerPositions.length && effectiveAuthenticated) {
+      if (!liveBrokerPositions.length && authenticated && activeBroker === 'dhan') {
         const cachedRows = getCachedBrokerRows(userId);
         if (cachedRows.length) {
           liveBrokerPositions = normalizeBrokerRows(cachedRows);

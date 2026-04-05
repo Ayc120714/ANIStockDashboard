@@ -1,5 +1,31 @@
 import { tradeApiGet, tradeApiPost } from './tradeApiClient';
 
+/** True when this broker row can load live portfolio today (matches Dashboard / Profile semantics). */
+export const brokerRowHasLiveTradingSession = (row) => {
+  if (!row) return false;
+  const b = String(row.broker || '').toLowerCase();
+  if (b === 'dhan') return Boolean(row.has_session);
+  return Boolean(row.live_enabled ?? row.has_session);
+};
+
+export const hasAnyBrokerLiveSession = (rows) =>
+  Array.isArray(rows) && rows.some((r) => brokerRowHasLiveTradingSession(r));
+
+/**
+ * Whether we should run the Dhan OAuth/consent callback flow (env + user intent).
+ * Avoids calling Dhan connect when the user only uses Angel / Samco / Upstox.
+ */
+export const userMayNeedDhanConsentFlow = (rows, draft = {}) => {
+  const d = String(draft?.client_id || '').trim();
+  const k = String(draft?.credentials?.api_key || draft?.api_key || '').trim();
+  const s = String(draft?.credentials?.api_secret || draft?.api_secret || '').trim();
+  if (d || k || s) return true;
+  const arr = Array.isArray(rows) ? rows : [];
+  const dhanRow = arr.find((r) => String(r.broker || '').toLowerCase() === 'dhan');
+  if (!dhanRow) return false;
+  return Boolean(dhanRow.token_stored || dhanRow.is_enabled);
+};
+
 export const fetchBrokerOptions = () => tradeApiGet('/brokers/options');
 
 export const fetchBrokerSetup = async ({ userId } = {}) => {

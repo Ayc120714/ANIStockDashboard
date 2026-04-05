@@ -3,6 +3,7 @@ import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/ma
 import { useNavigate } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { fetchBrokerSetup, hasAnyBrokerLiveSession, userMayNeedDhanConsentFlow } from '../api/brokers';
 import { connectDhan, ensureDhanSession } from '../api/dhan';
 import { markConsentLimitForToday, shouldSkipBrokerConsentToday } from '../auth/postLoginRouting';
 
@@ -19,7 +20,7 @@ function DhanCallbackPage() {
     let mounted = true;
     const hardWatchdog = setTimeout(() => {
       if (!mounted) return;
-      setError('Dhan callback timed out. Please retry login once.');
+      setError('Broker callback timed out. Please try again or open Profile → Broker to continue setup.');
       setLoading(false);
     }, 22000);
 
@@ -76,7 +77,26 @@ function DhanCallbackPage() {
             // continue with normal flow
           }
 
-          // Prefer existing valid broker session to avoid unnecessary consent churn.
+          let setupRows = [];
+          try {
+            setupRows = await fetchBrokerSetup({ userId });
+          } catch (_) {
+            setupRows = [];
+          }
+          if (hasAnyBrokerLiveSession(setupRows)) {
+            navigate(targetPath || '/', { replace: true });
+            return;
+          }
+
+          if (!userMayNeedDhanConsentFlow(setupRows, draft)) {
+            navigate('/profile', {
+              replace: true,
+              state: { openBrokerSetup: true, from: targetPath || '/' },
+            });
+            return;
+          }
+
+          // Prefer existing valid Dhan session to avoid unnecessary consent churn.
           try {
             const ensured = await withTimeout(
               ensureDhanSession({ user_id: userId }),
@@ -158,7 +178,10 @@ function DhanCallbackPage() {
             navigate(targetPath || '/', { replace: true, state: { brokerConsentLimited: true } });
             return;
           }
-          setError(e?.message || 'Failed to complete Dhan login (Step 3 token exchange).');
+          const hint =
+            ' Choose your broker (e.g. Angel One) under Profile → Broker and validate there. '
+            + 'Dhan setup requires server-side Dhan API keys when using Dhan.';
+          setError(`${e?.message || 'Failed to complete broker login (Dhan token exchange).'}${hint}`);
           setLoading(false);
         }
       }
@@ -174,16 +197,16 @@ function DhanCallbackPage() {
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
       <Paper sx={{ width: '100%', maxWidth: 560, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>Dhan Callback</Typography>
+        <Typography variant="h6" sx={{ mb: 1 }}>Broker session</Typography>
         {loading ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CircularProgress size={20} />
-            <Typography sx={{ fontSize: 14 }}>Finalizing broker session...</Typography>
+            <Typography sx={{ fontSize: 14 }}>Finalizing session…</Typography>
           </Box>
         ) : null}
         {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          Dhan consent login limit is {DHAN_DAILY_CONSENT_LIMIT} times per day.
+          Dhan browser login is limited to {DHAN_DAILY_CONSENT_LIMIT} consent attempts per day. Angel One, Samco, and Upstox are configured under Profile → Broker.
         </Alert>
         {!loading ? (
           <Button sx={{ mt: 1.5, textTransform: 'none' }} variant="contained" onClick={() => navigate('/profile', { replace: true })}>

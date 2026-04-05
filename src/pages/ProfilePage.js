@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -25,7 +25,7 @@ import {
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
-import { fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
+import { brokerRowHasLiveTradingSession, fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
 import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';
 import {
   fetchAngeloneHoldings,
@@ -137,6 +137,7 @@ function ProfilePage() {
   const [activeTab, setActiveTab] = useState('account');
   const [rows, setRows] = useState([]);
   const [selectedBroker, setSelectedBroker] = useState('dhan');
+  const brokerSelectInitializedRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -351,6 +352,32 @@ function ProfilePage() {
   useEffect(() => {
     loadBrokerRows();
   }, [loadBrokerRows]);
+
+  useEffect(() => {
+    brokerSelectInitializedRef.current = false;
+  }, [userId]);
+
+  useEffect(() => {
+    if (!rows.length) {
+      brokerSelectInitializedRef.current = false;
+      return;
+    }
+    if (brokerSelectInitializedRef.current) return;
+    brokerSelectInitializedRef.current = true;
+    const livePriority = ['dhan', 'angelone', 'samco', 'upstox'];
+    const withLive = livePriority
+      .map((b) => rows.find((r) => String(r.broker || '').toLowerCase() === b && brokerRowHasLiveTradingSession(r)))
+      .find(Boolean);
+    if (withLive?.broker) {
+      setSelectedBroker(String(withLive.broker));
+      return;
+    }
+    const prioritized = ['angelone', 'samco', 'upstox', 'dhan'];
+    const pick = prioritized
+      .map((b) => rows.find((r) => String(r.broker || '').toLowerCase() === b))
+      .find(Boolean);
+    if (pick?.broker) setSelectedBroker(String(pick.broker));
+  }, [rows]);
 
   useEffect(() => {
     loadAiKeys();
@@ -1147,6 +1174,9 @@ function ProfilePage() {
                     InputProps={brokerSecretAdornment('pin')}
                   />
                   <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
+                  <Typography sx={{ fontSize: 11, color: '#666', gridColumn: '1 / -1', lineHeight: 1.4 }}>
+                    Use the <strong>Published API key</strong> from the Angel One SmartAPI developer console. Retail login does not use a separate client secret; enable <strong>Enable now</strong>, then enter <strong>PIN</strong> and <strong>6-digit TOTP</strong> from the Angel One authenticator app and click Validate. Optional access token is only if you already have a valid JWT.
+                  </Typography>
                 </>
               ) : null}
               {activeBrokerRow.broker === 'upstox' ? (

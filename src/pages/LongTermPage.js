@@ -197,7 +197,6 @@ function LongTermPage() {
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [copiedCsv, setCopiedCsv] = useState(false);
-  const [visibleSymbols, setVisibleSymbols] = useState(new Set());
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [triggeredAlert, setTriggeredAlert] = useState('');
   const [movementDialog, setMovementDialog] = useState({ open: false, symbol: '', current: 0, row: null, pivots: null });
@@ -205,7 +204,6 @@ function LongTermPage() {
   const [selectedPivotPreset, setSelectedPivotPreset] = useState('');
   const rowsPerPage = 15;
   const userId = String(user?.id || user?.user_id || user?.email || 'guest');
-  const visibleSymbolsKey = `long_term_visible_symbols_${userId}`;
   const priceAlertsKey = `long_term_price_alerts_${userId}`;
 
   const loadSymbols = useCallback(() => {
@@ -217,8 +215,8 @@ function LongTermPage() {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetchWatchlist('long_term', { includeAll: isAdmin }),
-      fetchWatchlistSignals({ includeAll: isAdmin, timeframe: 'intraday' }),
+      fetchWatchlist('long_term'),
+      fetchWatchlistSignals({ timeframe: 'intraday' }),
     ])
       .then(([wl, sigs]) => {
         setData(Array.isArray(wl) ? wl : []);
@@ -226,23 +224,13 @@ function LongTermPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     load(); loadSymbols();
     const iv = setInterval(load, 60000);
     return () => clearInterval(iv);
   }, [load, loadSymbols]);
-
-  useEffect(() => {
-    try {
-      const rawVisible = localStorage.getItem(visibleSymbolsKey);
-      const parsedVisible = rawVisible ? JSON.parse(rawVisible) : [];
-      setVisibleSymbols(new Set(Array.isArray(parsedVisible) ? parsedVisible.map(normalizeSymbol).filter(Boolean) : []));
-    } catch (_) {
-      setVisibleSymbols(new Set());
-    }
-  }, [visibleSymbolsKey, priceAlertsKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -281,7 +269,7 @@ function LongTermPage() {
     return m;
   }, [signals]);
 
-  const serverDedupedData = useMemo(() => {
+  const dedupedData = useMemo(() => {
     const bySymbol = new Map();
     const mergeSignalIntoRow = (baseRow, signalRow = {}) => {
       const mergedRow = { ...baseRow };
@@ -312,18 +300,13 @@ function LongTermPage() {
     return Array.from(bySymbol.values());
   }, [data, sigMap]);
 
-  const dedupedData = useMemo(() => {
-    if (isAdmin) return serverDedupedData;
-    return serverDedupedData.filter((row) => visibleSymbols.has(normalizeSymbol(row.symbol)));
-  }, [isAdmin, serverDedupedData, visibleSymbols]);
-
   const existingSymbols = useMemo(
     () => new Set(dedupedData.map((d) => normalizeSymbol(d.symbol)).filter(Boolean)),
     [dedupedData]
   );
   const existingServerSymbols = useMemo(
-    () => new Set(serverDedupedData.map((d) => normalizeSymbol(d.symbol)).filter(Boolean)),
-    [serverDedupedData]
+    () => new Set(dedupedData.map((d) => normalizeSymbol(d.symbol)).filter(Boolean)),
+    [dedupedData]
   );
 
   const availableSymbols = useMemo(() =>
@@ -344,11 +327,6 @@ function LongTermPage() {
       ).filter((symbol) => !existingServerSymbols.has(symbol));
       for (const symbol of toAdd) {
         await addToWatchlist(symbol, 'long_term', '');
-      }
-      if (!isAdmin && toAdd.length) {
-        const nextVisible = new Set([...visibleSymbols, ...toAdd]);
-        setVisibleSymbols(nextVisible);
-        localStorage.setItem(visibleSymbolsKey, JSON.stringify([...nextVisible]));
       }
       setSelectedStocks([]);
       load();
@@ -412,14 +390,8 @@ function LongTermPage() {
     if (!window.confirm(`Delete ${syms.length} stock(s) from Long Term?\n\n${syms.join(', ')}`)) return;
     setDeleting(true);
     try {
-      await bulkDeleteFromWatchlist(syms, 'long_term', { includeAll: isAdmin });
+      await bulkDeleteFromWatchlist(syms, 'long_term');
       setCheckedSymbols(new Set());
-      if (!isAdmin && syms.length) {
-        const removeSet = new Set(syms.map(normalizeSymbol));
-        const nextVisible = new Set([...visibleSymbols].filter((s) => !removeSet.has(normalizeSymbol(s))));
-        setVisibleSymbols(nextVisible);
-        localStorage.setItem(visibleSymbolsKey, JSON.stringify([...nextVisible]));
-      }
       load();
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }
     setDeleting(false);
