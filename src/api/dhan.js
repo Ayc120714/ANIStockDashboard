@@ -22,28 +22,35 @@ export const fetchDhanStatus = async ({ userId } = {}) => {
   return tradeApiGet(`/dhan/status?${withUser(userId)}`);
 };
 
-export const connectDhan = async ({
-  user_id,
-  client_id,
-  pin,
-  totp,
-  access_token,
-  renew_token,
-  api_key,
-  api_secret,
-  token_id,
-} = {}) => {
+const firstNonEmptyStr = (...vals) => {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+};
+
+/**
+ * POST body must include api_key / api_secret as real strings when set.
+ * JSON.stringify drops keys whose value is `undefined`, which made the backend think secrets were missing.
+ */
+export const connectDhan = async (params = {}) => {
+  const p = params || {};
+  const clientId = firstNonEmptyStr(p.client_id, p.clientId, p.dhanClientId);
+  const apiKey = firstNonEmptyStr(p.api_key, p.app_id, p.appId, p.apiKey);
+  const apiSecret = firstNonEmptyStr(p.api_secret, p.app_secret, p.appSecret);
   try {
     return await tradeApiPost('/dhan/connect', {
-      user_id,
-      client_id,
-      pin,
-      totp,
-      access_token,
-      renew_token,
-      api_key,
-      api_secret,
-      token_id,
+      user_id: p.user_id ?? null,
+      client_id: clientId,
+      pin: p.pin != null ? String(p.pin) : '',
+      totp: p.totp != null ? String(p.totp) : '',
+      access_token: p.access_token != null ? String(p.access_token) : '',
+      renew_token: Boolean(p.renew_token),
+      api_key: apiKey,
+      api_secret: apiSecret,
+      token_id: p.token_id != null ? String(p.token_id) : '',
     });
   } catch (e) {
     throw normalizeDhanError(e);

@@ -49,6 +49,7 @@ import {
   fetchUpstoxBrokerOrders,
   fetchUpstoxBrokerPositions,
 } from '../api/upstoxBroker';
+import { resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
 
 const pickArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -94,6 +95,32 @@ const deriveOpenPositionsFromOrders = (orders) => {
 
 const AI_KEY_PROVIDERS = ['groq', 'gemini', 'cerebras', 'perplexity'];
 const BROKER_LABELS = { dhan: 'Dhan', angelone: 'Angel One', samco: 'Samco', upstox: 'Upstox' };
+
+/** Hints for password managers; `new-password` on non-login fields often triggers wrong suggestions. */
+const BROKER_ANTI_AUTOFILL_DATA = {
+  'data-lpignore': 'true',
+  'data-1p-ignore': 'true',
+  'data-bwignore': 'true',
+  'data-form-type': 'other',
+};
+
+const buildBrokerInputProps = (name) => ({
+  name,
+  autoComplete: 'off',
+  spellCheck: false,
+  autoCapitalize: 'off',
+  autoCorrect: 'off',
+  ...BROKER_ANTI_AUTOFILL_DATA,
+});
+
+const buildBrokerSecretInputProps = (name) => ({
+  name,
+  autoComplete: 'off',
+  spellCheck: false,
+  autoCapitalize: 'off',
+  autoCorrect: 'off',
+  ...BROKER_ANTI_AUTOFILL_DATA,
+});
 const DHAN_DAILY_CONSENT_LIMIT = 25;
 const consentBlockKeyForToday = (userId) => `dhan_consent_blocked_${String(userId || '')}_${new Date().toISOString().slice(0, 10)}`;
 
@@ -134,6 +161,7 @@ function ProfilePage() {
   );
   const onboardingBrokerSetup = Boolean(location.state?.openBrokerSetup);
   const onboardingTargetPath = location.state?.from || '/';
+  const onboardingPreferredBroker = String(location.state?.preferredBroker || '').toLowerCase();
   const [activeTab, setActiveTab] = useState('account');
   const [rows, setRows] = useState([]);
   const [selectedBroker, setSelectedBroker] = useState('dhan');
@@ -166,6 +194,34 @@ function ProfilePage() {
         </IconButton>
       </InputAdornment>
     ),
+  });
+  /** Chrome often ignores `autocomplete=off` for “login-like” pairs; brief readOnly blocks injected fills. */
+  const [brokerAutofillUnlock, setBrokerAutofillUnlock] = useState({});
+  useEffect(() => {
+    setBrokerAutofillUnlock({});
+  }, [selectedBroker]);
+  const brokerFieldsUnlocked = Boolean(brokerAutofillUnlock[selectedBroker]);
+  const brokerLockedInputProps = useCallback(
+    (name, { secret = false } = {}) => {
+      const base = secret ? buildBrokerSecretInputProps(name) : buildBrokerInputProps(name);
+      return {
+        ...base,
+        readOnly: !brokerFieldsUnlocked,
+        onFocus: (e) => {
+          if (!brokerFieldsUnlocked) {
+            setBrokerAutofillUnlock((p) => ({ ...p, [selectedBroker]: true }));
+          }
+          const t = e?.target;
+          if (t && t.readOnly) t.readOnly = false;
+        },
+      };
+    },
+    [brokerFieldsUnlocked, selectedBroker]
+  );
+  const brokerPinMaskSx = (pinVisible) => ({
+    '& input': {
+      WebkitTextSecurity: pinVisible ? 'none' : 'disc',
+    },
   });
   const brokerDraftKey = useCallback(
     (broker) => `broker_integration_draft_${userId}_${String(broker || '').toLowerCase()}`,
@@ -202,17 +258,54 @@ function ProfilePage() {
     }
   }, [userId, brokerDraftKey]);
 
+  /** Persist broker form draft only on explicit user edits — not after API-loaded `rows` (avoids mirroring server/env defaults into localStorage). */
+  const persistBrokerDraftForRow = useCallback(
+    (row) => {
+      if (!userId || !row?.broker) return;
+      const broker = String(row.broker).toLowerCase();
+      if (!broker) return;
+      try {
+        const isDhan = broker === 'dhan';
+        const draftClientId = isDhan
+          ? resolveDhanClientIdForSubmit(row?.client_id, row?.credentials?.mobile)
+          : String(row?.client_id || '').trim();
+        localStorage.setItem(
+          brokerDraftKey(broker),
+          JSON.stringify({
+            client_id: draftClientId,
+            credentials: {
+              mobile: isDhan ? '' : String(row?.credentials?.mobile || '').trim(),
+              api_key: String(row?.credentials?.api_key || '').trim(),
+              api_secret: String(row?.credentials?.api_secret || '').trim(),
+            },
+          })
+        );
+      } catch (_) {
+        // ignore localStorage failures
+      }
+    },
+    [userId, brokerDraftKey]
+  );
+
   const applyDraftToRow = useCallback((row) => {
     const broker = String(row?.broker || '').toLowerCase();
     const draft = readBrokerDraft(broker);
     const draftCred = draft?.credentials && typeof draft.credentials === 'object' ? draft.credentials : {};
     const baseCred = { ...emptyCredentials(broker), ...(row?.credentials || {}) };
+    const mergedMobile = String(baseCred.mobile || draftCred.mobile || '').trim();
+    const dhanId =
+      broker === 'dhan'
+        ? resolveDhanClientIdForSubmit(
+            row?.client_id || draft?.client_id,
+            mergedMobile || draftCred.mobile || baseCred.mobile,
+          )
+        : String(row?.client_id || draft?.client_id || '').trim();
     return {
       ...row,
-      client_id: String(row?.client_id || draft?.client_id || '').trim(),
+      client_id: dhanId,
       credentials: {
         ...baseCred,
-        mobile: String(baseCred.mobile || draftCred.mobile || '').trim(),
+        mobile: broker === 'dhan' ? '' : mergedMobile,
         api_key: String(baseCred.api_key || draftCred.api_key || '').trim(),
         api_secret: String(baseCred.api_secret || draftCred.api_secret || '').trim(),
       },
@@ -386,39 +479,31 @@ function ProfilePage() {
   useEffect(() => {
     if (!onboardingBrokerSetup) return;
     setActiveTab('broker');
+    if (onboardingPreferredBroker && ['dhan', 'angelone', 'samco', 'upstox'].includes(onboardingPreferredBroker)) {
+      setSelectedBroker(onboardingPreferredBroker);
+      brokerSelectInitializedRef.current = true;
+    }
     setMessage('Complete broker validation to activate session and show holdings on dashboard.');
-  }, [onboardingBrokerSetup]);
+  }, [onboardingBrokerSetup, onboardingPreferredBroker]);
 
   useEffect(() => {
     setBrokerSecretVisible({ pin: false, api_secret: false });
   }, [selectedBroker]);
 
   useEffect(() => {
-    setShowAccountPassword(false);
-  }, [activeTab]);
+    if (!userId) return;
+    const broker = String(selectedBroker || '').trim().toLowerCase();
+    if (!broker || !['dhan', 'angelone', 'samco', 'upstox'].includes(broker)) return;
+    try {
+      localStorage.setItem(`broker_preferred_${userId}`, broker);
+    } catch (_) {
+      // ignore storage failures
+    }
+  }, [selectedBroker, userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    rows.forEach((row) => {
-      const broker = String(row?.broker || '').toLowerCase();
-      if (!broker) return;
-      try {
-        localStorage.setItem(
-          brokerDraftKey(broker),
-          JSON.stringify({
-            client_id: String(row?.client_id || '').trim(),
-            credentials: {
-              mobile: String(row?.credentials?.mobile || '').trim(),
-              api_key: String(row?.credentials?.api_key || '').trim(),
-              api_secret: String(row?.credentials?.api_secret || '').trim(),
-            },
-          })
-        );
-      } catch (_) {
-        // ignore localStorage failures
-      }
-    });
-  }, [rows, userId, brokerDraftKey]);
+    setShowAccountPassword(false);
+  }, [activeTab]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search || '');
@@ -438,9 +523,22 @@ function ProfilePage() {
         } catch (_) {
           pending = {};
         }
-        const clientId = String(pending?.client_id || '').trim();
-        const pendingApiKey = String(pending?.api_key || '').trim();
-        const pendingApiSecret = String(pending?.api_secret || '').trim();
+        let draftParsed = {};
+        try {
+          draftParsed = JSON.parse(localStorage.getItem(`broker_integration_draft_${userId}_dhan`) || '{}');
+        } catch (_) {
+          draftParsed = {};
+        }
+        const dCred =
+          draftParsed?.credentials && typeof draftParsed.credentials === 'object'
+            ? draftParsed.credentials
+            : {};
+        let clientId = resolveDhanClientIdForSubmit(
+          pending?.client_id || draftParsed?.client_id,
+          dCred?.mobile,
+        );
+        const pendingApiKey = String(pending?.api_key || dCred.api_key || '').trim();
+        const pendingApiSecret = String(pending?.api_secret || dCred.api_secret || '').trim();
         const connectRes = await connectDhan({
           user_id: userId,
           client_id: clientId,
@@ -488,46 +586,56 @@ function ProfilePage() {
 
   const updateRow = (broker, patch) => {
     setRows((prev) => {
+      let next;
       const index = prev.findIndex((r) => r.broker === broker);
       if (index >= 0) {
-        return prev.map((r) => (r.broker === broker ? { ...r, ...patch } : r));
+        next = prev.map((r) => (r.broker === broker ? { ...r, ...patch } : r));
+      } else {
+        next = [
+          ...prev,
+          {
+            broker,
+            client_id: '',
+            is_enabled: false,
+            has_session: false,
+            live_enabled: false,
+            credentials: emptyCredentials(broker),
+            ...patch,
+          },
+        ];
       }
-      return [
-        ...prev,
-        {
-          broker,
-          client_id: '',
-          is_enabled: false,
-          has_session: false,
-          live_enabled: false,
-          credentials: emptyCredentials(broker),
-          ...patch,
-        },
-      ];
+      const updated = next.find((r) => r.broker === broker);
+      if (updated) persistBrokerDraftForRow(updated);
+      return next;
     });
   };
 
   const updateRowCredential = (broker, key, value) => {
     setRows((prev) => {
+      let next;
       const index = prev.findIndex((r) => r.broker === broker);
       if (index >= 0) {
-        return prev.map((r) => (
+        next = prev.map((r) => (
           r.broker === broker
             ? { ...r, credentials: { ...(r.credentials || {}), [key]: value } }
             : r
         ));
+      } else {
+        next = [
+          ...prev,
+          {
+            broker,
+            client_id: '',
+            is_enabled: false,
+            has_session: false,
+            live_enabled: false,
+            credentials: { ...emptyCredentials(broker), [key]: value },
+          },
+        ];
       }
-      return [
-        ...prev,
-        {
-          broker,
-          client_id: '',
-          is_enabled: false,
-          has_session: false,
-          live_enabled: false,
-          credentials: { ...emptyCredentials(broker), [key]: value },
-        },
-      ];
+      const updated = next.find((r) => r.broker === broker);
+      if (updated) persistBrokerDraftForRow(updated);
+      return next;
     });
   };
 
@@ -558,16 +666,13 @@ function ProfilePage() {
     setError('');
     setMessage('');
     try {
-      const rawClientId = row.broker === 'dhan'
-        ? (row.client_id || row.credentials?.mobile || '')
-        : (row.client_id || '');
-      const sanitizedDhanClientId = row.broker === 'dhan'
-        ? String(rawClientId).replace(/\s/g, '').replace(/^\+/, '')
-        : String(rawClientId);
+      const resolvedClientId = row.broker === 'dhan'
+        ? resolveDhanClientIdForSubmit(row.client_id, row.credentials?.mobile)
+        : String(row.client_id || '').trim();
       const payload = {
         user_id: userId,
         broker: row.broker,
-        client_id: sanitizedDhanClientId,
+        client_id: resolvedClientId,
         pin: (row.credentials?.pin || '').trim(),
         totp: (row.credentials?.totp || '').replace(/\s/g, '').trim(),
         api_key: (row.credentials?.api_key || '').trim(),
@@ -578,6 +683,47 @@ function ProfilePage() {
         auth_code: (row.credentials?.auth_code || '').trim(),
         access_token: (row.credentials?.access_token || '').trim(),
       };
+      // Guard against browser autofill pollution (email/password landing in broker fields).
+      if (row.broker === 'dhan') {
+        const hasDhanOAuthInputs = Boolean(payload.client_id || payload.token_id || payload.api_key || payload.api_secret);
+        if (hasDhanOAuthInputs) {
+          if (!payload.client_id) {
+            throw new Error('Dhan Client ID is required for API token generation/consent flow.');
+          }
+          if (!/^\d{5,16}$/.test(String(payload.client_id))) {
+            throw new Error('Dhan Client ID must be the numeric dhanClientId from web.dhan.co (5–16 digits only, not an email).');
+          }
+          if (!payload.api_key) {
+            throw new Error('Dhan App ID/API Key is required for API token generation/consent flow.');
+          }
+          if (!payload.api_secret) {
+            throw new Error('Dhan API Secret is required for API token generation/consent flow.');
+          }
+        }
+        if (payload.api_key && payload.api_key.includes('@')) {
+          throw new Error('Dhan App ID/API Key cannot be an email. Enter the API Key from Dhan Access DhanHQ APIs.');
+        }
+        if (payload.pin && !/^\d{4,8}$/.test(payload.pin)) {
+          throw new Error('Dhan PIN must be numeric (typically 4 digits).');
+        }
+        if (payload.totp && !/^\d{6}$/.test(payload.totp)) {
+          throw new Error('Dhan TOTP must be 6 digits.');
+        }
+        if (payload.client_id && !/^\d{5,16}$/.test(String(payload.client_id))) {
+          throw new Error('Dhan Client ID must be numeric (5–16 digits from web.dhan.co), not an email or text.');
+        }
+      }
+      if (row.broker === 'angelone') {
+        if (payload.api_key && payload.api_key.includes('@')) {
+          throw new Error('Angel One API Key cannot be an email. Use the published API Key from SmartAPI console.');
+        }
+        if (payload.pin && !/^\d{4,8}$/.test(payload.pin)) {
+          throw new Error('Angel One PIN must be numeric.');
+        }
+        if (payload.totp && !/^\d{6}$/.test(payload.totp)) {
+          throw new Error('Angel One TOTP must be 6 digits.');
+        }
+      }
       if (!Boolean(row?.is_enabled)) {
         await onSaveBroker({ ...row, is_enabled: false });
         setMessage(`${row.broker.toUpperCase()} saved for later. Enable integration when ready.`);
@@ -596,14 +742,23 @@ function ProfilePage() {
             );
           }
         }
+        const draftDhan = readBrokerDraft('dhan');
+        const dDraftCred =
+          draftDhan?.credentials && typeof draftDhan.credentials === 'object' ? draftDhan.credentials : {};
+        const mergedDhanApiKey = String(payload.api_key || dDraftCred.api_key || '').trim();
+        const mergedDhanApiSecret = String(payload.api_secret || dDraftCred.api_secret || '').trim();
+        const mergedDhanClientId = resolveDhanClientIdForSubmit(
+          payload.client_id || draftDhan?.client_id,
+          dDraftCred.mobile,
+        );
         const connectRes = await connectDhan({
           user_id: userId,
-          client_id: payload.client_id,
+          client_id: mergedDhanClientId,
           pin: payload.pin,
           totp: payload.totp,
           access_token: payload.access_token,
-          api_key: payload.api_key,
-          api_secret: payload.api_secret,
+          api_key: mergedDhanApiKey,
+          api_secret: mergedDhanApiSecret,
           token_id: payload.token_id,
         });
         if (connectRes?.requires_token_id && connectRes?.login_url) {
@@ -611,9 +766,9 @@ function ProfilePage() {
             sessionStorage.setItem(
               `dhan_pending_connect_${userId}`,
               JSON.stringify({
-                client_id: String(connectRes?.client_id || payload.client_id || '').trim(),
-                api_key: String(payload.api_key || '').trim(),
-                api_secret: String(payload.api_secret || '').trim(),
+                client_id: String(connectRes?.client_id || mergedDhanClientId || '').trim(),
+                api_key: mergedDhanApiKey,
+                api_secret: mergedDhanApiSecret,
               })
             );
           } catch (_) {
@@ -623,7 +778,7 @@ function ProfilePage() {
           window.location.assign(connectRes.login_url);
           return;
         }
-        payload.client_id = String(connectRes?.data?.client_id || payload.client_id || '').trim();
+        payload.client_id = String(connectRes?.data?.client_id || mergedDhanClientId || '').trim();
         effectiveToken = String(connectRes?.session_token || effectiveToken || '').trim();
         if (!effectiveToken) {
           throw new Error('Unable to create Dhan session token. Check Client ID/PIN/TOTP or JWT token.');
@@ -701,7 +856,7 @@ function ProfilePage() {
       if (b === 'dhan') {
         const res = await connectDhan({
           user_id: userId,
-          client_id: String(row.client_id || '').trim(),
+          client_id: resolveDhanClientIdForSubmit(row.client_id, row.credentials?.mobile),
           access_token: String(row.credentials?.access_token || '').trim(),
           renew_token: true,
         });
@@ -776,7 +931,10 @@ function ProfilePage() {
   const hasBrokerCredentials = useMemo(() => {
     if (!activeBrokerRow) return false;
     const broker = String(activeBrokerRow.broker || '').toLowerCase();
-    const clientId = String(activeBrokerRow.client_id || activeBrokerRow.credentials?.mobile || '').trim();
+    const clientId =
+      broker === 'dhan'
+        ? resolveDhanClientIdForSubmit(activeBrokerRow.client_id, activeBrokerRow.credentials?.mobile)
+        : String(activeBrokerRow.client_id || activeBrokerRow.credentials?.mobile || '').trim();
     const pin = String(activeBrokerRow.credentials?.pin || '').trim();
     const totp = String(activeBrokerRow.credentials?.totp || '').trim();
     const accessToken = String(activeBrokerRow.credentials?.access_token || '').trim();
@@ -787,7 +945,8 @@ function ProfilePage() {
     const redirectUri = String(activeBrokerRow.credentials?.redirect_uri || '').trim();
 
     if (broker === 'dhan') return Boolean(clientId && ((pin && totp) || accessToken || (apiKey && apiSecret)));
-    if (broker === 'samco') return Boolean(clientId && (pin || accessToken));
+    // Samco live data uses server SAMCO_* env (Trade API); Validate calls server login — no per-user secrets required in UI.
+    if (broker === 'samco') return true;
     if (broker === 'angelone') return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
     if (broker === 'upstox') return Boolean(clientId && (accessToken || (authCode && clientSecret && redirectUri)));
     return Boolean(clientId);
@@ -1073,6 +1232,12 @@ function ProfilePage() {
       ) : null}
 
       <Paper sx={{ p: 2, mb: 2 }}>
+        <Box
+          component="form"
+          autoComplete="off"
+          noValidate
+          onSubmit={(e) => e.preventDefault()}
+        >
         <Typography sx={{ fontSize: 13, color: '#555', mb: 1.5 }}>
           Select your broker, enter only the required fields for that broker, validate, and keep integration enabled now or later.
         </Typography>
@@ -1099,10 +1264,29 @@ function ProfilePage() {
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ mb: 1.2 }}>
               <TextField
                 size="small"
-                label={activeBrokerRow.broker === 'dhan' ? 'Client ID / Mobile (optional if backend .env is set)' : 'Client ID'}
+                label={activeBrokerRow.broker === 'dhan' ? 'Dhan Client ID (numeric dhanClientId)' : 'Client ID'}
                 value={activeBrokerRow.client_id || ''}
-                onChange={(e) => updateRow(activeBrokerRow.broker, { client_id: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (activeBrokerRow.broker === 'dhan') {
+                    updateRow(activeBrokerRow.broker, { client_id: v.replace(/\D/g, '').slice(0, 16) });
+                  } else {
+                    updateRow(activeBrokerRow.broker, { client_id: v });
+                  }
+                }}
                 sx={{ minWidth: 260 }}
+                autoComplete="off"
+                inputProps={{
+                  ...brokerLockedInputProps(`broker_${activeBrokerRow.broker}_client_id`),
+                  ...(activeBrokerRow.broker === 'dhan'
+                    ? { inputMode: 'numeric', pattern: '[0-9]*' }
+                    : {}),
+                }}
+                helperText={
+                  activeBrokerRow.broker === 'dhan'
+                    ? 'Digits only — copy the numeric Client ID from web.dhan.co (not your email).'
+                    : undefined
+                }
               />
               <Stack direction="row" spacing={1} alignItems="center">
                 <Typography sx={{ fontSize: 12, color: '#666' }}>Enable now</Typography>
@@ -1119,61 +1303,132 @@ function ProfilePage() {
             <Box sx={{ display: 'grid', gap: 1.1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, mb: 1.2 }}>
               {activeBrokerRow.broker === 'dhan' ? (
                 <>
-                  <TextField size="small" label="Mobile Number (or Dhan Client ID)" value={activeBrokerRow.credentials?.mobile || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'mobile', e.target.value)} />
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    OAuth consent uses your numeric Client ID plus App ID and App Secret from Dhan → My Profile → Access DhanHQ APIs.
+                  </Typography>
                   <TextField
                     size="small"
-                    type={brokerSecretVisible.pin ? 'text' : 'password'}
+                    type="text"
                     label="PIN / Password"
                     value={activeBrokerRow.credentials?.pin || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
                     InputProps={brokerSecretAdornment('pin')}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_pin', { secret: true })}
+                    sx={brokerPinMaskSx(brokerSecretVisible.pin)}
                   />
-                  <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
-                  <TextField size="small" label="API Key override (optional)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
                   <TextField
                     size="small"
-                    type={brokerSecretVisible.api_secret ? 'text' : 'password'}
-                    label="API Secret override (optional)"
+                    label="TOTP"
+                    value={activeBrokerRow.credentials?.totp || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_totp')}
+                  />
+                  <TextField
+                    size="small"
+                    label="App ID (API Key from Dhan)"
+                    value={activeBrokerRow.credentials?.api_key || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_api_key')}
+                  />
+                  <TextField
+                    size="small"
+                    type="text"
+                    label="App Secret (from Dhan)"
                     value={activeBrokerRow.credentials?.api_secret || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)}
                     InputProps={brokerSecretAdornment('api_secret')}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_api_secret', { secret: true })}
+                    sx={brokerPinMaskSx(brokerSecretVisible.api_secret)}
+                    helperText="Required for Dhan API token/consent flow. Paste exactly as shown in Dhan (any characters Dhan provides)."
                   />
-                  <TextField size="small" label="tokenId (after Dhan redirect)" value={activeBrokerRow.credentials?.token_id || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'token_id', e.target.value)} />
+                  <TextField
+                    size="small"
+                    label="tokenId (after Dhan redirect)"
+                    value={activeBrokerRow.credentials?.token_id || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'token_id', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_token_id')}
+                  />
                   <TextField
                     size="small"
                     label="Access Token (JWT optional)"
                     value={activeBrokerRow.credentials?.access_token || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
                     placeholder="Use Dhan JWT token if available"
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_dhan_access_token')}
                   />
                 </>
               ) : null}
               {activeBrokerRow.broker === 'samco' ? (
                 <>
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    Samco market and session checks use the server&apos;s <code>SAMCO_*</code> environment variables (Trade API: password, YOB, secret key or daily access token). Use super-admin{' '}
+                    <code>POST /api/system/samco/*</code> for IP registration and OTP onboarding. Optional fields below are for your records; <strong>Validate &amp; Create Session</strong> runs{' '}
+                    <code>SamcoClient.login()</code> on the server.
+                  </Typography>
                   <TextField
                     size="small"
-                    type={brokerSecretVisible.pin ? 'text' : 'password'}
-                    label="PIN/Password"
+                    type="text"
+                    label="PIN/Password (optional, not sent to Samco from here)"
                     value={activeBrokerRow.credentials?.pin || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
                     InputProps={brokerSecretAdornment('pin')}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_samco_pin', { secret: true })}
+                    sx={brokerPinMaskSx(brokerSecretVisible.pin)}
                   />
-                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
+                  <TextField
+                    size="small"
+                    label="Access Token (optional, not used for server login)"
+                    value={activeBrokerRow.credentials?.access_token || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_samco_access_token')}
+                  />
                 </>
               ) : null}
               {activeBrokerRow.broker === 'angelone' ? (
                 <>
-                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
-                  <TextField size="small" label="API Key" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} />
                   <TextField
                     size="small"
-                    type={brokerSecretVisible.pin ? 'text' : 'password'}
+                    label="Access Token (optional)"
+                    value={activeBrokerRow.credentials?.access_token || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_angel_access_token')}
+                  />
+                  <TextField
+                    size="small"
+                    label="API Key"
+                    value={activeBrokerRow.credentials?.api_key || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_angel_smartapi_key')}
+                  />
+                  <TextField
+                    size="small"
+                    type="text"
                     label="PIN/Password"
                     value={activeBrokerRow.credentials?.pin || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
                     InputProps={brokerSecretAdornment('pin')}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_angel_pin', { secret: true })}
+                    sx={brokerPinMaskSx(brokerSecretVisible.pin)}
                   />
-                  <TextField size="small" label="TOTP" value={activeBrokerRow.credentials?.totp || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)} />
+                  <TextField
+                    size="small"
+                    label="TOTP"
+                    value={activeBrokerRow.credentials?.totp || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_angel_totp')}
+                  />
                   <Typography sx={{ fontSize: 11, color: '#666', gridColumn: '1 / -1', lineHeight: 1.4 }}>
                     Use the <strong>Published API key</strong> from the Angel One SmartAPI developer console. Retail login does not use a separate client secret; enable <strong>Enable now</strong>, then enter <strong>PIN</strong> and <strong>6-digit TOTP</strong> from the Angel One authenticator app and click Validate. Optional access token is only if you already have a valid JWT.
                   </Typography>
@@ -1181,10 +1436,10 @@ function ProfilePage() {
               ) : null}
               {activeBrokerRow.broker === 'upstox' ? (
                 <>
-                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} />
-                  <TextField size="small" label="Auth Code" value={activeBrokerRow.credentials?.auth_code || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'auth_code', e.target.value)} />
-                  <TextField size="small" label="Client Secret" value={activeBrokerRow.credentials?.client_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'client_secret', e.target.value)} />
-                  <TextField size="small" label="Redirect URI" value={activeBrokerRow.credentials?.redirect_uri || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'redirect_uri', e.target.value)} />
+                  <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_access_token')} />
+                  <TextField size="small" label="Auth Code" value={activeBrokerRow.credentials?.auth_code || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'auth_code', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_auth_code')} />
+                  <TextField size="small" label="Client Secret" value={activeBrokerRow.credentials?.client_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'client_secret', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_client_secret', { secret: true })} />
+                  <TextField size="small" label="Redirect URI" value={activeBrokerRow.credentials?.redirect_uri || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'redirect_uri', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_redirect_uri')} />
                 </>
               ) : null}
             </Box>
@@ -1261,6 +1516,7 @@ function ProfilePage() {
             </Stack>
           </>
         ) : null}
+        </Box>
       </Paper>
 
       {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}

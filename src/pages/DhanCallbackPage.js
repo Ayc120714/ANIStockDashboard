@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { fetchBrokerSetup, hasAnyBrokerLiveSession, userMayNeedDhanConsentFlow } from '../api/brokers';
 import { connectDhan, ensureDhanSession } from '../api/dhan';
 import { markConsentLimitForToday, shouldSkipBrokerConsentToday } from '../auth/postLoginRouting';
+import { effectiveDhanClientIdFromDraft, resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
 
 const DHAN_DAILY_CONSENT_LIMIT = 25;
 
@@ -50,10 +51,29 @@ function DhanCallbackPage() {
 
       try {
         const draftRaw = localStorage.getItem(`broker_integration_draft_${userId}_dhan`) || '{}';
-        const draft = JSON.parse(draftRaw);
-        const draftClientId = String(draft?.client_id || '').trim();
+        let draft = {};
+        try {
+          draft = JSON.parse(draftRaw);
+        } catch (_) {
+          draft = {};
+        }
+        let draftClientId = effectiveDhanClientIdFromDraft(draft);
         const draftApiKey = String(draft?.credentials?.api_key || '').trim();
         const draftApiSecret = String(draft?.credentials?.api_secret || '').trim();
+
+        const mergeClientIdFromBrokerSetup = async () => {
+          if (draftClientId) return;
+          try {
+            const setupRows = await fetchBrokerSetup({ userId });
+            const dhanRow = (Array.isArray(setupRows) ? setupRows : []).find(
+              (r) => String(r?.broker || '').toLowerCase() === 'dhan',
+            );
+            const cred = dhanRow?.credentials && typeof dhanRow.credentials === 'object' ? dhanRow.credentials : {};
+            draftClientId = resolveDhanClientIdForSubmit(dhanRow?.client_id, cred.mobile);
+          } catch (_) {
+            // ignore
+          }
+        };
 
         if (!tokenId) {
           if (shouldSkipBrokerConsentToday(userId)) {
@@ -116,6 +136,13 @@ function DhanCallbackPage() {
           // Start clean every time Step 1 is initiated.
           sessionStorage.removeItem(`dhan_pending_connect_${userId}`);
 
+          await mergeClientIdFromBrokerSetup();
+          if (draftClientId && !(draftApiKey && draftApiSecret)) {
+            throw new Error(
+              'Dhan Client ID is set, but App ID/App Secret are missing. In Profile -> Broker, enter API Key and App Secret from the same Dhan login.'
+            );
+          }
+
           // STEP 1: Backend generates consent and returns Dhan login URL.
           const connectRes = await withTimeout(
             connectDhan({
@@ -146,11 +173,26 @@ function DhanCallbackPage() {
         }
 
         const pendingRaw = sessionStorage.getItem(`dhan_pending_connect_${userId}`) || '{}';
-        const pending = JSON.parse(pendingRaw);
+        let pending = {};
+        try {
+          pending = JSON.parse(pendingRaw);
+        } catch (_) {
+          pending = {};
+        }
+        await mergeClientIdFromBrokerSetup();
         const pendingTargetPath = String(pending?.from || targetPath || '/').trim() || '/';
-        const pendingClientId = String(pending?.client_id || draftClientId || '').trim();
+        const dCredStep3 = draft?.credentials && typeof draft.credentials === 'object' ? draft.credentials : {};
+        const pendingClientId = resolveDhanClientIdForSubmit(
+          pending?.client_id || draft?.client_id,
+          dCredStep3?.mobile,
+        );
         const pendingApiKey = String(pending?.api_key || draftApiKey || '').trim();
         const pendingApiSecret = String(pending?.api_secret || draftApiSecret || '').trim();
+        if (pendingClientId && !(pendingApiKey && pendingApiSecret)) {
+          throw new Error(
+            'Dhan callback token cannot be consumed without matching App ID and App Secret for this Client ID.'
+          );
+        }
 
         // STEP 3: backend consumes tokenId and returns access token.
         await withTimeout(

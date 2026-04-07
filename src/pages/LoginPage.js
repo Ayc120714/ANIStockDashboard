@@ -98,6 +98,18 @@ function LoginPage() {
     [email, password]
   );
 
+  const resolveFallbackPath = () => {
+    const fromState = location.state?.from;
+    if (typeof fromState === 'string' && fromState.trim()) return fromState.trim();
+    if (fromState && typeof fromState === 'object') {
+      const p = String(fromState.pathname || '').trim();
+      const s = String(fromState.search || '').trim();
+      const h = String(fromState.hash || '').trim();
+      if (p) return `${p}${s}${h}`;
+    }
+    return '/';
+  };
+
   const onPasswordLogin = async (e) => {
     e.preventDefault();
     if (!canSubmitPassword) return;
@@ -105,11 +117,12 @@ function LoginPage() {
     setError('');
     try {
       const res = await loginStart(email.trim(), password);
+      const fallbackPath = resolveFallbackPath();
       if (res?.mfa_required === false && res?.access_token && res?.refresh_token) {
         persistAuth(res.access_token, res.refresh_token, res?.user || null);
         await routeAfterLogin({
           nextUser: res?.user || null,
-          fallbackPath: location.state?.from?.pathname || '/',
+          fallbackPath,
           navigate,
         });
         return;
@@ -120,7 +133,7 @@ function LoginPage() {
           purpose: res?.purpose || 'login',
           requires: res?.requires || ['email'],
           email: email.trim(),
-          from: location.state?.from?.pathname || '/',
+          from: fallbackPath,
         },
       });
     } catch (err) {

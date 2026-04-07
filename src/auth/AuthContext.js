@@ -140,15 +140,22 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     const userId = String(user?.id || user?.user_id || user?.email || '');
     try {
-      if (refreshToken) {
-        await logoutSession(refreshToken);
+      if (userId) {
+        // Run before /auth/logout: logout revokes the access session immediately, so broker
+        // disconnect would otherwise see 401 (and trigger refresh noise in logs).
+        await Promise.allSettled([
+          clearBrokerSession({ user_id: userId, broker: 'dhan' }),
+          clearBrokerSession({ user_id: userId, broker: 'angelone' }),
+          clearBrokerSession({ user_id: userId, broker: 'samco' }),
+          clearBrokerSession({ user_id: userId, broker: 'upstox' }),
+        ]);
       }
     } catch (_) {
       // noop
     }
     try {
-      if (userId) {
-        await clearBrokerSession({ user_id: userId });
+      if (refreshToken) {
+        await logoutSession(refreshToken);
       }
     } catch (_) {
       // noop

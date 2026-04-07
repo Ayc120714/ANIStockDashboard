@@ -7,14 +7,21 @@ import { routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
 
 const onlyDigits = (value) => (value || '').replace(/\D/g, '').slice(0, 8);
+const OTP_FLOW_SESSION_KEY = 'auth_otp_flow_ctx';
 
 function OtpVerifyPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { persistAuth } = useAuth();
-  const flowId = location.state?.flowId || '';
-  const purpose = location.state?.purpose || '';
-  const from = location.state?.from || '/';
+  let storedFlow = {};
+  try {
+    storedFlow = JSON.parse(sessionStorage.getItem(OTP_FLOW_SESSION_KEY) || '{}');
+  } catch (_) {
+    storedFlow = {};
+  }
+  const flowId = String(location.state?.flowId || storedFlow?.flowId || '').trim();
+  const purpose = String(location.state?.purpose || storedFlow?.purpose || '').trim();
+  const from = String(location.state?.from || storedFlow?.from || '/').trim() || '/';
 
   const [emailOtp, setEmailOtp] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
@@ -28,11 +35,20 @@ function OtpVerifyPage() {
   /** Password + email OTP (`login`) or passwordless email OTP (`login_email`). */
   const isEmailOtpLoginStep = purpose === 'login_email' || purpose === 'login';
 
+  const clearOtpFlowSession = useCallback(() => {
+    try {
+      sessionStorage.removeItem(OTP_FLOW_SESSION_KEY);
+    } catch (_) {
+      // ignore storage failures
+    }
+  }, []);
+
   /** Exchange tokens and route (after OTP consumed for login flows). */
   const doCompleteLogin = useCallback(async () => {
     if (purpose === 'login_email') {
       const res = await completeEmailOtpLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      clearOtpFlowSession();
       await routeAfterLogin({
         nextUser: res?.user || null,
         fallbackPath: from || '/',
@@ -43,13 +59,14 @@ function OtpVerifyPage() {
     if (purpose === 'login') {
       const res = await completeLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      clearOtpFlowSession();
       await routeAfterLogin({
         nextUser: res?.user || null,
         fallbackPath: from || '/',
         navigate,
       });
     }
-  }, [flowId, purpose, trustDevice, from, navigate, persistAuth]);
+  }, [flowId, purpose, trustDevice, from, navigate, persistAuth, clearOtpFlowSession]);
 
   const onVerify = async (channel) => {
     const otpCode = emailOtp;
@@ -118,6 +135,7 @@ function OtpVerifyPage() {
         return;
       }
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      clearOtpFlowSession();
       const fallbackPath = from || '/';
       const userId = String(res?.user?.id || res?.user?.user_id || res?.user?.email || '');
       try {
@@ -142,6 +160,23 @@ function OtpVerifyPage() {
       setLoading(false);
     }
   };
+
+  React.useEffect(() => {
+    if (!flowId || !purpose) return;
+    try {
+      sessionStorage.setItem(
+        OTP_FLOW_SESSION_KEY,
+        JSON.stringify({
+          flowId,
+          purpose,
+          from: from || '/',
+          savedAt: Date.now(),
+        })
+      );
+    } catch (_) {
+      // ignore storage failures
+    }
+  }, [flowId, purpose, from]);
 
   /** If verify succeeded but token exchange failed, OTP is already used — retry complete only. */
   const onRetryCompleteLogin = async () => {

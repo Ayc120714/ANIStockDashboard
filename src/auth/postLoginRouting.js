@@ -84,14 +84,83 @@ export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }
   }
 
   if (pendingDhanLogin) {
-    navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
-    return;
+    let preferredBroker = '';
+    try {
+      preferredBroker = String(localStorage.getItem(`broker_preferred_${userId}`) || '').trim().toLowerCase();
+    } catch (_) {
+      preferredBroker = '';
+    }
+    if (preferredBroker && preferredBroker !== 'dhan') {
+      try {
+        sessionStorage.removeItem(`dhan_pending_connect_${userId}`);
+      } catch (_) {
+        // ignore storage failures
+      }
+    } else {
+      navigate(`/callback?from=${encodeURIComponent(fallback)}`, { replace: true });
+      return;
+    }
   }
 
   try {
     const rows = await fetchBrokerSetup({ userId });
     if (hasAnyBrokerLiveSession(rows)) {
       navigate(fallback, { replace: true });
+      return;
+    }
+    // Read broker drafts once so we can route by a single broker intent.
+    const readDraft = (broker) => {
+      try {
+        return JSON.parse(localStorage.getItem(`broker_integration_draft_${userId}_${broker}`) || '{}');
+      } catch (_) {
+        return {};
+      }
+    };
+    const readPreferredBroker = () => {
+      try {
+        const raw = String(localStorage.getItem(`broker_preferred_${userId}`) || '').trim().toLowerCase();
+        if (['dhan', 'angelone', 'samco', 'upstox'].includes(raw)) return raw;
+      } catch (_) {
+        // ignore storage failures
+      }
+      return '';
+    };
+    const nonEmpty = (...vals) => vals.some((v) => String(v || '').trim().length > 0);
+    const rowByBroker = new Map((Array.isArray(rows) ? rows : []).map((r) => [String(r?.broker || '').toLowerCase(), r]));
+    const hasIntentFor = (broker) => {
+      const row = rowByBroker.get(broker);
+      const draft = readDraft(broker);
+      const cred = draft?.credentials && typeof draft.credentials === 'object' ? draft.credentials : {};
+      const hasDraftIntent = nonEmpty(
+        draft?.client_id,
+        cred?.api_key,
+        cred?.api_secret,
+        cred?.pin,
+        cred?.totp,
+        cred?.token_id,
+        cred?.access_token,
+        cred?.auth_code,
+        cred?.client_secret,
+        cred?.redirect_uri
+      );
+      const hasRowIntent = Boolean(row && (row.is_enabled || row.token_stored || row.client_id));
+      return hasDraftIntent || hasRowIntent;
+    };
+
+    const intentOrder = ['angelone', 'samco', 'upstox', 'dhan'];
+    const intentBrokers = intentOrder.filter((b) => hasIntentFor(b));
+    const preferredBroker = readPreferredBroker();
+    const chosenBroker = intentBrokers.includes(preferredBroker)
+      ? preferredBroker
+      : (intentBrokers.length === 1 ? intentBrokers[0] : intentBrokers[0]);
+
+    if (chosenBroker) {
+      // Enforce broker-specific flow: open the exact broker setup first.
+      // API authentication should happen only for the broker user selected/filled.
+      navigate('/profile', {
+        replace: true,
+        state: { openBrokerSetup: true, from: fallback, preferredBroker: chosenBroker },
+      });
       return;
     }
   } catch (_) {
