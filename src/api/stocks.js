@@ -27,7 +27,9 @@ const rsFieldByPeriod = {
 const mapStockToTable = (s, idx, opts = {}) => {
   const period = opts.period || '1d';
   const perfField = rsFieldByPeriod[period] || 'day1d';
-  const chgVal = s[perfField] ?? s.day1d;
+  // Do not fall back to 1D when selected horizon data is unavailable.
+  // Showing day1d for 1w/6m makes the Alpha Tracker look like all "+0.00%".
+  const chgVal = s[perfField];
 
   const volJump = (s.volume && s.avg_volume && s.avg_volume > 0)
     ? (s.volume / s.avg_volume).toFixed(1) + 'x'

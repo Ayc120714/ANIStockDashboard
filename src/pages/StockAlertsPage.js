@@ -42,20 +42,23 @@ const dateKeyIST = (d) =>
     day: '2-digit',
   }).format(d);
 
-const isTodayInIST = (value) => {
-  if (!value) return false;
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return false;
-  return dateKeyIST(dt) === dateKeyIST(new Date());
-};
-
-/** Parse API ``timestamp`` (naive ``YYYY-MM-DD HH:mm:ss``, ISO, etc.) for sorting. */
+/** Parse API timestamps (naive ``YYYY-MM-DD HH:mm:ss``, ISO, etc.) safely.
+ * Backend often emits UTC-like naive strings; treat naive values as UTC for consistent IST conversion.
+ */
 const parseAdvisorAlertMs = (ts) => {
   if (ts == null || ts === '') return 0;
   const s = String(ts).trim();
-  const normalized = s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  const isoLike = s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  const hasZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(isoLike);
+  const normalized = hasZone ? isoLike : `${isoLike}Z`;
   const ms = Date.parse(normalized);
   return Number.isFinite(ms) ? ms : 0;
+};
+
+const isTodayInIST = (value) => {
+  const ms = parseAdvisorAlertMs(value);
+  if (!ms) return false;
+  return dateKeyIST(new Date(ms)) === dateKeyIST(new Date());
 };
 
 /** Show alert time in IST (matches NSE session context). */
@@ -553,7 +556,7 @@ function StockAlertsPage() {
             <tbody>
               {paged.map(a => (
                 <tr key={a.id}>
-                  <td style={compact}>{a.triggered_at?.replace('T', ' ').slice(0, 19) || '—'}</td>
+                  <td style={compact}>{formatAlertTimeIST(a.triggered_at)}</td>
                   <td style={{ ...compact, textTransform: 'capitalize' }}>{String(a.list_type || '—').replace('_', ' ')}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.symbol}</td>
                   <td style={{ ...compact, fontWeight: 600 }}>{a.direction || '—'}</td>
