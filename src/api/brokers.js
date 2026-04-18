@@ -108,5 +108,8 @@ export const clearBrokerSession = ({ user_id, broker }) => {
   if (b === 'angelone') return tradeApiPost('/angelone/disconnect', { user_id });
   if (b === 'samco') return tradeApiPost('/samco/disconnect', { user_id });
   if (b === 'upstox') return tradeApiPost('/upstox/disconnect', { user_id });
+  if (b === 'kotak') return tradeApiPost('/kotak/disconnect', { user_id });
+  if (b === 'fyers') return tradeApiPost('/fyers/disconnect', { user_id });
+  if (b === 'zerodha') return tradeApiPost('/zerodha/disconnect', { user_id });
   return tradeApiPost('/brokers/session/clear', { user_id, ...(broker ? { broker } : {}) });
 };

@@ -148,6 +148,9 @@ export function AuthProvider({ children }) {
           clearBrokerSession({ user_id: userId, broker: 'angelone' }),
           clearBrokerSession({ user_id: userId, broker: 'samco' }),
           clearBrokerSession({ user_id: userId, broker: 'upstox' }),
+          clearBrokerSession({ user_id: userId, broker: 'kotak' }),
+          clearBrokerSession({ user_id: userId, broker: 'fyers' }),
+          clearBrokerSession({ user_id: userId, broker: 'zerodha' }),
         ]);
       }
     } catch (_) {

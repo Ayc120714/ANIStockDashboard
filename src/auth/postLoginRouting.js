@@ -119,7 +119,7 @@ export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }
     const readPreferredBroker = () => {
       try {
         const raw = String(localStorage.getItem(`broker_preferred_${userId}`) || '').trim().toLowerCase();
-        if (['dhan', 'angelone', 'samco', 'upstox'].includes(raw)) return raw;
+        if (['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'].includes(raw)) return raw;
       } catch (_) {
         // ignore storage failures
       }
@@ -147,7 +147,7 @@ export const routeAfterLogin = async ({ nextUser, fallbackPath = '/', navigate }
       return hasDraftIntent || hasRowIntent;
     };
 
-    const intentOrder = ['angelone', 'samco', 'upstox', 'dhan'];
+    const intentOrder = ['angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha', 'dhan'];
     const intentBrokers = intentOrder.filter((b) => hasIntentFor(b));
     const preferredBroker = readPreferredBroker();
     const chosenBroker = intentBrokers.includes(preferredBroker)

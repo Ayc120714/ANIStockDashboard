@@ -39,16 +39,10 @@ import {
   fetchDhanOrders,
   fetchDhanPositions,
 } from '../api/dhan';
-import {
-  fetchSamcoBrokerHoldings,
-  fetchSamcoBrokerOrders,
-  fetchSamcoBrokerPositions,
-} from '../api/samcoBroker';
-import {
-  fetchUpstoxBrokerHoldings,
-  fetchUpstoxBrokerOrders,
-  fetchUpstoxBrokerPositions,
-} from '../api/upstoxBroker';
+import { loadRestBrokerPortfolioSlices } from '../api/restBrokerPortfolio';
+import { ensureKotakBrokerSession } from '../api/kotakBroker';
+import { ensureFyersBrokerSession } from '../api/fyersBroker';
+import { ensureZerodhaBrokerSession } from '../api/zerodhaBroker';
 import { resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
 
 const pickArray = (payload) => {
@@ -94,7 +88,22 @@ const deriveOpenPositionsFromOrders = (orders) => {
 };
 
 const AI_KEY_PROVIDERS = ['groq', 'gemini', 'cerebras', 'perplexity'];
-const BROKER_LABELS = { dhan: 'Dhan', angelone: 'Angel One', samco: 'Samco', upstox: 'Upstox' };
+const BROKER_LABELS = {
+  dhan: 'Dhan',
+  angelone: 'Angel One',
+  samco: 'Samco',
+  upstox: 'Upstox',
+  kotak: 'Kotak Neo',
+  fyers: 'Fyers',
+  zerodha: 'Zerodha (Kite)',
+};
+/** Public API docs when the server row does not set `doc_url`. */
+const BROKER_DOC_URLS = {
+  kotak: 'https://www.notion.so/Client-documentation-236da70d37e280b3a979fc7be7b003bc',
+  fyers: 'https://myapi.fyers.in/docsv3',
+  zerodha: 'https://kite.trade/docs/connect/v3/',
+};
+const PROFILE_BROKER_TABS_ORDER = ['dhan', 'samco', 'angelone', 'upstox', 'kotak', 'fyers', 'zerodha'];
 
 /** Hints for password managers; `new-password` on non-login fields often triggers wrong suggestions. */
 const BROKER_ANTI_AUTOFILL_DATA = {
@@ -242,8 +251,11 @@ function ProfilePage() {
 
   const emptyCredentials = (broker) => {
     if (broker === 'dhan') return { mobile: '', pin: '', totp: '', access_token: '', api_key: '', api_secret: '', token_id: '' };
-    if (broker === 'angelone') return { api_key: '', pin: '', totp: '', access_token: '' };
+    if (broker === 'angelone' || broker === 'kotak') return { api_key: '', pin: '', totp: '', access_token: '' };
     if (broker === 'upstox') return { access_token: '', auth_code: '', client_secret: '', redirect_uri: '' };
+    if (broker === 'fyers' || broker === 'zerodha') {
+      return { api_key: '', api_secret: '', access_token: '', auth_code: '', redirect_uri: '' };
+    }
     return { pin: '', access_token: '' }; // samco
   };
 
@@ -396,32 +408,28 @@ function ProfilePage() {
         return;
       }
 
-      if (b === 'samco' || b === 'upstox') {
-        const fetchPos = b === 'samco' ? fetchSamcoBrokerPositions : fetchUpstoxBrokerPositions;
-        const fetchHold = b === 'samco' ? fetchSamcoBrokerHoldings : fetchUpstoxBrokerHoldings;
-        const fetchOrd = b === 'samco' ? fetchSamcoBrokerOrders : fetchUpstoxBrokerOrders;
-        const [posResult, holdResult, ordResult] = await Promise.allSettled([
-          fetchPos({ userId }),
-          fetchHold({ userId }),
-          fetchOrd({ userId }),
-        ]);
-        const pv = posResult.status === 'fulfilled' ? posResult.value : {};
-        const hv = holdResult.status === 'fulfilled' ? holdResult.value : {};
-        const ov = ordResult.status === 'fulfilled' ? ordResult.value : {};
-        const parsedPositions = pickArray(pv?.data ?? pv);
-        const parsedHoldings = pickArray(hv?.data ?? hv);
-        const parsedOrders = pickArray(ov?.data ?? ov);
-        const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
-        const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
-        setPositions(mergedPositions);
-        setOrders(parsedOrders);
-        const note = String(pv?.message || hv?.message || ov?.message || '').trim();
-        if (note) {
-          setMessage(note);
-        } else if (!mergedPositions.length && !parsedOrders.length) {
-          setMessage(`No portfolio rows returned for ${BROKER_LABELS[b] || b}.`);
+      {
+        const slices = await loadRestBrokerPortfolioSlices(b, userId);
+        if (slices) {
+          const [posResult, holdResult, ordResult] = slices;
+          const pv = posResult.status === 'fulfilled' ? posResult.value : {};
+          const hv = holdResult.status === 'fulfilled' ? holdResult.value : {};
+          const ov = ordResult.status === 'fulfilled' ? ordResult.value : {};
+          const parsedPositions = pickArray(pv?.data ?? pv);
+          const parsedHoldings = pickArray(hv?.data ?? hv);
+          const parsedOrders = pickArray(ov?.data ?? ov);
+          const mergedPositionsRaw = [...parsedPositions, ...parsedHoldings];
+          const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
+          setPositions(mergedPositions);
+          setOrders(parsedOrders);
+          const note = String(pv?.message || hv?.message || ov?.message || '').trim();
+          if (note) {
+            setMessage(note);
+          } else if (!mergedPositions.length && !parsedOrders.length) {
+            setMessage(`No portfolio rows returned for ${BROKER_LABELS[b] || b}.`);
+          }
+          return;
         }
-        return;
       }
 
       setPositions([]);
@@ -457,7 +465,7 @@ function ProfilePage() {
     }
     if (brokerSelectInitializedRef.current) return;
     brokerSelectInitializedRef.current = true;
-    const livePriority = ['dhan', 'angelone', 'samco', 'upstox'];
+    const livePriority = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
     const withLive = livePriority
       .map((b) => rows.find((r) => String(r.broker || '').toLowerCase() === b && brokerRowHasLiveTradingSession(r)))
       .find(Boolean);
@@ -465,7 +473,7 @@ function ProfilePage() {
       setSelectedBroker(String(withLive.broker));
       return;
     }
-    const prioritized = ['angelone', 'samco', 'upstox', 'dhan'];
+    const prioritized = ['angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha', 'dhan'];
     const pick = prioritized
       .map((b) => rows.find((r) => String(r.broker || '').toLowerCase() === b))
       .find(Boolean);
@@ -479,7 +487,7 @@ function ProfilePage() {
   useEffect(() => {
     if (!onboardingBrokerSetup) return;
     setActiveTab('broker');
-    if (onboardingPreferredBroker && ['dhan', 'angelone', 'samco', 'upstox'].includes(onboardingPreferredBroker)) {
+    if (onboardingPreferredBroker && PROFILE_BROKER_TABS_ORDER.includes(onboardingPreferredBroker)) {
       setSelectedBroker(onboardingPreferredBroker);
       brokerSelectInitializedRef.current = true;
     }
@@ -493,7 +501,7 @@ function ProfilePage() {
   useEffect(() => {
     if (!userId) return;
     const broker = String(selectedBroker || '').trim().toLowerCase();
-    if (!broker || !['dhan', 'angelone', 'samco', 'upstox'].includes(broker)) return;
+    if (!broker || !PROFILE_BROKER_TABS_ORDER.includes(broker)) return;
     try {
       localStorage.setItem(`broker_preferred_${userId}`, broker);
     } catch (_) {
@@ -713,15 +721,20 @@ function ProfilePage() {
           throw new Error('Dhan Client ID must be numeric (5–16 digits from web.dhan.co), not an email or text.');
         }
       }
-      if (row.broker === 'angelone') {
+      if (row.broker === 'angelone' || row.broker === 'kotak') {
         if (payload.api_key && payload.api_key.includes('@')) {
-          throw new Error('Angel One API Key cannot be an email. Use the published API Key from SmartAPI console.');
+          throw new Error(`${BROKER_LABELS[row.broker] || row.broker} API key cannot be an email.`);
         }
         if (payload.pin && !/^\d{4,8}$/.test(payload.pin)) {
-          throw new Error('Angel One PIN must be numeric.');
+          throw new Error(`${BROKER_LABELS[row.broker] || row.broker} PIN must be numeric.`);
         }
         if (payload.totp && !/^\d{6}$/.test(payload.totp)) {
-          throw new Error('Angel One TOTP must be 6 digits.');
+          throw new Error(`${BROKER_LABELS[row.broker] || row.broker} TOTP must be 6 digits.`);
+        }
+      }
+      if (row.broker === 'fyers' || row.broker === 'zerodha') {
+        if (payload.api_key && payload.api_key.includes('@')) {
+          throw new Error('App API key cannot be an email.');
         }
       }
       if (!Boolean(row?.is_enabled)) {
@@ -848,7 +861,12 @@ function ProfilePage() {
   const onRenewBrokerToken = async (row) => {
     if (!row) return;
     const b = String(row.broker || '').toLowerCase();
-    if (b !== 'dhan' && b !== 'angelone') return;
+    const restEnsureByBroker = {
+      kotak: ensureKotakBrokerSession,
+      fyers: ensureFyersBrokerSession,
+      zerodha: ensureZerodhaBrokerSession,
+    };
+    if (b !== 'dhan' && b !== 'angelone' && !restEnsureByBroker[b]) return;
     setBusy(true);
     setError('');
     setMessage('');
@@ -865,9 +883,12 @@ function ProfilePage() {
           updateRowCredential(row.broker, 'access_token', renewedToken);
         }
         setMessage('Dhan access token renewed successfully.');
-      } else {
+      } else if (b === 'angelone') {
         await ensureAngeloneSession({ user_id: userId });
         setMessage('Angel One session refreshed (token rotation when supported).');
+      } else if (restEnsureByBroker[b]) {
+        await restEnsureByBroker[b]({ user_id: userId });
+        setMessage(`${BROKER_LABELS[b] || b} session refreshed (when supported by the server).`);
       }
       await loadBrokerRows();
       await loadLiveData();
@@ -895,7 +916,7 @@ function ProfilePage() {
   }, [orders]);
 
   const brokerRows = useMemo(() => {
-    const fallback = ['dhan', 'samco', 'angelone', 'upstox'].map((broker) => ({
+    const fallback = PROFILE_BROKER_TABS_ORDER.map((broker) => ({
       broker,
       client_id: '',
       is_enabled: false,
@@ -907,7 +928,7 @@ function ProfilePage() {
     }));
     if (!rows.length) return fallback.map((row) => applyDraftToRow(row));
     const byBroker = new Map(rows.map((r) => [r.broker, r]));
-    return ['dhan', 'samco', 'angelone', 'upstox'].map((broker) => {
+    return PROFILE_BROKER_TABS_ORDER.map((broker) => {
       const row = byBroker.get(broker);
       return row
         ? applyDraftToRow({ ...row, credentials: row.credentials || emptyCredentials(broker) })
@@ -947,8 +968,16 @@ function ProfilePage() {
     if (broker === 'dhan') return Boolean(clientId && ((pin && totp) || accessToken || (apiKey && apiSecret)));
     // Samco live data uses server SAMCO_* env (Trade API); Validate calls server login — no per-user secrets required in UI.
     if (broker === 'samco') return true;
-    if (broker === 'angelone') return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
+    if (broker === 'angelone' || broker === 'kotak') {
+      return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
+    }
     if (broker === 'upstox') return Boolean(clientId && (accessToken || (authCode && clientSecret && redirectUri)));
+    if (broker === 'fyers') {
+      return Boolean(accessToken || (authCode && redirectUri && apiKey && apiSecret));
+    }
+    if (broker === 'zerodha') {
+      return Boolean(accessToken || (authCode && apiKey && apiSecret));
+    }
     return Boolean(clientId);
   }, [activeBrokerRow]);
 
@@ -1442,6 +1471,72 @@ function ProfilePage() {
                   <TextField size="small" label="Redirect URI" value={activeBrokerRow.credentials?.redirect_uri || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'redirect_uri', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_redirect_uri')} />
                 </>
               ) : null}
+              {activeBrokerRow.broker === 'kotak' ? (
+                <>
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    Kotak Neo API credentials follow the client documentation from Kotak (consumer key, PIN, TOTP, or tokens as your integration uses).
+                  </Typography>
+                  <TextField
+                    size="small"
+                    label="Access Token (optional)"
+                    value={activeBrokerRow.credentials?.access_token || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_kotak_access_token')}
+                  />
+                  <TextField
+                    size="small"
+                    label="API Key"
+                    value={activeBrokerRow.credentials?.api_key || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_kotak_api_key')}
+                  />
+                  <TextField
+                    size="small"
+                    type="text"
+                    label="PIN"
+                    value={activeBrokerRow.credentials?.pin || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
+                    InputProps={brokerSecretAdornment('pin')}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_kotak_pin', { secret: true })}
+                    sx={brokerPinMaskSx(brokerSecretVisible.pin)}
+                  />
+                  <TextField
+                    size="small"
+                    label="TOTP"
+                    value={activeBrokerRow.credentials?.totp || ''}
+                    onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'totp', e.target.value)}
+                    autoComplete="off"
+                    inputProps={brokerLockedInputProps('broker_kotak_totp')}
+                  />
+                </>
+              ) : null}
+              {activeBrokerRow.broker === 'fyers' ? (
+                <>
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    Fyers API v3 uses OAuth2-style auth: register an app, set the redirect URL, then exchange the auth code for an access token (see Fyers docs for request/response structure).
+                  </Typography>
+                  <TextField size="small" label="App ID (API key)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_api_key')} />
+                  <TextField size="small" type="text" label="App Secret" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} InputProps={brokerSecretAdornment('api_secret')} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_api_secret', { secret: true })} sx={brokerPinMaskSx(brokerSecretVisible.api_secret)} />
+                  <TextField size="small" label="Redirect URI" value={activeBrokerRow.credentials?.redirect_uri || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'redirect_uri', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_redirect_uri')} />
+                  <TextField size="small" label="Auth code" value={activeBrokerRow.credentials?.auth_code || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'auth_code', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_auth_code')} />
+                  <TextField size="small" label="Access token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_access_token')} />
+                </>
+              ) : null}
+              {activeBrokerRow.broker === 'zerodha' ? (
+                <>
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    Zerodha Kite Connect uses your app <code>api_key</code> and <code>api_secret</code>; after the browser login, paste the <code>request_token</code> from the redirect as the auth code (see Kite Connect documentation).
+                  </Typography>
+                  <TextField size="small" label="API key (Kite app)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_api_key')} />
+                  <TextField size="small" type="text" label="API secret" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} InputProps={brokerSecretAdornment('api_secret')} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_api_secret', { secret: true })} sx={brokerPinMaskSx(brokerSecretVisible.api_secret)} />
+                  <TextField size="small" label="Redirect URL (registered on Kite)" value={activeBrokerRow.credentials?.redirect_uri || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'redirect_uri', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_redirect_uri')} />
+                  <TextField size="small" label="Request token / auth code" value={activeBrokerRow.credentials?.auth_code || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'auth_code', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_auth_code')} />
+                  <TextField size="small" label="Access token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_access_token')} />
+                </>
+              ) : null}
             </Box>
 
             <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
@@ -1457,7 +1552,11 @@ function ProfilePage() {
               >
                 Validate & Create Session
               </Button>
-              {activeBrokerRow.broker === 'dhan' || activeBrokerRow.broker === 'angelone' ? (
+              {activeBrokerRow.broker === 'dhan'
+                || activeBrokerRow.broker === 'angelone'
+                || activeBrokerRow.broker === 'kotak'
+                || activeBrokerRow.broker === 'fyers'
+                || activeBrokerRow.broker === 'zerodha' ? (
                 <Button
                   size="small"
                   variant="outlined"
@@ -1468,8 +1567,8 @@ function ProfilePage() {
                   {activeBrokerRow.broker === 'dhan' ? 'Renew Token' : 'Refresh session'}
                 </Button>
               ) : null}
-              {activeBrokerRow.doc_url ? (
-                <Button size="small" component={Link} href={activeBrokerRow.doc_url} target="_blank" rel="noreferrer" sx={{ textTransform: 'none' }}>
+              {(activeBrokerRow.doc_url || BROKER_DOC_URLS[activeBrokerRow.broker]) ? (
+                <Button size="small" component={Link} href={activeBrokerRow.doc_url || BROKER_DOC_URLS[activeBrokerRow.broker]} target="_blank" rel="noreferrer" sx={{ textTransform: 'none' }}>
                   Open docs
                 </Button>
               ) : null}

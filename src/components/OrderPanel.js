@@ -28,14 +28,29 @@ const BROKER_CAPABILITIES = {
   samco: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
   angelone: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
   upstox: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
+  kotak: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
+  fyers: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
+  zerodha: { products: PRODUCT_OPTIONS.map((p) => p.value), limitSupported: true, superSupported: false },
 };
 const BROKER_LEVERAGE = {
   dhan: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
   angelone: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
   samco: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
   upstox: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
+  kotak: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
+  fyers: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
+  zerodha: { INTRADAY: 5, MARGIN: 4, DELIVERY: 1 },
 };
-const BROKER_LABELS = { dhan: 'Dhan', angelone: 'Angel One', samco: 'Samco', upstox: 'Upstox' };
+const BROKER_LABELS = {
+  dhan: 'Dhan',
+  angelone: 'Angel One',
+  samco: 'Samco',
+  upstox: 'Upstox',
+  kotak: 'Kotak Neo',
+  fyers: 'Fyers',
+  zerodha: 'Zerodha',
+};
+const ORDER_PANEL_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
 
 const toPositiveNumber = (value) => {
   const n = Number(value);
@@ -122,12 +137,11 @@ function OrderPanel({
       try {
         const rows = await fetchBrokerSetup({ userId });
         const arr = Array.isArray(rows) ? rows : [];
-        const order = ['dhan', 'angelone', 'samco', 'upstox'];
-        let pick = order
+        let pick = ORDER_PANEL_BROKER_PRIORITY
           .map((b) => arr.find((r) => String(r.broker || '').toLowerCase() === b && brokerRowHasLiveTradingSession(r)))
           .find(Boolean);
         if (!pick) {
-          pick = order
+          pick = ORDER_PANEL_BROKER_PRIORITY
             .map((b) => arr.find((r) => {
               if (String(r.broker || '').toLowerCase() !== b) return false;
               return Boolean(r.is_enabled || r.token_stored);
@@ -695,7 +709,7 @@ function OrderPanel({
           action={(
             <Stack direction="row" spacing={1}>
               <Button size="small" variant="contained" onClick={() => onTrailAction('sl')} disabled={busy} sx={{ textTransform: 'none' }}>
-                Book at T1 (SL->Cost)
+                {'Book at T1 (SL → cost)'}
               </Button>
               <Button size="small" variant="outlined" onClick={() => onTrailAction('t2')} disabled={busy} sx={{ textTransform: 'none' }}>
                 Extend to T2

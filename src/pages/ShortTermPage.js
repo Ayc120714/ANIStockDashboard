@@ -35,7 +35,7 @@ const firstPositive = (...values) => {
   return null;
 };
 const extractLeverageByBroker = (row) => {
-  const brokers = ['dhan', 'samco', 'angelone', 'upstox'];
+  const brokers = ['dhan', 'samco', 'angelone', 'upstox', 'kotak', 'fyers', 'zerodha'];
   const result = {};
 
   const nested = row?.leverageByBroker || row?.leverage_by_broker;

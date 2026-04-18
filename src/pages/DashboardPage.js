@@ -21,16 +21,7 @@ import {
   fetchAngelonePositions,
 } from '../api/angelone';
 import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
-import {
-  fetchSamcoBrokerHoldings,
-  fetchSamcoBrokerOrders,
-  fetchSamcoBrokerPositions,
-} from '../api/samcoBroker';
-import {
-  fetchUpstoxBrokerHoldings,
-  fetchUpstoxBrokerOrders,
-  fetchUpstoxBrokerPositions,
-} from '../api/upstoxBroker';
+import { loadRestBrokerPortfolioSlices } from '../api/restBrokerPortfolio';
 import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
@@ -42,7 +33,7 @@ const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
 /** First match wins: Dhan, then Angel One, then Samco, Upstox (same family as Profile). */
-const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox'];
+const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const deriveDirectionFromRow = (row) => {
   const reco = String(row?.recommendation || '').toLowerCase();
@@ -1317,20 +1308,12 @@ function DashboardPage() {
             ]);
             const [o] = await Promise.allSettled([fetchAngeloneOrders({ userId })]);
             liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
-          } else if (activeBroker === 'samco') {
-            const [p, h] = await Promise.allSettled([
-              fetchSamcoBrokerPositions({ userId }),
-              fetchSamcoBrokerHoldings({ userId }),
-            ]);
-            const [o] = await Promise.allSettled([fetchSamcoBrokerOrders({ userId })]);
-            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
-          } else if (activeBroker === 'upstox') {
-            const [p, h] = await Promise.allSettled([
-              fetchUpstoxBrokerPositions({ userId }),
-              fetchUpstoxBrokerHoldings({ userId }),
-            ]);
-            const [o] = await Promise.allSettled([fetchUpstoxBrokerOrders({ userId })]);
-            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
+          } else {
+            const slices = await loadRestBrokerPortfolioSlices(activeBroker, userId);
+            if (slices) {
+              const [p, h, o] = slices;
+              liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
+            }
           }
         } catch (_) {
           liveBrokerPositions = [];
