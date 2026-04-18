@@ -15,15 +15,18 @@ import {
 } from '@mui/material';
 import {
   addAdminUser,
-  approveAdminUserAccessLink,
-  blockAdminUser,
+  addPremiumEmail,
   deleteAdminUser,
+  deletePremiumEmail,
   fetchAdminUsers,
-  rejectAdminUserRequest,
+  fetchPremiumEmails,
+  setUserPaidPremium,
 } from '../api/auth';
+import AdminUserDirectoryTables from '../components/AdminUserDirectoryTables';
 import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.styles';
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
+
 const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
@@ -39,8 +42,34 @@ function AdminUsersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const [paidTarget, setPaidTarget] = useState(null);
+
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
+
+  const [premiumRows, setPremiumRows] = useState([]);
+  const [premiumLoading, setPremiumLoading] = useState(true);
+  const [premiumEmail, setPremiumEmail] = useState('');
+  const [premiumError, setPremiumError] = useState('');
+  const [premiumMessage, setPremiumMessage] = useState('');
+  const [premiumBusy, setPremiumBusy] = useState(false);
+
+  const loadPremiumEmails = useCallback(async () => {
+    setPremiumLoading(true);
+    setPremiumError('');
+    try {
+      const res = await fetchPremiumEmails();
+      setPremiumRows(Array.isArray(res?.data) ? res.data : []);
+    } catch (err) {
+      if (isMissingResourceError(err)) {
+        setPremiumRows([]);
+      } else {
+        setPremiumError(err?.message || 'Failed to load premium email list.');
+      }
+    } finally {
+      setPremiumLoading(false);
+    }
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -63,6 +92,10 @@ function AdminUsersPage() {
     loadUsers();
   }, [loadUsers]);
 
+  useEffect(() => {
+    loadPremiumEmails();
+  }, [loadPremiumEmails]);
+
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return rows;
@@ -75,6 +108,25 @@ function AdminUsersPage() {
       );
     });
   }, [rows, search]);
+
+  const tierLifetimeUsers = useMemo(
+    () => filteredRows.filter((r) => Boolean(r.premium_lifetime)),
+    [filteredRows],
+  );
+  const tierYearlyOtherPremiumUsers = useMemo(
+    () => filteredRows.filter((r) => {
+      if (r.premium_lifetime) return false;
+      return Boolean(r.paid_premium_active || r.premium_complimentary || r.on_premium_allowlist);
+    }),
+    [filteredRows],
+  );
+  const tierBasicUsers = useMemo(
+    () =>
+      filteredRows.filter(
+        (r) => !r.premium_lifetime && !r.paid_premium_active && !r.premium_complimentary && !r.on_premium_allowlist,
+      ),
+    [filteredRows],
+  );
 
   const canCreate = useMemo(() => {
     const em = email.trim();
@@ -126,9 +178,167 @@ function AdminUsersPage() {
     }
   };
 
+  const canAddPremium = premiumEmail.trim().includes('@') && premiumEmail.trim().length > 5;
+
+  const onAddPremiumEmail = async () => {
+    if (!canAddPremium) return;
+    setPremiumBusy(true);
+    setPremiumError('');
+    setPremiumMessage('');
+    try {
+      await addPremiumEmail(premiumEmail.trim());
+      setPremiumMessage(`Premium access granted for ${premiumEmail.trim()}.`);
+      setPremiumEmail('');
+      await loadPremiumEmails();
+    } catch (err) {
+      setPremiumError(err?.message || 'Unable to add email.');
+    } finally {
+      setPremiumBusy(false);
+    }
+  };
+
+  const onSubmitPaidPremium = async () => {
+    if (!paidTarget) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await setUserPaidPremium(paidTarget.id);
+      const ist = res?.paid_premium_until_ist ? ` (through ${res.paid_premium_until_ist})` : '';
+      setMessage(`Paid premium recorded for ${paidTarget.email}${ist}.`);
+      setPaidTarget(null);
+      await loadUsers();
+    } catch (err) {
+      setError(err?.message || 'Unable to record payment.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRemovePremiumEmail = async (row) => {
+    if (!row?.id) return;
+    setPremiumBusy(true);
+    setPremiumError('');
+    setPremiumMessage('');
+    try {
+      await deletePremiumEmail(row.id);
+      setPremiumMessage(`Removed ${row.email} from premium list.`);
+      await loadPremiumEmails();
+    } catch (err) {
+      setPremiumError(err?.message || 'Unable to remove email.');
+    } finally {
+      setPremiumBusy(false);
+    }
+  };
+
   return (
     <TableSection>
       <TableTitle>Admin User Management</TableTitle>
+
+      <Box sx={{ fontSize: 13, color: 'text.secondary', mb: 2, lineHeight: 1.5 }}>
+        Creating or approving a user only activates their <strong>basic</strong> workspace (when the paywall is on).
+        Below, users are split into <strong>Lifetime members</strong>, <strong>Yearly &amp; other premium</strong> (explicitly
+        upgraded without lifetime), and <strong>Basic</strong> (not upgraded yet). Use <strong>Record payment</strong> for
+        a one-year paid term (IST), or the email allowlist for overrides.
+      </Box>
+      <Box
+        component="ol"
+        sx={{
+          fontSize: 13,
+          color: 'text.secondary',
+          mb: 2,
+          pl: 2.5,
+          lineHeight: 1.65,
+          '& li': { mb: 0.75 },
+        }}
+      >
+        <Box component="li">
+          <strong>Basic → premium (multi-select):</strong> open the <strong>Basic users</strong> table, tick the checkbox on
+          each row (or the header to select all visible rows), then use <strong>Complimentary premium for selected</strong>.
+          The server stores that in one database commit (up to 200 users per action).
+        </Box>
+        <Box component="li">
+          <strong>Premium → lifetime (multi-select):</strong> open <strong>Yearly &amp; other premium</strong>, select rows,
+          then <strong>Lifetime premium for selected</strong>. From <strong>Basic</strong> you can instead choose{' '}
+          <strong>Lifetime premium for selected</strong> to grant lifetime in one step. Both use a single DB commit per bulk
+          action.
+        </Box>
+        <Box component="li">
+          Single-row actions (Block, Record payment, etc.) stay in each row’s <strong>Action</strong> column.
+        </Box>
+      </Box>
+
+      <Box sx={{ border: '1px solid #e5e7eb', borderRadius: 2, p: 2, mb: 2, bgcolor: '#fff' }}>
+        <Box sx={{ fontWeight: 700, mb: 0.5 }}>Premium email access</Box>
+        <Box sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
+          When the premium paywall is on, these emails get full access without using per-user <strong>Record payment</strong>.
+          Use this list for partners or manual overrides; paying customers can instead use <strong>Record payment</strong> on
+          their user row. Emails must match the account login email after normalization.
+        </Box>
+        {premiumError ? <Alert severity="error" sx={{ mb: 1.5 }}>{premiumError}</Alert> : null}
+        {premiumMessage ? <Alert severity="success" sx={{ mb: 1.5 }}>{premiumMessage}</Alert> : null}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start', mb: 1.5 }}>
+          <TextField
+            size="small"
+            label="Email to grant premium"
+            value={premiumEmail}
+            onChange={(e) => setPremiumEmail(e.target.value)}
+            sx={{ minWidth: 280 }}
+            disabled={premiumBusy}
+          />
+          <Button variant="contained" onClick={onAddPremiumEmail} disabled={!canAddPremium || premiumBusy} sx={{ mt: 0.25 }}>
+            Add to list
+          </Button>
+          <Button variant="outlined" onClick={loadPremiumEmails} disabled={premiumBusy || premiumLoading}>
+            Refresh list
+          </Button>
+        </Box>
+        {premiumLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={28} />
+          </Box>
+        ) : (
+          <TableWrapper>
+            <Table>
+              <thead>
+                <tr>
+                  <th style={compact}>ID</th>
+                  <th style={compact}>Email</th>
+                  <th style={compact}>Added</th>
+                  <th style={compact}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {premiumRows.map((row) => (
+                  <tr key={row.id}>
+                    <td style={compact}>{row.id}</td>
+                    <td style={compact}>{row.email}</td>
+                    <td style={compact}>{row.created_at || '—'}</td>
+                    <td style={compact}>
+                      <Button
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        disabled={premiumBusy}
+                        onClick={() => onRemovePremiumEmail(row)}
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {premiumRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                      No premium emails yet. Add one above when a customer should bypass the paywall.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </Table>
+          </TableWrapper>
+        )}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
       {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}
@@ -179,150 +389,39 @@ function AdminUsersPage() {
           <CircularProgress />
         </Box>
       ) : (
-        <TableWrapper>
-          <Table>
-            <thead>
-              <tr>
-                <th style={compact}>ID</th>
-                <th style={compact}>Email (User ID)</th>
-                <th style={compact}>Mobile</th>
-                <th style={compact}>Name</th>
-                <th style={compact}>Status</th>
-                <th style={compact}>Created</th>
-                <th style={compact}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row) => (
-                <tr key={row.id}>
-                  <td style={compact}>{row.id}</td>
-                  <td style={compact}>{row.email}</td>
-                  <td style={compact}>{row.mobile || '—'}</td>
-                  <td style={compact}>{row.full_name || '—'}</td>
-                  <td style={{ ...compact, fontWeight: 700, color: row.is_active ? '#2e7d32' : '#c62828' }}>
-                    {row.is_pending_approval ? 'Pending Approval' : (row.is_active ? 'Active' : 'Blocked')}
-                  </td>
-                  <td style={compact}>{row.created_at || '—'}</td>
-                  <td style={compact}>
-                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
-                      {row.is_pending_approval ? (
-                        <>
-                          <Button
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                            disabled={busy}
-                            onClick={async () => {
-                              setBusy(true);
-                              setError('');
-                              setMessage('');
-                              try {
-                                const res = await approveAdminUserAccessLink(row.id);
-                                setMessage(res?.message || `Access link sent to ${row.email}.`);
-                                await loadUsers();
-                              } catch (err) {
-                                setError(err?.message || 'Unable to send access link.');
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            Approve & Send Link
-                          </Button>
-                          <Button
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                            disabled={busy}
-                            onClick={async () => {
-                              setBusy(true);
-                              setError('');
-                              setMessage('');
-                              try {
-                                await rejectAdminUserRequest(row.id, 'rejected_by_admin');
-                                setMessage(`User ${row.email} rejected.`);
-                                await loadUsers();
-                              } catch (err) {
-                                setError(err?.message || 'Unable to reject user.');
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      ) : row.is_active ? (
-                        <Button
-                          size="small"
-                          color="warning"
-                          variant="outlined"
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            setError('');
-                            setMessage('');
-                            try {
-                              await blockAdminUser(row.id, true);
-                              setMessage(`User ${row.email} blocked successfully.`);
-                              await loadUsers();
-                            } catch (err) {
-                              setError(err?.message || 'Unable to block user.');
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          Block
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            setError('');
-                            setMessage('');
-                            try {
-                              await blockAdminUser(row.id, false);
-                              setMessage(`User ${row.email} unblocked successfully.`);
-                              await loadUsers();
-                            } catch (err) {
-                              setError(err?.message || 'Unable to unblock user.');
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          Unblock
-                        </Button>
-                      )}
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        disabled={busy}
-                        onClick={() => setDeleteTarget(row)}
-                      >
-                        Delete
-                      </Button>
-                    </Box>
-                  </td>
-                </tr>
-              ))}
-              {filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
-                    No users found.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </Table>
-        </TableWrapper>
+        <AdminUserDirectoryTables
+          tierLifetimeUsers={tierLifetimeUsers}
+          tierYearlyOtherPremiumUsers={tierYearlyOtherPremiumUsers}
+          tierBasicUsers={tierBasicUsers}
+          busy={busy}
+          setBusy={setBusy}
+          setError={setError}
+          setMessage={setMessage}
+          loadUsers={loadUsers}
+          setPaidTarget={setPaidTarget}
+          setDeleteTarget={setDeleteTarget}
+        />
       )}
+
+      <Dialog open={Boolean(paidTarget)} onClose={() => !busy && setPaidTarget(null)}>
+        <DialogTitle>Record annual payment (IST)</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 1 }}>
+            User <strong>{paidTarget?.email || ''}</strong>. This records <strong>one calendar year</strong> of paid
+            premium from the later of <em>now</em> (Asia/Kolkata) and the current subscription end (if still active),
+            so renewals stack correctly. Re-run each year after payment.
+          </DialogContentText>
+          <DialogContentText sx={{ color: 'text.secondary', fontSize: 13 }}>
+            There is no lifetime option; access must be renewed annually.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPaidTarget(null)} disabled={busy}>Cancel</Button>
+          <Button variant="contained" onClick={onSubmitPaidPremium} disabled={busy}>
+            Confirm annual premium (IST)
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
         <DialogTitle>Delete User</DialogTitle>

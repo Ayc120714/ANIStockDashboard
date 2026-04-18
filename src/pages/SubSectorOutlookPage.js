@@ -32,8 +32,11 @@ import {
   HeaderCell,
   TableScroll,
 } from './SubSectorOutlook.styles';
-import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook'; 
-import { fetchStocksBySubsector } from '../api/stocks'; 
+import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook';
+import { fetchStocksBySubsector } from '../api/stocks';
+import { useAuth } from '../auth/AuthContext';
+import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
+import { MdLock } from 'react-icons/md';
 const SUBSECTOR_REFRESH_MS = 30000;
 const SUBSECTOR_MAIN_ROWS_OPTIONS = [15, 25, 50, 100];
 /** Bump when API shape changes (e.g. trend string + trend_pct) so stale sessionStorage is not used. */
@@ -87,10 +90,38 @@ function formatTrendDisplay(sub) {
   return '—';
 }
 
-function matchesChip(chip, sub, weekLabels) {
+function weekNumFromLabel(label) {
+  const m = /^W(\d+)$/i.exec(String(label || '').trim());
+  return m ? parseInt(m[1], 10) : NaN;
+}
+
+/**
+ * Premium: chip uses newest week (smallest W# among W-prefixed labels).
+ * Basic: chip uses the **last** column in `weekLabels` order (e.g. W1 when headers are W4–W1 left-to-right).
+ */
+function pickWeekLabelForChip(weekLabels, outlookPremium) {
+  if (!weekLabels?.length) return null;
+  const parsed = weekLabels
+    .map((l) => ({ l, n: weekNumFromLabel(l) }))
+    .filter((x) => Number.isFinite(x.n));
+  if (!parsed.length) return weekLabels[0];
+  if (outlookPremium) return parsed.reduce((a, b) => (a.n <= b.n ? a : b)).l;
+  return weekLabels[weekLabels.length - 1];
+}
+
+/** Basic: only the rightmost / last week column in API order stays unlocked (W1 when labels are W4…W1). */
+function isWeekColumnLockedForBasic(lbl, outlookPremium, weekLabels) {
+  if (outlookPremium) return false;
+  if (!weekLabels?.length) return false;
+  const idx = weekLabels.indexOf(lbl);
+  if (idx < 0) return false;
+  return idx !== weekLabels.length - 1;
+}
+
+function matchesChip(chip, sub, weekLabels, outlookPremium) {
   if (chip === 'All') return true;
-  const latestLabel = weekLabels && weekLabels.length ? weekLabels[0] : null;
-  const val = latestLabel ? sub[latestLabel] : null;
+  const chipLabel = pickWeekLabelForChip(weekLabels, outlookPremium);
+  const val = chipLabel ? sub[chipLabel] : null;
   if (typeof val !== 'number') return true;
 
   if (chip === 'Weak') return val < -2;
@@ -101,6 +132,7 @@ function matchesChip(chip, sub, weekLabels) {
 
 
 function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
+  const { outlookPremium } = useAuth();
   const [chip, setChip] = useState('All');
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('top');
@@ -162,6 +194,16 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   }, [loadSubsectorData]);
 
   useEffect(() => {
+    if (!outlookPremium && modalOpen) {
+      setModalOpen(false);
+      setSelectedSubsector(null);
+      setModalStocks([]);
+      setModalTotal(0);
+      setModalPage(1);
+    }
+  }, [outlookPremium, modalOpen]);
+
+  useEffect(() => {
     setMainListPage(0);
   }, [search, chip, selectedSector]);
 
@@ -202,6 +244,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   }, []);
 
   const handleSubsectorClick = async (subsectorName, sectorName) => {
+    if (!outlookPremium) return;
     setSelectedSubsector({ name: subsectorName, sector: sectorName });
     setModalOpen(true);
     setModalPage(1);
@@ -262,7 +305,9 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const weekLabels = sectorData.weekLabels || [];
   const dataList = sectorData.data || [];
   const handleTableSort = (key) => {
-    setTableSort(prev => ({
+    if (key === 'trend' && !outlookPremium) return;
+    if (isWeekColumnLockedForBasic(key, outlookPremium, weekLabels)) return;
+    setTableSort((prev) => ({
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
@@ -275,6 +320,10 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
 
   const sortSubsectors = (subsectors) => {
     if (!tableSort.key) return subsectors;
+    if (tableSort.key === 'trend' && !outlookPremium) return subsectors;
+    if (!outlookPremium && isWeekColumnLockedForBasic(tableSort.key, outlookPremium, weekLabels)) {
+      return subsectors;
+    }
     const sorted = [...subsectors];
     sorted.sort((a, b) => {
       let aVal, bVal;
@@ -316,7 +365,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
       .toLowerCase()
       .includes(search.toLowerCase());
 
-      const matchesBand = matchesChip(chip, sub, weekLabels);
+      const matchesBand = matchesChip(chip, sub, weekLabels, outlookPremium);
 
     return matchesSearch && matchesBand;
   })),
@@ -363,6 +412,7 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
         {loadError && (
           <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600, textAlign: 'left' }}>{loadError}</div>
         )}
+        <UpgradeToPremiumBanner />
         {isLoading && !loadError && (
           <div style={{ marginBottom: '12px', color: '#666', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
             <CircularProgress />
@@ -442,18 +492,28 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                 <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('all')}>
                   ALL{getTableSortArrow('all')}
                 </HeaderCell>
-                <HeaderCell style={{ cursor: 'pointer' }} onClick={() => handleTableSort('trend')}>
-                  Trend{getTableSortArrow('trend')}
+                <HeaderCell
+                  style={{ cursor: outlookPremium ? 'pointer' : 'not-allowed', opacity: outlookPremium ? 1 : 0.75 }}
+                  onClick={() => outlookPremium && handleTableSort('trend')}
+                  title={!outlookPremium ? 'Premium access required' : undefined}
+                >
+                  Trend{outlookPremium ? getTableSortArrow('trend') : ' 🔒'}
                 </HeaderCell>
-                {(weekLabels.length ? weekLabels : [1,2,3,4]).map((lbl, idx) => (
-                  <HeaderCell
-                    key={lbl || idx}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => typeof lbl === 'string' && handleTableSort(lbl)}
-                  >
-                    {typeof lbl === 'string' ? lbl : 'W—'}{typeof lbl === 'string' ? getTableSortArrow(lbl) : ''}
-                  </HeaderCell>
-                ))}
+                {(weekLabels.length ? weekLabels : [1, 2, 3, 4]).map((lbl, idx) => {
+                  const locked =
+                    typeof lbl === 'string' && isWeekColumnLockedForBasic(lbl, outlookPremium, weekLabels);
+                  return (
+                    <HeaderCell
+                      key={lbl || idx}
+                      style={{ cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.75 : 1 }}
+                      onClick={() => typeof lbl === 'string' && !locked && handleTableSort(lbl)}
+                      title={locked ? 'Premium access required' : undefined}
+                    >
+                      {typeof lbl === 'string' ? lbl : 'W—'}
+                      {locked ? ' 🔒' : typeof lbl === 'string' ? getTableSortArrow(lbl) : ''}
+                    </HeaderCell>
+                  );
+                })}
               </HeaderRow>
             </thead>
             <tbody>
@@ -483,8 +543,17 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                       )}
                       <TableRow>
                         <TableCell
-                          style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
-                          onClick={() => handleSubsectorClick(sub.name, sector)}
+                          style={
+                            outlookPremium
+                              ? { cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }
+                              : { cursor: 'not-allowed', color: '#555', textDecoration: 'none' }
+                          }
+                          onClick={() => outlookPremium && handleSubsectorClick(sub.name, sector)}
+                          title={
+                            !outlookPremium
+                              ? 'Premium access required — upgrade to open the stock list for this subsector'
+                              : undefined
+                          }
                         >
                           {sub.name}
                           {countVal != null && Number(countVal) > 0 && (
@@ -500,21 +569,53 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                         </TableCell>
                         <TableCell
                           className={
-                            trendText === '—'
+                            !outlookPremium
                               ? ''
-                              : trendSortValue(sub) >= 0
-                                ? 'trend-up'
-                                : 'trend-down'
+                              : trendText === '—'
+                                ? ''
+                                : trendSortValue(sub) >= 0
+                                  ? 'trend-up'
+                                  : 'trend-down'
                           }
                         >
-                          {trendText}
+                          {outlookPremium ? (
+                            trendText
+                          ) : (
+                            <span
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                color: '#bdbdbd',
+                              }}
+                              title="Premium access required"
+                            >
+                              <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                            </span>
+                          )}
                         </TableCell>
                         {(weekLabels.length ? weekLabels : [1, 2, 3, 4]).map((lbl, idx) => {
                           const val = weekLabels.length ? sub[lbl] : null;
                           const display = val != null ? `${val}%` : '—';
+                          const locked =
+                            weekLabels.length > 0 &&
+                            typeof lbl === 'string' &&
+                            isWeekColumnLockedForBasic(lbl, outlookPremium, weekLabels);
                           return (
-                            <TableCell key={lbl || idx} highlight={getHighlight(val)}>
-                              {display}
+                            <TableCell key={lbl || idx} highlight={locked ? undefined : getHighlight(val)}>
+                              {locked ? (
+                                <span
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    color: '#bdbdbd',
+                                  }}
+                                  title="Premium access required"
+                                >
+                                  <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                                </span>
+                              ) : (
+                                display
+                              )}
                             </TableCell>
                           );
                         })}

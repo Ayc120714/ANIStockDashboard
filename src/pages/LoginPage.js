@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Link, TextField, Typography } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
-import { useLocation, useNavigate } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import MarketDisclaimer from '../components/MarketDisclaimer';
 import { loginStart } from '../api/auth';
 import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
 import { useAuth } from '../auth/AuthContext';
@@ -83,7 +84,7 @@ const DEFAULT_LOGIN_CONTENT = {
 function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { persistAuth } = useAuth();
+  const { persistAuth, hydrateMe } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -120,6 +121,7 @@ function LoginPage() {
       const fallbackPath = resolveFallbackPath();
       if (res?.mfa_required === false && res?.access_token && res?.refresh_token) {
         persistAuth(res.access_token, res.refresh_token, res?.user || null);
+        await hydrateMe();
         await routeAfterLogin({
           nextUser: res?.user || null,
           fallbackPath,
@@ -557,6 +559,139 @@ function LoginPage() {
               </CardContent>
             </Card>
           </Box>
+        </Box>
+
+        <Box
+          sx={{
+            px: { xs: 1.2, md: 2.4, xl: 4 },
+            py: { xs: 1.2, md: 1.4 },
+            borderRadius: 2.5,
+            border: '1px solid rgba(96,165,250,0.28)',
+            background: 'linear-gradient(120deg, rgba(10,22,52,0.92), rgba(20,52,128,0.42))',
+            boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
+          }}
+        >
+          <Typography
+            sx={{
+              color: '#e2e8f0',
+              fontWeight: 800,
+              fontSize: 'clamp(16px, 1vw, 22px)',
+              mb: 1.2,
+              textAlign: { xs: 'left', md: 'center' },
+            }}
+          >
+            {'Product map & policies'}
+          </Typography>
+          <Typography
+            sx={{
+              color: '#cbd5e1',
+              fontSize: '0.82rem',
+              lineHeight: 1.5,
+              mb: 1.5,
+              textAlign: { xs: 'left', md: 'center' },
+              maxWidth: 900,
+              mx: { md: 'auto' },
+            }}
+          >
+            Use the links in About and Policies to open each topic on its own page (same content as /features, /pricing,
+            and the policy pages)—so this login screen stays compact.
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, minmax(0, 1fr))' },
+              gap: 1.2,
+            }}
+          >
+            <Box
+              sx={{
+                p: 1.35,
+                borderRadius: 2,
+                border: '1px solid rgba(96,165,250,0.35)',
+                background: 'rgba(15,23,42,0.72)',
+              }}
+            >
+              <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
+                {'Markets & desk'}
+              </Typography>
+              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5 }}>Dashboard pulse and Overview (indices, flows, tables).</Typography>
+              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5, mt: 0.5 }}>
+                {'Portfolio Manager, Alerts, F&O, Commodities, Forex — premium after upgrade.'}
+              </Typography>
+              <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#93c5fd', fontSize: '0.78rem', fontWeight: 700, mt: 0.75, display: 'inline-block' }}>
+                Full product map →
+              </Link>
+            </Box>
+            <Box
+              sx={{
+                p: 1.35,
+                borderRadius: 2,
+                border: '1px solid rgba(96,165,250,0.35)',
+                background: 'rgba(15,23,42,0.72)',
+              }}
+            >
+              <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
+                Research modules
+              </Typography>
+              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5 }}>{'Long Term & Short Term outlook pages.'}</Typography>
+              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5, mt: 0.5 }}>Screens and Financial Advisor for deeper work.</Typography>
+              <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#93c5fd', fontSize: '0.78rem', fontWeight: 700, mt: 0.75, display: 'inline-block' }}>
+                Full product map →
+              </Link>
+            </Box>
+            <Box
+              sx={{
+                p: 1.35,
+                borderRadius: 2,
+                border: '2px solid rgba(202, 138, 4, 0.85)',
+                background: 'rgba(202, 138, 4, 0.07)',
+                boxShadow: '0 0 0 1px rgba(202,138,4,0.2)',
+              }}
+            >
+              <Typography sx={{ color: '#fef9c3', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
+                Policies
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.45 }}>
+                <Link component={RouterLink} to="/privacy-policy" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
+                  Privacy policy
+                </Link>
+                <Link component={RouterLink} to="/terms-of-use" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
+                  Terms of use
+                </Link>
+                <Link component={RouterLink} to="/cancellation-policy" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
+                  Cancellation policy
+                </Link>
+              </Box>
+            </Box>
+            <Box
+              sx={{
+                p: 1.35,
+                borderRadius: 2,
+                border: '2px solid rgba(202, 138, 4, 0.85)',
+                background: 'rgba(202, 138, 4, 0.07)',
+                boxShadow: '0 0 0 1px rgba(202,138,4,0.2)',
+              }}
+            >
+              <Typography sx={{ color: '#fef9c3', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
+                About
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.45 }}>
+                <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
+                  Features
+                </Link>
+                <Link component={RouterLink} to="/pricing" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
+                  Pricing
+                </Link>
+                <Typography sx={{ color: '#e2e8f0', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                  {"What's new — Events & notices (after you sign in)."}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+
+        <Box sx={{ px: { xs: 1.2, md: 2.4, xl: 4 }, width: '100%', maxWidth: 1200, mx: 'auto', mt: 1 }}>
+          <MarketDisclaimer variant="login" />
         </Box>
       </Box>
     </Box>

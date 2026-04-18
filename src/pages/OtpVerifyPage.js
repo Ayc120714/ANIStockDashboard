@@ -12,7 +12,7 @@ const OTP_FLOW_SESSION_KEY = 'auth_otp_flow_ctx';
 function OtpVerifyPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { persistAuth } = useAuth();
+  const { persistAuth, hydrateMe } = useAuth();
   let storedFlow = {};
   try {
     storedFlow = JSON.parse(sessionStorage.getItem(OTP_FLOW_SESSION_KEY) || '{}');
@@ -48,6 +48,7 @@ function OtpVerifyPage() {
     if (purpose === 'login_email') {
       const res = await completeEmailOtpLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      await hydrateMe();
       clearOtpFlowSession();
       await routeAfterLogin({
         nextUser: res?.user || null,
@@ -59,6 +60,7 @@ function OtpVerifyPage() {
     if (purpose === 'login') {
       const res = await completeLogin(flowId, trustDevice);
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      await hydrateMe();
       clearOtpFlowSession();
       await routeAfterLogin({
         nextUser: res?.user || null,
@@ -66,7 +68,7 @@ function OtpVerifyPage() {
         navigate,
       });
     }
-  }, [flowId, purpose, trustDevice, from, navigate, persistAuth, clearOtpFlowSession]);
+  }, [flowId, purpose, trustDevice, from, navigate, persistAuth, hydrateMe, clearOtpFlowSession]);
 
   const onVerify = async (channel) => {
     const otpCode = emailOtp;
@@ -135,6 +137,7 @@ function OtpVerifyPage() {
         return;
       }
       persistAuth(res?.access_token, res?.refresh_token, res?.user || null);
+      await hydrateMe();
       clearOtpFlowSession();
       const fallbackPath = from || '/';
       const userId = String(res?.user?.id || res?.user?.user_id || res?.user?.email || '');

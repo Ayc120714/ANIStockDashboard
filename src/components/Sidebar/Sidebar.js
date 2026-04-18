@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { SidebarContainer, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
 import { SidebarNavLink } from './SidebarNavLink';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdLock, MdViewModule, MdAttachMoney } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
 function normalizePath(pathname) {
@@ -21,18 +21,22 @@ function routeActive(pathname, to) {
   return matchPath({ path: pattern, end: true, caseSensitive: false }, p) != null;
 }
 
-function SidebarItem({ to, collapsed, title, pathname, children }) {
+function SidebarItem({ to, collapsed, title, pathname, locked, children }) {
   const on = routeActive(pathname, to);
   return (
-    <SidebarNavLink to={to} collapsed={collapsed} active={on} title={title}>
+    <SidebarNavLink to={to} collapsed={collapsed} active={on} title={title} locked={locked}>
       {children}
+      {locked && !collapsed ? (
+        <MdLock size={15} style={{ marginLeft: 'auto', flexShrink: 0, opacity: 0.9 }} aria-hidden />
+      ) : null}
     </SidebarNavLink>
   );
 }
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, outlookPremium } = useAuth();
+  const moduleLocked = !outlookPremium;
   const { pathname } = useLocation();
 
   return (
@@ -64,32 +68,44 @@ function Sidebar() {
             <span className="label">Overview</span>
           </SidebarItem>
 
-          <SidebarItem to="/long-term" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Long Term' : undefined}>
+          <SidebarItem
+            to="/long-term"
+            collapsed={collapsed}
+            pathname={pathname}
+            locked={moduleLocked}
+            title={collapsed ? 'Long Term' : undefined}
+          >
             <MdTrendingUp />
             <span className="label">Long Term</span>
           </SidebarItem>
 
-          <SidebarItem to="/short-term" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Short Term' : undefined}>
+          <SidebarItem
+            to="/short-term"
+            collapsed={collapsed}
+            pathname={pathname}
+            locked={moduleLocked}
+            title={collapsed ? 'Short Term' : undefined}
+          >
             <MdSpeed />
             <span className="label">Short Term</span>
           </SidebarItem>
 
-          <SidebarItem to="/screens" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Screens' : undefined}>
+          <SidebarItem to="/screens" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Screens' : undefined}>
             <MdGridView />
             <span className="label">Screens</span>
           </SidebarItem>
 
-          <SidebarItem to="/advisor" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Advisor' : undefined}>
+          <SidebarItem to="/advisor" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Advisor' : undefined}>
             <MdAutoGraph />
             <span className="label">Advisor</span>
           </SidebarItem>
 
-          <SidebarItem to="/portfolio-manager" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Portfolio Manager' : undefined}>
+          <SidebarItem to="/portfolio-manager" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Portfolio Manager' : undefined}>
             <MdAccountBalanceWallet />
             <span className="label">Portfolio Manager</span>
           </SidebarItem>
 
-          <SidebarItem to="/alerts" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Alerts' : undefined}>
+          <SidebarItem to="/alerts" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Alerts' : undefined}>
             <MdNotifications />
             <span className="label">Alerts</span>
           </SidebarItem>
@@ -98,17 +114,17 @@ function Sidebar() {
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Derivatives</SectionTitle>
 
-          <SidebarItem to="/fno" collapsed={collapsed} pathname={pathname} title={collapsed ? 'F&O' : undefined}>
+          <SidebarItem to="/fno" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'F&O' : undefined}>
             <MdBarChart />
             <span className="label">F&O</span>
           </SidebarItem>
 
-          <SidebarItem to="/commodities" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Commodities' : undefined}>
+          <SidebarItem to="/commodities" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Commodities' : undefined}>
             <MdDiamond />
             <span className="label">Commodities</span>
           </SidebarItem>
 
-          <SidebarItem to="/forex" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Forex' : undefined}>
+          <SidebarItem to="/forex" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Forex' : undefined}>
             <MdCurrencyExchange />
             <span className="label">Forex</span>
           </SidebarItem>
@@ -125,6 +141,16 @@ function Sidebar() {
           <SidebarItem to="/events" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Events' : undefined}>
             <MdEventNote />
             <span className="label">Events</span>
+          </SidebarItem>
+
+          <SidebarItem to="/features" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Features' : undefined}>
+            <MdViewModule />
+            <span className="label">Features</span>
+          </SidebarItem>
+
+          <SidebarItem to="/pricing" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Pricing' : undefined}>
+            <MdAttachMoney />
+            <span className="label">Pricing</span>
           </SidebarItem>
 
           {isSuperAdmin ? (

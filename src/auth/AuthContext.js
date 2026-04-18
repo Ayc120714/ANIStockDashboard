@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { configureAuthHandlers } from '../api/apiClient';
 import { fetchMe, logoutSession, refreshSession } from '../api/auth';
 import { clearBrokerSession } from '../api/brokers';
+import { resolveOutlookPremiumAccess } from '../utils/outlookPremiumAccess';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
@@ -78,7 +79,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const hydrateMe = useCallback(async () => {
-    if (!accessToken) return;
+    // After login, tokens are written to localStorage before React state updates; read storage so
+    // /auth/me still runs (avoids treating user as basic/premium from stale partial login payloads).
+    const token =
+      accessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem(ACCESS_KEY) || '' : '');
+    if (!token) return;
     try {
       const data = await fetchMe();
       if (data?.user) {
@@ -137,6 +142,25 @@ export function AuthProvider({ children }) {
     };
   }, [accessToken, refreshToken, hydrateMe, tryRefresh]);
 
+  // Re-fetch /auth/me so paid-premium expiry updates outlook_premium without a full reload (paywall on).
+  useEffect(() => {
+    if (!accessToken) return undefined;
+    const tick = () => {
+      hydrateMe();
+    };
+    const id = window.setInterval(tick, 120000);
+    return () => window.clearInterval(id);
+  }, [accessToken, hydrateMe]);
+
+  useEffect(() => {
+    if (!accessToken) return undefined;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') hydrateMe();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [accessToken, hydrateMe]);
+
   const logout = useCallback(async () => {
     const userId = String(user?.id || user?.user_id || user?.email || '');
     try {
@@ -166,6 +190,8 @@ export function AuthProvider({ children }) {
     clearAuth();
   }, [clearAuth, refreshToken, user]);
 
+  const outlookPremium = useMemo(() => resolveOutlookPremiumAccess(user), [user]);
+
   const value = useMemo(
     () => ({
       user,
@@ -176,13 +202,14 @@ export function AuthProvider({ children }) {
       isSuperAdmin:
         Boolean(user?.is_super_admin) ||
         SUPER_ADMIN_EMAILS.has(String(user?.email || '').toLowerCase()),
+      outlookPremium,
       bootstrapping,
       persistAuth,
       clearAuth,
       logout,
       hydrateMe,
     }),
-    [user, accessToken, refreshToken, bootstrapping, persistAuth, clearAuth, logout, hydrateMe],
+    [user, accessToken, refreshToken, bootstrapping, outlookPremium, persistAuth, clearAuth, logout, hydrateMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

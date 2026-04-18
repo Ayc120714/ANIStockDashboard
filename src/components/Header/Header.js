@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { HeaderContainer } from './Header.styles';
 import { Box, Button } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 
 function Header() {
-  const { user, logout } = useAuth();
+  const { user, logout, outlookPremium } = useAuth();
+
+  const planLabel = useMemo(() => {
+    if (user?.premium_lifetime === true) return 'Lifetime';
+    if (outlookPremium) return 'Premium';
+    return 'Basic';
+  }, [user?.premium_lifetime, outlookPremium]);
 
   return (
     <HeaderContainer>
@@ -38,10 +44,32 @@ function Header() {
           }}
         />
       </Box>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-        <span style={{ color: '#555', fontSize: 13 }}>
-          {user?.full_name || user?.email || ''}
-        </span>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <span style={{ color: '#555', fontSize: 13 }}>
+            {user?.full_name || user?.email || ''}
+          </span>
+          <Box
+            component="span"
+            sx={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: 0.06,
+              textTransform: 'uppercase',
+              px: 1,
+              py: 0.35,
+              borderRadius: 1,
+              border: '1px solid',
+              ...(planLabel === 'Lifetime'
+                ? { color: '#1565c0', borderColor: 'rgba(21, 101, 192, 0.45)', bgcolor: 'rgba(21, 101, 192, 0.08)' }
+                : planLabel === 'Premium'
+                  ? { color: '#2e7d32', borderColor: 'rgba(46, 125, 50, 0.45)', bgcolor: 'rgba(46, 125, 50, 0.08)' }
+                  : { color: '#616161', borderColor: 'rgba(97, 97, 97, 0.4)', bgcolor: 'rgba(0,0,0,0.04)' }),
+            }}
+          >
+            {planLabel}
+          </Box>
+        </Box>
         <Button size="small" variant="outlined" onClick={logout}>
           Logout
         </Button>

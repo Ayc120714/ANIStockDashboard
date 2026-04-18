@@ -112,3 +112,8 @@
   border-left-color: rgba(191, 219, 254, 0.6);
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.24);
 }
+
+/* Premium-gated nav: still navigates to the gate page so users see the upsell copy */
+.locked:not(.active) {
+  opacity: 0.72;
+}

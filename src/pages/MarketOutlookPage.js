@@ -1,9 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TablePagination } from '@mui/material';
+import { MdLock } from 'react-icons/md';
 import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
+import { useAuth } from '../auth/AuthContext';
 import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
+import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
+import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import {
   CardContainer,
   Card,
@@ -31,6 +35,7 @@ const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
 function MarketOutlookContent({ apiReady, timedOut }) {
+  const { outlookPremium } = useAuth();
   const [searchParams] = useSearchParams();
   const miDiag = searchParams.get('mi_diag') === '1';
   const defaultIndexCards = [
@@ -155,6 +160,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
   }, [sortedTableData, tablePage, tableRowsPerPage]);
 
   const requestSort = (key) => {
+    if (!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has(key)) return;
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
@@ -348,6 +354,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
           Live refresh every 30s. Last update: {lastRefreshedAt.toLocaleTimeString()}
         </div>
       )}
+      <UpgradeToPremiumBanner />
       {/* Index Cards Row 1 */}
       <CardContainer>
         {indexCards.map((card, idx) => (
@@ -535,11 +542,21 @@ function MarketOutlookContent({ apiReady, timedOut }) {
           <Table>
             <thead>
               <tr>
-                {columnConfig.map((col) => (
-                  <th key={col.key} onClick={() => requestSort(col.key)} style={{cursor:'pointer'}}>
-                    {col.label}{getSortArrow(col.key)}
-                  </th>
-                ))}
+                {columnConfig.map((col) => {
+                  const locked = !outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has(col.key);
+                  return (
+                    <th
+                      key={col.key}
+                      onClick={() => requestSort(col.key)}
+                      style={{ cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.75 : 1 }}
+                      title={locked ? 'Premium access required' : undefined}
+                    >
+                      {col.label}
+                      {locked ? ' 🔒' : ''}
+                      {getSortArrow(col.key)}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -559,9 +576,27 @@ function MarketOutlookContent({ apiReady, timedOut }) {
                   <td className={perfCellClassName(row.week1w)}>{row.week1w}</td>
                   <td className={perfCellClassName(row.month1m)}>{row.month1m}</td>
                   <td className={perfCellClassName(row.month3m)}>{row.month3m}</td>
-                  <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
-                  <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
-                  <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('month6m') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
+                  )}
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('year1y') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
+                  )}
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('year3y') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
+                  )}
                 </tr>
               ))}
             </tbody>

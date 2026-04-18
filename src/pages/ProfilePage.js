@@ -25,6 +25,7 @@ import {
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { brokerRowHasLiveTradingSession, fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
 import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';
 import {
@@ -97,8 +98,15 @@ const BROKER_LABELS = {
   fyers: 'Fyers',
   zerodha: 'Zerodha (Kite)',
 };
-/** Public API docs when the server row does not set `doc_url`. */
-const BROKER_DOC_URLS = {
+/**
+ * Official broker setup / API documentation (keys, OAuth, consent, IP allowlist — follow the broker site).
+ * Used when `GET /brokers/setup` does not return `doc_url` for a row.
+ */
+const BROKER_SETUP_DOC_URLS = {
+  dhan: 'https://dhanhq.co/docs/v2/',
+  samco: 'https://docs-tradeapi.samco.in',
+  angelone: 'https://smartapi.angelbroking.com/docs',
+  upstox: 'https://upstox.com/developer/api-documentation',
   kotak: 'https://www.notion.so/Client-documentation-236da70d37e280b3a979fc7be7b003bc',
   fyers: 'https://myapi.fyers.in/docsv3',
   zerodha: 'https://kite.trade/docs/connect/v3/',
@@ -160,7 +168,11 @@ const formatLastAuthIST = (value) => {
 };
 
 function ProfilePage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, outlookPremium } = useAuth();
+  const paidPremiumLapsed =
+    Boolean(user?.paid_premium_until) &&
+    user?.paid_premium_active === false &&
+    !outlookPremium;
   const navigate = useNavigate();
   const location = useLocation();
   const userId = String(user?.id || user?.user_id || user?.email || '');
@@ -1045,6 +1057,14 @@ function ProfilePage() {
       <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
         Profile
       </Typography>
+      <UpgradeToPremiumBanner />
+      {paidPremiumLapsed ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Your paid premium period has ended. This account is on the <strong>basic</strong> plan until an
+          administrator records the next payment (Admin Users → Record payment) or restores premium through the
+          allowlist.
+        </Alert>
+      ) : null}
       <Tabs
         value={activeTab}
         onChange={(_, value) => setActiveTab(value)}
@@ -1254,6 +1274,18 @@ function ProfilePage() {
 
       {activeTab === 'broker' ? (
         <>
+      {onboardingBrokerSetup ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography component="span" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+            API access and IPv4 allowlisting
+          </Typography>
+          Most brokers only accept API traffic from approved networks. In your broker&apos;s developer or API
+          console, <strong>enable API / algo access</strong> and register this deployment&apos;s{' '}
+          <strong>public IPv4 address</strong> (static IP allowlist / whitelist). Without that, validation and live
+          calls from our servers may fail even if your credentials are correct. Use each broker&apos;s official
+          documentation (listed below) for keys, consent, and IP rules.
+        </Alert>
+      ) : null}
       {isAdmin ? (
         <Alert severity={liveEnabledCount > 0 ? 'success' : 'info'} sx={{ mb: 2 }}>
           Live execution: {liveEnabledCount > 0 ? `${liveEnabledCount} broker session(s) active.` : 'Activate broker session to place live orders.'}
@@ -1270,6 +1302,28 @@ function ProfilePage() {
         <Typography sx={{ fontSize: 13, color: '#555', mb: 1.5 }}>
           Select your broker, enter only the required fields for that broker, validate, and keep integration enabled now or later.
         </Typography>
+        <Alert severity="info" variant="outlined" sx={{ mb: 1.5, py: 1.25 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 13, mb: 0.75 }}>
+            Official setup and API documentation (per broker)
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: '#555', mb: 1, lineHeight: 1.45 }}>
+            Each vendor documents app registration, authentication (including OTP/TOTP where applicable), and any
+            static IPv4 or API allowlisting. Open the guide for the broker you are configuring.
+          </Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2.25, fontSize: 12.5, lineHeight: 1.5 }}>
+            {PROFILE_BROKER_TABS_ORDER.map((bid) => (
+              <Box component="li" key={bid} sx={{ mb: 0.35 }}>
+                <Link href={BROKER_SETUP_DOC_URLS[bid]} target="_blank" rel="noreferrer" sx={{ fontWeight: 600 }}>
+                  {BROKER_LABELS[bid] || bid}
+                </Link>
+                <Typography component="span" sx={{ fontSize: 12, color: '#666' }}>
+                  {' — '}
+                  setup, API keys, and connectivity requirements on the broker&apos;s site
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Alert>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ mb: 1.5 }}>
           <TextField
             select
@@ -1333,7 +1387,8 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'dhan' ? (
                 <>
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
-                    OAuth consent uses your numeric Client ID plus App ID and App Secret from Dhan → My Profile → Access DhanHQ APIs.
+                    OAuth consent uses your numeric Client ID plus App ID and App Secret from Dhan → My Profile → Access DhanHQ APIs.{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.dhan} target="_blank" rel="noreferrer">DhanHQ API setup documentation</Link>
                   </Typography>
                   <TextField
                     size="small"
@@ -1398,7 +1453,9 @@ function ProfilePage() {
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
                     Samco market and session checks use the server&apos;s <code>SAMCO_*</code> environment variables (Trade API: password, YOB, secret key or daily access token). Use super-admin{' '}
                     <code>POST /api/system/samco/*</code> for IP registration and OTP onboarding. Optional fields below are for your records; <strong>Validate &amp; Create Session</strong> runs{' '}
-                    <code>SamcoClient.login()</code> on the server.
+                    <code>SamcoClient.login()</code> on the server. Follow{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.samco} target="_blank" rel="noreferrer">Samco Trade API documentation</Link>
+                    {' '}for gateway access, OTP, and static IP rules.
                   </Typography>
                   <TextField
                     size="small"
@@ -1459,12 +1516,19 @@ function ProfilePage() {
                     inputProps={brokerLockedInputProps('broker_angel_totp')}
                   />
                   <Typography sx={{ fontSize: 11, color: '#666', gridColumn: '1 / -1', lineHeight: 1.4 }}>
-                    Use the <strong>Published API key</strong> from the Angel One SmartAPI developer console. Retail login does not use a separate client secret; enable <strong>Enable now</strong>, then enter <strong>PIN</strong> and <strong>6-digit TOTP</strong> from the Angel One authenticator app and click Validate. Optional access token is only if you already have a valid JWT.
+                    Use the <strong>Published API key</strong> from the Angel One SmartAPI developer console. Retail login does not use a separate client secret; enable <strong>Enable now</strong>, then enter <strong>PIN</strong> and <strong>6-digit TOTP</strong> from the Angel One authenticator app and click Validate. Optional access token is only if you already have a valid JWT. See{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.angelone} target="_blank" rel="noreferrer">Angel One SmartAPI documentation</Link>
+                    {' '}for app creation, IP allowlist, and session flow.
                   </Typography>
                 </>
               ) : null}
               {activeBrokerRow.broker === 'upstox' ? (
                 <>
+                  <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
+                    OAuth2 redirect flow: create an app, set redirect URI, then exchange auth code for tokens. See{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.upstox} target="_blank" rel="noreferrer">Upstox developer documentation</Link>
+                    {' '}for registration, scopes, and IPv4 allowlisting if your account requires it.
+                  </Typography>
                   <TextField size="small" label="Access Token (optional)" value={activeBrokerRow.credentials?.access_token || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_access_token')} />
                   <TextField size="small" label="Auth Code" value={activeBrokerRow.credentials?.auth_code || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'auth_code', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_auth_code')} />
                   <TextField size="small" label="Client Secret" value={activeBrokerRow.credentials?.client_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'client_secret', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_upstox_client_secret', { secret: true })} />
@@ -1474,7 +1538,8 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'kotak' ? (
                 <>
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
-                    Kotak Neo API credentials follow the client documentation from Kotak (consumer key, PIN, TOTP, or tokens as your integration uses).
+                    Kotak Neo API credentials follow the client documentation from Kotak (consumer key, PIN, TOTP, or tokens as your integration uses).{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.kotak} target="_blank" rel="noreferrer">Kotak Neo client documentation</Link>
                   </Typography>
                   <TextField
                     size="small"
@@ -1516,7 +1581,9 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'fyers' ? (
                 <>
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
-                    Fyers API v3 uses OAuth2-style auth: register an app, set the redirect URL, then exchange the auth code for an access token (see Fyers docs for request/response structure).
+                    Fyers API v3 uses OAuth2-style auth: register an app, set the redirect URL, then exchange the auth code for an access token. See{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.fyers} target="_blank" rel="noreferrer">Fyers API v3 documentation</Link>
+                    {' '}for request/response structure, auth, and connectivity.
                   </Typography>
                   <TextField size="small" label="App ID (API key)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_api_key')} />
                   <TextField size="small" type="text" label="App Secret" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} InputProps={brokerSecretAdornment('api_secret')} autoComplete="off" inputProps={brokerLockedInputProps('broker_fyers_api_secret', { secret: true })} sx={brokerPinMaskSx(brokerSecretVisible.api_secret)} />
@@ -1528,7 +1595,8 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'zerodha' ? (
                 <>
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
-                    Zerodha Kite Connect uses your app <code>api_key</code> and <code>api_secret</code>; after the browser login, paste the <code>request_token</code> from the redirect as the auth code (see Kite Connect documentation).
+                    Zerodha Kite Connect uses your app <code>api_key</code> and <code>api_secret</code>; after the browser login, paste the <code>request_token</code> from the redirect as the auth code. Full setup:{' '}
+                    <Link href={BROKER_SETUP_DOC_URLS.zerodha} target="_blank" rel="noreferrer">Kite Connect documentation</Link>.
                   </Typography>
                   <TextField size="small" label="API key (Kite app)" value={activeBrokerRow.credentials?.api_key || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_key', e.target.value)} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_api_key')} />
                   <TextField size="small" type="text" label="API secret" value={activeBrokerRow.credentials?.api_secret || ''} onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'api_secret', e.target.value)} InputProps={brokerSecretAdornment('api_secret')} autoComplete="off" inputProps={brokerLockedInputProps('broker_zerodha_api_secret', { secret: true })} sx={brokerPinMaskSx(brokerSecretVisible.api_secret)} />
@@ -1567,8 +1635,8 @@ function ProfilePage() {
                   {activeBrokerRow.broker === 'dhan' ? 'Renew Token' : 'Refresh session'}
                 </Button>
               ) : null}
-              {(activeBrokerRow.doc_url || BROKER_DOC_URLS[activeBrokerRow.broker]) ? (
-                <Button size="small" component={Link} href={activeBrokerRow.doc_url || BROKER_DOC_URLS[activeBrokerRow.broker]} target="_blank" rel="noreferrer" sx={{ textTransform: 'none' }}>
+              {(activeBrokerRow.doc_url || BROKER_SETUP_DOC_URLS[activeBrokerRow.broker]) ? (
+                <Button size="small" component={Link} href={activeBrokerRow.doc_url || BROKER_SETUP_DOC_URLS[activeBrokerRow.broker]} target="_blank" rel="noreferrer" sx={{ textTransform: 'none' }}>
                   Open docs
                 </Button>
               ) : null}

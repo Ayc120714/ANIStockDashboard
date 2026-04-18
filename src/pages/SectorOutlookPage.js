@@ -8,11 +8,16 @@ import {
 import { Box, TextField } from '@mui/material';
 import { CircularProgress } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
+import { MdLock } from 'react-icons/md';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
+import { useAuth } from '../auth/AuthContext';
+import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
+import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 
 const SECTOR_REFRESH_MS = 30000;
 
 function SectorOutlookPage({ onSectorClick }) {
+  const { outlookPremium } = useAuth();
     const [page, setPage] = useState(1);
     const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,6 +119,7 @@ const extractNumeric = (value) => {
   }, [sortedData, page]);
 
   const handleSort = (key) => {
+    if (!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has(key)) return;
     setSortConfig((prev) => ({
       key,
       ascending: prev.key === key ? !prev.ascending : true
@@ -146,6 +152,7 @@ const extractNumeric = (value) => {
     {loadError && (
       <div style={{ marginBottom: '12px', color: '#dc3545', fontWeight: 600 }}>{loadError}</div>
     )}
+    <UpgradeToPremiumBanner />
     {isLoading && !loadError && (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
         <CircularProgress />
@@ -159,12 +166,21 @@ const extractNumeric = (value) => {
           <Table>
             <thead>
               <tr>
-    {columnConfig.map((col) => (
-      <th key={col.key} onClick={() => handleSort(col.key)}>
-        {col.label}
-        {getSortArrow(col.key)}
-      </th>
-    ))}
+    {columnConfig.map((col) => {
+      const locked = !outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has(col.key);
+      return (
+        <th
+          key={col.key}
+          onClick={() => handleSort(col.key)}
+          style={{ cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.75 : 1 }}
+          title={locked ? 'Premium access required' : undefined}
+        >
+          {col.label}
+          {locked ? ' 🔒' : ''}
+          {getSortArrow(col.key)}
+        </th>
+      );
+    })}
   </tr>
             </thead>
             <tbody>
@@ -182,9 +198,27 @@ const extractNumeric = (value) => {
                   <td className={perfCellClassName(row.week1w)}>{row.week1w}</td>
                   <td className={perfCellClassName(row.month1m)}>{row.month1m}</td>
                   <td className={perfCellClassName(row.month3m)}>{row.month3m}</td>
-                  <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
-                  <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
-                  <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('month6m') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.month6m)}>{row.month6m}</td>
+                  )}
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('year1y') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.year1y)}>{row.year1y}</td>
+                  )}
+                  {!outlookPremium && OUTLOOK_PREMIUM_COLUMN_KEYS.has('year3y') ? (
+                    <td style={{ textAlign: 'center', color: '#bdbdbd' }} title="Premium access required">
+                      <MdLock size={18} style={{ verticalAlign: 'middle' }} />
+                    </td>
+                  ) : (
+                    <td className={perfCellClassName(row.year3y)}>{row.year3y}</td>
+                  )}
                 </tr>
               ))}
             </tbody>

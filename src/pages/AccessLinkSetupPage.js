@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Link, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Link, TextField, Typography } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
 import { completeAccessLinkSetup } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
+import { routeAfterLogin } from '../auth/postLoginRouting';
 import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
@@ -11,9 +14,11 @@ const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8
 function AccessLinkSetupPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { persistAuth } = useAuth();
+  const { persistAuth, hydrateMe } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -42,11 +47,15 @@ function AccessLinkSetupPage() {
         throw new Error('Access setup completed but login session is missing.');
       }
       persistAuth(res.access_token, res.refresh_token, res.user || null);
-      setMessage('Password set successfully. Redirecting to dashboard...');
-      setTimeout(
-        () => navigate('/', { replace: true, state: { showTelegramBotInfo: true } }),
-        700,
-      );
+      await hydrateMe();
+      setMessage('Password set successfully. Redirecting...');
+      setTimeout(async () => {
+        await routeAfterLogin({
+          nextUser: res.user || null,
+          fallbackPath: '/',
+          navigate,
+        });
+      }, 700);
     } catch (err) {
       setError(err?.message || 'Unable to complete access setup.');
     } finally {
@@ -92,18 +101,46 @@ function AccessLinkSetupPage() {
           <Box component="form" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
             <TextField
               label="New Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               size="small"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               helperText="Min 8 chars with uppercase, lowercase, number and special character"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Confirm Password"
-              type="password"
+              type={showConfirmPassword ? 'text' : 'password'}
               size="small"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                    >
+                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <Button
               type="submit"

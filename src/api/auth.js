@@ -60,6 +60,46 @@ export const approveAdminUserAccessLink = (userId) =>
 export const rejectAdminUserRequest = (userId, reason = '') =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, { reason });
 
+export const fetchPremiumEmails = () => apiGet('/auth/admin/premium-emails');
+
+export const addPremiumEmail = (email) => apiPost('/auth/admin/premium-emails', { email: String(email || '').trim() });
+
+export const deletePremiumEmail = (entryId) =>
+  apiRequest(`/auth/admin/premium-emails/${encodeURIComponent(String(entryId))}`, { method: 'DELETE' });
+
+/** After payment: server grants **one calendar year** in IST; renew with another call each year. */
+export const setUserPaidPremium = (userId) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, {});
+
+export const clearUserPaidPremium = (userId) =>
+  apiRequest(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, { method: 'DELETE' });
+
+/** Grant or revoke full premium without payment (super-admin only). */
+export const setUserComplimentaryPremium = (userId, enabled) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/premium-complimentary`, {
+    enabled: Boolean(enabled),
+  });
+
+/** Permanent premium for a small set of users (super-admin only). */
+export const setUserLifetimePremium = (userId, enabled) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/premium-lifetime`, {
+    enabled: Boolean(enabled),
+  });
+
+/** Bulk grant/revoke complimentary premium (single DB commit on server). Max 200 IDs. */
+export const bulkSetUserComplimentaryPremium = (userIds, enabled = true) =>
+  apiPost('/auth/admin/users/bulk-premium-complimentary', {
+    user_ids: userIds.map((id) => Number(id)).filter((n) => n > 0),
+    enabled: Boolean(enabled),
+  });
+
+/** Bulk grant/revoke lifetime premium (single DB commit on server). Max 200 IDs. */
+export const bulkSetUserLifetimePremium = (userIds, enabled = true) =>
+  apiPost('/auth/admin/users/bulk-premium-lifetime', {
+    user_ids: userIds.map((id) => Number(id)).filter((n) => n > 0),
+    enabled: Boolean(enabled),
+  });
+
 export const completeAccessLinkSetup = (flowId, token, newPassword, trustDevice = true) =>
   apiPost('/auth/access-link/complete', {
     flow_id: flowId,
