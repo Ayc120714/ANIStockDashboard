@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 
 const accent = '#ca8a04';
 const accentSoft = 'rgba(202, 138, 4, 0.12)';
@@ -215,7 +216,7 @@ const derivativesItems = [
   },
 ];
 
-const accountItems = [
+const accountItemsBase = [
   {
     id: 'profile',
     title: 'Profile & brokers',
@@ -228,8 +229,8 @@ const accountItems = [
   {
     id: 'premium',
     title: 'Plans & premium',
-    blurb: 'Basic, Premium, Lifetime.',
-    detail: 'Badge in the header shows your tier; yearly premium is recorded by admin after payment.',
+    blurb: 'Basic and Premium.',
+    detail: 'Badge in the header shows Basic or Premium; yearly Premium activates after your admin confirms payment.',
     bullets: ['Locked nav opens after premium is active.', 'See Upgrade for payment steps.'],
     ctaTo: '/upgrade-premium',
     ctaLabel: 'Upgrade to Premium',
@@ -245,8 +246,20 @@ const accountItems = [
   },
 ];
 
-/** Full features marketing body — used on the public Features route. */
+/** Full features marketing body — used on the public Features route and Profile → Features tab. */
 export function FeaturesMarketingContent() {
+  const { isAuthenticated } = useAuth();
+  const pricingHref = isAuthenticated ? '/profile?tab=pricing' : '/pricing';
+  const accountItems = useMemo(
+    () =>
+      accountItemsBase.map((item) =>
+        item.id === 'premium' && isAuthenticated
+          ? { ...item, ctaTo: '/profile?tab=pricing', ctaLabel: 'View pricing' }
+          : item,
+      ),
+    [isAuthenticated],
+  );
+
   return (
     <>
       <Box sx={{ mb: 3, textAlign: { xs: 'left', sm: 'center' }, px: { xs: 0, sm: 0.5 } }}>
@@ -274,7 +287,7 @@ export function FeaturesMarketingContent() {
           </Button>
           <Button
             component={RouterLink}
-            to="/pricing"
+            to={pricingHref}
             variant="outlined"
             size="medium"
             sx={{ textTransform: 'none', fontWeight: 700 }}

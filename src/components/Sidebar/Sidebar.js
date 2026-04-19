@@ -21,8 +21,8 @@ function routeActive(pathname, to) {
   return matchPath({ path: pattern, end: true, caseSensitive: false }, p) != null;
 }
 
-function SidebarItem({ to, collapsed, title, pathname, locked, children }) {
-  const on = routeActive(pathname, to);
+function SidebarItem({ to, collapsed, title, pathname, locked, children, active: activeOverride }) {
+  const on = activeOverride !== undefined ? activeOverride : routeActive(pathname, to);
   return (
     <SidebarNavLink to={to} collapsed={collapsed} active={on} title={title} locked={locked}>
       {children}
@@ -37,7 +37,12 @@ function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { isSuperAdmin, outlookPremium } = useAuth();
   const moduleLocked = !outlookPremium;
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const profileTab = new URLSearchParams(search || '').get('tab');
+  const onProfile = normalizePath(pathname) === '/profile';
+  const profileSidebarActive = onProfile && profileTab !== 'pricing' && profileTab !== 'features';
+  const pricingSidebarActive = onProfile && profileTab === 'pricing';
+  const featuresSidebarActive = onProfile && profileTab === 'features';
 
   return (
     <SidebarContainer collapsed={collapsed}>
@@ -133,7 +138,13 @@ function Sidebar() {
         <Section collapsed={collapsed}>
           <SectionTitle collapsed={collapsed}>Resources</SectionTitle>
 
-          <SidebarItem to="/profile" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Profile' : undefined}>
+          <SidebarItem
+            to="/profile"
+            collapsed={collapsed}
+            pathname={pathname}
+            title={collapsed ? 'Profile' : undefined}
+            active={profileSidebarActive}
+          >
             <MdPerson />
             <span className="label">Profile</span>
           </SidebarItem>
@@ -143,12 +154,24 @@ function Sidebar() {
             <span className="label">Events</span>
           </SidebarItem>
 
-          <SidebarItem to="/features" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Features' : undefined}>
+          <SidebarItem
+            to="/profile?tab=features"
+            collapsed={collapsed}
+            pathname={pathname}
+            title={collapsed ? 'Features' : undefined}
+            active={featuresSidebarActive}
+          >
             <MdViewModule />
             <span className="label">Features</span>
           </SidebarItem>
 
-          <SidebarItem to="/pricing" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Pricing' : undefined}>
+          <SidebarItem
+            to="/profile?tab=pricing"
+            collapsed={collapsed}
+            pathname={pathname}
+            title={collapsed ? 'Pricing' : undefined}
+            active={pricingSidebarActive}
+          >
             <MdAttachMoney />
             <span className="label">Pricing</span>
           </SidebarItem>

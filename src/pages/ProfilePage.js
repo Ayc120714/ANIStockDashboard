@@ -24,6 +24,7 @@ import {
 } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useLocation, useNavigate } from 'react-router';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { brokerRowHasLiveTradingSession, fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
@@ -45,6 +46,8 @@ import { ensureKotakBrokerSession } from '../api/kotakBroker';
 import { ensureFyersBrokerSession } from '../api/fyersBroker';
 import { ensureZerodhaBrokerSession } from '../api/zerodhaBroker';
 import { resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
+import { PricingMarketingContent } from './PricingPage';
+import { FeaturesMarketingContent } from './FeaturesPage';
 
 const pickArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -175,6 +178,7 @@ function ProfilePage() {
     !outlookPremium;
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const userId = String(user?.id || user?.user_id || user?.email || '');
   const brokerSessionKey = useCallback(
     (broker) => `broker_session_auth_${userId}_${String(broker || '').toLowerCase()}`,
@@ -183,7 +187,24 @@ function ProfilePage() {
   const onboardingBrokerSetup = Boolean(location.state?.openBrokerSetup);
   const onboardingTargetPath = location.state?.from || '/';
   const onboardingPreferredBroker = String(location.state?.preferredBroker || '').toLowerCase();
-  const [activeTab, setActiveTab] = useState('account');
+  const activeTab = useMemo(() => {
+    const t = String(searchParams.get('tab') || '').toLowerCase();
+    return t === 'broker' || t === 'pricing' || t === 'features' ? t : 'account';
+  }, [searchParams]);
+
+  const setActiveTab = useCallback(
+    (value) => {
+      const v = value === 'broker' || value === 'pricing' || value === 'features' ? value : 'account';
+      const next = new URLSearchParams(searchParams);
+      if (v === 'account') {
+        next.delete('tab');
+      } else {
+        next.set('tab', v);
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
   const [rows, setRows] = useState([]);
   const [selectedBroker, setSelectedBroker] = useState('dhan');
   const brokerSelectInitializedRef = useRef(false);
@@ -504,7 +525,7 @@ function ProfilePage() {
       brokerSelectInitializedRef.current = true;
     }
     setMessage('Complete broker validation to activate session and show holdings on dashboard.');
-  }, [onboardingBrokerSetup, onboardingPreferredBroker]);
+  }, [onboardingBrokerSetup, onboardingPreferredBroker, setActiveTab]);
 
   useEffect(() => {
     setBrokerSecretVisible({ pin: false, api_secret: false });
@@ -602,7 +623,7 @@ function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, navigate, userId, loadBrokerRows]);
+  }, [location.search, navigate, userId, loadBrokerRows, setActiveTab]);
 
   const updateRow = (broker, patch) => {
     setRows((prev) => {
@@ -1060,9 +1081,8 @@ function ProfilePage() {
       <UpgradeToPremiumBanner />
       {paidPremiumLapsed ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Your paid premium period has ended. This account is on the <strong>basic</strong> plan until an
-          administrator records the next payment (Admin Users → Record payment) or restores premium through the
-          allowlist.
+          Your paid premium period has ended. This account is on the <strong>basic</strong> plan until your
+          administrator confirms renewal.
         </Alert>
       ) : null}
       <Tabs
@@ -1072,6 +1092,8 @@ function ProfilePage() {
       >
         <Tab value="account" label="Account Details" />
         <Tab value="broker" label="Broker Integration" />
+        <Tab value="pricing" label="Pricing" />
+        <Tab value="features" label="Features" />
       </Tabs>
 
       {activeTab === 'account' ? (
@@ -1270,6 +1292,18 @@ function ProfilePage() {
             </TableContainer>
           </Paper>
         </>
+      ) : null}
+
+      {activeTab === 'pricing' ? (
+        <Box sx={{ py: 0.5 }}>
+          <PricingMarketingContent />
+        </Box>
+      ) : null}
+
+      {activeTab === 'features' ? (
+        <Box sx={{ py: 0.5, maxWidth: 1000, mx: 'auto' }}>
+          <FeaturesMarketingContent />
+        </Box>
       ) : null}
 
       {activeTab === 'broker' ? (

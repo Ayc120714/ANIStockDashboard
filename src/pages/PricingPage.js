@@ -41,6 +41,7 @@ export function PricingMarketingContent() {
   const { isAuthenticated, outlookPremium } = useAuth();
   const premiumCtaTo = isAuthenticated ? '/upgrade-premium' : '/login';
   const premiumCtaLabel = isAuthenticated ? 'How to activate premium' : 'Sign in to upgrade';
+  const showBasicPlan = !isAuthenticated;
 
   return (
     <Box>
@@ -48,38 +49,53 @@ export function PricingMarketingContent() {
         Plans at a glance
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 560, mx: 'auto', mb: 2.5, lineHeight: 1.55 }}>
-        Basic is included with your account. Premium unlocks the full desk. Pay outside the app; admin records your term
-        (usually live within 24h).
+        {showBasicPlan ? (
+          <>
+            Basic is included with your account. Premium unlocks the full desk. Pay yearly outside the app; your admin
+            confirms payment and access usually updates within about 24 hours.
+          </>
+        ) : (
+          <>
+            Premium unlocks the full desk. Pay yearly outside the app; your admin confirms payment and access usually
+            updates within about 24 hours.
+          </>
+        )}
       </Typography>
 
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: showBasicPlan ? 'repeat(2, 1fr)' : 'minmax(0, 520px)',
+          },
           gap: 2.5,
           alignItems: 'stretch',
+          justifyContent: showBasicPlan ? 'stretch' : 'center',
         }}
       >
-        <Box>
-          <Card elevation={0} sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'rgba(15,23,42,0.35)' }}>
-            <CardContent sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Basic
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 900, my: 0.5 }}>
-                Included
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                After sign-up; header shows <strong>Basic</strong>.
-              </Typography>
-              <Button component={RouterLink} to="/signup" variant="contained" fullWidth sx={{ textTransform: 'none', fontWeight: 800 }}>
-                Sign up
-              </Button>
-            </CardContent>
-          </Card>
-        </Box>
+        {showBasicPlan ? (
+          <Box>
+            <Card elevation={0} sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'rgba(15,23,42,0.35)' }}>
+              <CardContent sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  Basic
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900, my: 0.5 }}>
+                  Included
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  After sign-up; header shows <strong>Basic</strong>.
+                </Typography>
+                <Button component={RouterLink} to="/signup" variant="contained" fullWidth sx={{ textTransform: 'none', fontWeight: 800 }}>
+                  Sign up
+                </Button>
+              </CardContent>
+            </Card>
+          </Box>
+        ) : null}
 
-        <Box>
+        <Box sx={{ maxWidth: showBasicPlan ? 'none' : 520, width: '100%', mx: showBasicPlan ? 0 : 'auto' }}>
           <Card
             elevation={0}
             sx={{
@@ -120,37 +136,8 @@ export function PricingMarketingContent() {
                 lines={['Portfolio + Alerts; F&O, Commodities, Forex.', 'Telegram / integrations when enabled.']}
               />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', pt: 1, display: 'block', lineHeight: 1.45 }}>
-                Admin records payment or applies allowlist / complimentary access.
+                Your admin confirms payment; Premium then shows on your account.
               </Typography>
-            </CardContent>
-          </Card>
-        </Box>
-
-        <Box>
-          <Card elevation={0} sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'rgba(15,23,42,0.35)' }}>
-            <CardContent sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Lifetime / special
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 900, my: 0.5 }}>
-                By arrangement
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Lifetime, enterprise, or allowlist — same product surface as annual where provisioned.
-              </Typography>
-              <Button
-                href={`mailto:${SUPPORT_EMAIL}?subject=AYC%20premium%20(lifetime%20%2F%20enterprise)`}
-                variant="outlined"
-                fullWidth
-                sx={{ textTransform: 'none', fontWeight: 800, mb: 2 }}
-              >
-                Contact support
-              </Button>
-              <Divider sx={{ mb: 2 }} />
-              <FeatureBlock
-                title="Included"
-                lines={['Premium modules as provisioned.', 'Lifetime badge when active; renewals differ from annual.']}
-              />
             </CardContent>
           </Card>
         </Box>
@@ -164,7 +151,12 @@ export function PricingMarketingContent() {
           {SUPPORT_EMAIL}
         </Link>
         <Typography variant="body2" sx={{ mt: 2 }}>
-          <Link component={RouterLink} to="/features" underline="hover" fontWeight={700}>
+          <Link
+            component={RouterLink}
+            to={isAuthenticated ? '/profile?tab=features' : '/features'}
+            underline="hover"
+            fontWeight={700}
+          >
             Browse product features
           </Link>
           {' · '}

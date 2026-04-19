@@ -6,8 +6,8 @@ import { useAuth } from '../auth/AuthContext';
 const SUPPORT_EMAIL = 'support@aycindustries.com';
 
 /**
- * In-app instructions for moving from Basic to Premium. Payment is handled outside the app;
- * a super-admin records the annual term under Admin Users → Record payment after funds are confirmed.
+ * In-app instructions for moving from Basic to Premium. Payment happens outside this app;
+ * your organisation’s admin shares the link or steps; access updates after they confirm payment.
  */
 function UpgradePremiumPage() {
   const { outlookPremium } = useAuth();
@@ -25,25 +25,15 @@ function UpgradePremiumPage() {
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, color: 'text.primary' }}>
             <Typography variant="body1" sx={{ lineHeight: 1.65 }}>
-              Complete the yearly payment using the channel your organisation uses (bank transfer, UPI, invoice,
-              etc.). This site does not collect card payments directly.
+              When your admin shares the payment link or instructions, complete the <strong>yearly</strong> Premium
+              payment outside this app (this site does not take cards).
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.65 }}>
-              After payment is received and verified, a super-admin opens <strong>Admin Users</strong>, finds your
-              login email, and uses <strong>Record payment</strong> to activate one calendar year of premium (IST), or
-              grants access via complimentary / lifetime / allowlist if that is what you purchased.
+              After they confirm payment, your access usually updates within about <strong>24 hours</strong>. Refresh or
+              sign in again — your header badge should show <strong>Premium</strong> and locked areas will open.
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.65 }}>
-              Refresh the app or log in again; your plan badge in the header should show <strong>Premium</strong> and
-              locked areas will open.
-            </Typography>
-            <Typography variant="body1" sx={{ lineHeight: 1.65 }}>
-              If you are unsure who to pay or how to send proof, use <strong>Profile</strong> or contact support through
-              the same channel you used to register.
-            </Typography>
-            <Typography variant="body1" sx={{ lineHeight: 1.65 }}>
-              Once payment is done, admin will share the grants with the end user for access. It takes{' '}
-              <strong>24 hours</strong> for access to reflect in the app. If you have any issue, please reach{' '}
+              Questions? Use <strong>Profile</strong> or email{' '}
               <Link href={`mailto:${SUPPORT_EMAIL}`} underline="hover">
                 {SUPPORT_EMAIL}
               </Link>
@@ -55,7 +45,7 @@ function UpgradePremiumPage() {
           <Button component={RouterLink} to="/outlook" variant="contained" size="small" sx={{ textTransform: 'none' }}>
             Back to Overview
           </Button>
-          <Button component={RouterLink} to="/pricing" variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+          <Button component={RouterLink} to="/profile?tab=pricing" variant="outlined" size="small" sx={{ textTransform: 'none' }}>
             Compare plans
           </Button>
           <Button component={RouterLink} to="/profile" variant="outlined" size="small" sx={{ textTransform: 'none' }}>
