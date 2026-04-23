@@ -88,6 +88,17 @@ const ContentArea = styled.div`
   }
 `;
 
+const GlobalViewNote = styled.div`
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  background: linear-gradient(180deg, rgba(219, 234, 254, 0.8), rgba(239, 246, 255, 0.9));
+  color: #1e3a8a;
+  font-size: 12.5px;
+  font-weight: 600;
+`;
+
 function MainLayout() {
   return (
     <BootstrapReadyProvider pollMs={3000} maxWaitForApiMs={60000}>
@@ -96,6 +107,9 @@ function MainLayout() {
         <MainContent>
           <Header />
           <ContentArea>
+            <GlobalViewNote>
+              Note: This application is best viewed on a laptop or monitor; mobile view may feel condensed.
+            </GlobalViewNote>
             <Outlet />
           </ContentArea>
         </MainContent>

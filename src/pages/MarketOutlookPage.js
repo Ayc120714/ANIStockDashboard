@@ -34,6 +34,19 @@ const MIN_FII_DII_DAYS = 20;
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
+const parseIsoLikeDate = (value) => {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const normalized = String(value).trim().replace(/\//g, '-');
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+};
+
+const normalizeRecentDaily = (daily, limit) => {
+  if (!Array.isArray(daily)) return [];
+  const sorted = [...daily].sort((a, b) => parseIsoLikeDate(b?.date) - parseIsoLikeDate(a?.date));
+  return sorted.slice(0, limit);
+};
+
 function MarketOutlookContent({ apiReady, timedOut }) {
   const { outlookPremium } = useAuth();
   const [searchParams] = useSearchParams();
@@ -92,19 +105,19 @@ function MarketOutlookContent({ apiReady, timedOut }) {
       }
     };
 
-    const loadFiiDii = async () => {
-      setFiiDiiLoadState('loading');
+    const loadFiiDii = async ({ silent = false } = {}) => {
+      if (!silent) setFiiDiiLoadState('loading');
       try {
         const data = await fetchFiiDiiActivity(MIN_FII_DII_DAYS);
         if (isMounted && data) {
           setFiiDiiData(data);
           setFiiDiiLoadState('done');
-        } else if (isMounted) {
+        } else if (isMounted && !silent) {
           setFiiDiiLoadState('error');
         }
       } catch (err) {
         console.warn('FII/DII fetch failed:', err?.message || err);
-        if (isMounted) setFiiDiiLoadState('error');
+        if (isMounted && !silent) setFiiDiiLoadState('error');
       }
     };
 
@@ -112,6 +125,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     loadFiiDii();
     const marketTimer = setInterval(() => {
       load({ silent: true });
+      loadFiiDii({ silent: true });
     }, MARKET_REFRESH_MS);
 
     return () => {
@@ -194,7 +208,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
 
   const fiiCard = useMemo(() => {
     if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
-    const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
+    const daily = normalizeRecentDaily(fiiDiiData.daily, MIN_FII_DII_DAYS);
     const latest = daily[0];
     const mtdNet = Number(fiiDiiData.mtd?.fii?.net ?? 0) || 0;
     let series = [...daily].reverse().map((d) => ({
@@ -220,7 +234,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
 
   const diiCard = useMemo(() => {
     if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
-    const daily = Array.isArray(fiiDiiData.daily) ? fiiDiiData.daily.slice(0, MIN_FII_DII_DAYS) : [];
+    const daily = normalizeRecentDaily(fiiDiiData.daily, MIN_FII_DII_DAYS);
     const latest = daily[0];
     const mtdNet = Number(fiiDiiData.mtd?.dii?.net ?? 0) || 0;
     let series = [...daily].reverse().map((d) => ({

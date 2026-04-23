@@ -28,6 +28,25 @@ export const fetchMonthlyMacdSetup = async (limit = 200) => {
   return data?.data ?? [];
 };
 
+/** Monday close above prior calendar week's high (optional cross from prior session). */
+export const fetchMondayPrevWeekHighCross = async ({
+  limit = 500,
+  refresh = false,
+  universe = 'all',
+  as_of = '',
+  monday_date = '',
+  require_cross = true,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('universe', String(universe || 'all'));
+  if (refresh) params.set('refresh', 'true');
+  if (as_of && String(as_of).trim()) params.set('as_of', String(as_of).trim());
+  if (monday_date && String(monday_date).trim()) params.set('monday_date', String(monday_date).trim());
+  if (!require_cross) params.set('require_cross', 'false');
+  return apiGet(`/advisor/signals/monday-prev-week-high-cross?${params.toString()}`);
+};
+
 /** Custom RS / MACD / PSAR / RVOL screen (`setup_mode`: strict | or_signal). */
 export const fetchCustomRsMacdSetup = async ({
   limit = 400,

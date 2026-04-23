@@ -3,7 +3,7 @@
 Use this when **FII/DII, Market Insights, Screens, or SubSector data** look empty/wrong even after `git pull`.
 Git is only half the story: the **production build**, **API base URL**, **Nginx → Uvicorn**, **database**, and **outbound jobs** must all line up.
 
-Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha), **[VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md)** (when Screens numbers are wrong — DB + Samco checklist), **[CURSOR_VPS_REMOTE.md](./CURSOR_VPS_REMOTE.md)** (open the VPS in Cursor via Remote-SSH).
+Related: [VPS_RESTART_FRONTEND_BACKEND.md](./VPS_RESTART_FRONTEND_BACKEND.md), [VPS_DATA_STALENESS.md](./VPS_DATA_STALENESS.md), **[REPO_LAYOUT.md](./REPO_LAYOUT.md)** (where the backend folder lives), **[SAMCO_SCREENS_DATA.md](./SAMCO_SCREENS_DATA.md)** (candles → Top Movers / Volume / Alpha), **[VPS_DEBUG_SCREENS_DB.md](./VPS_DEBUG_SCREENS_DB.md)** (when Screens numbers are wrong — DB + Samco checklist), **[CURSOR_VPS_REMOTE.md](./CURSOR_VPS_REMOTE.md)** (open the VPS in Cursor via Remote-SSH), **[VPS_PER_USER_STATIC_EGRESS_PREP.md](./VPS_PER_USER_STATIC_EGRESS_PREP.md)** (packages and planning for per-user static broker egress).
 
 ---
 

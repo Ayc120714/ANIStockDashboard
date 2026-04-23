@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Link, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import MarketDisclaimer from '../components/MarketDisclaimer';
 import { loginStart } from '../api/auth';
 import { clearConsentLimitMarkersToday, hasAnyConsentLimitMarkerToday, routeAfterLogin } from '../auth/postLoginRouting';
@@ -98,7 +98,6 @@ function LoginPage() {
     () => email.trim().length > 0 && password.length >= 8,
     [email, password]
   );
-
   const resolveFallbackPath = () => {
     const fromState = location.state?.from;
     if (typeof fromState === 'string' && fromState.trim()) return fromState.trim();
@@ -145,9 +144,6 @@ function LoginPage() {
     }
   };
 
-  const frameworkItems = Array.isArray(DEFAULT_LOGIN_CONTENT.frameworkItems) ? DEFAULT_LOGIN_CONTENT.frameworkItems : [];
-  const solutionItems = Array.isArray(DEFAULT_LOGIN_CONTENT.solutionItems) ? DEFAULT_LOGIN_CONTENT.solutionItems : [];
-  const whyItems = Array.isArray(DEFAULT_LOGIN_CONTENT.whyItems) ? DEFAULT_LOGIN_CONTENT.whyItems : [];
   const authInputSx = {
     '& .MuiInputBase-input': { color: '#0f172a', fontWeight: 500 },
     '& .MuiFormLabel-root': { color: '#334155' },
@@ -280,109 +276,11 @@ function LoginPage() {
                 </Typography>
               </Box>
 
-              <Box sx={{ p: 1.25, borderRadius: 1.8, border: '1px solid rgba(96,165,250,0.26)', background: 'rgba(15,23,42,0.36)' }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(17px, 0.95vw, 23px)', mb: 0.7 }}>
-                  {DEFAULT_LOGIN_CONTENT.section2Label}
-                </Typography>
-                <Box sx={{ display: 'grid', gap: 0.8 }}>
-                  {frameworkItems.map((item) => (
-                    <Box key={item.title}>
-                      <Typography sx={{ color: '#bfdbfe', fontWeight: 700, fontSize: 'clamp(15px, 0.95vw, 20px)' }}>{item.title}</Typography>
-                      <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.5 }}>{item.text}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
+              
 
-              <Box sx={{ p: 1.25, borderRadius: 1.8, border: '1px solid rgba(96,165,250,0.26)', background: 'rgba(15,23,42,0.36)' }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(17px, 0.95vw, 23px)', mb: 0.7 }}>
-                  {DEFAULT_LOGIN_CONTENT.section3Label}
-                </Typography>
-                <Box sx={{ display: 'grid', gap: 0.7 }}>
-                  {solutionItems.map((item) => (
-                    <Box key={item.title} sx={{ display: 'flex', gap: 0.8 }}>
-                      <Box sx={{ color: '#60a5fa', lineHeight: '20px' }}>-</Box>
-                      <Box>
-                        <Typography sx={{ color: '#bfdbfe', fontWeight: 700, fontSize: 'clamp(15px, 0.95vw, 20px)' }}>{item.title}</Typography>
-                        <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)' }}>{item.text}</Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
+              
 
-              <Box sx={{ p: 1.25, borderRadius: 1.8, border: '1px solid rgba(96,165,250,0.26)', background: 'rgba(15,23,42,0.36)' }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(17px, 0.95vw, 23px)', mb: 0.7 }}>
-                  {DEFAULT_LOGIN_CONTENT.section4Label}
-                </Typography>
-                <Box sx={{ display: 'grid', gap: 0.45 }}>
-                  {whyItems.map((item) => (
-                    <Typography key={item} sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)' }}>
-                      - {item}
-                    </Typography>
-                  ))}
-                </Box>
-                <Typography sx={{ color: '#e2e8f0', fontSize: 'clamp(14px, 0.9vw, 18px)', mt: 0.8 }}>
-                  {DEFAULT_LOGIN_CONTENT.section4Closing}
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 1.25, borderRadius: 1.8, border: '1px solid rgba(96,165,250,0.26)', background: 'rgba(15,23,42,0.36)' }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(17px, 0.95vw, 23px)', mb: 0.55 }}>
-                  {DEFAULT_LOGIN_CONTENT.section5Label}
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.5 }}>
-                  {DEFAULT_LOGIN_CONTENT.section5Text}
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 1.25, borderRadius: 1.8, border: '1px solid rgba(96,165,250,0.26)', background: 'rgba(15,23,42,0.36)' }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(17px, 0.95vw, 23px)', mb: 0.55 }}>
-                  {DEFAULT_LOGIN_CONTENT.section6Label}
-                </Typography>
-                <Typography sx={{ color: '#e2e8f0', fontWeight: 700, fontSize: 'clamp(16px, 1vw, 22px)' }}>
-                  {DEFAULT_LOGIN_CONTENT.section6Title}
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', mt: 0.5 }}>
-                  {DEFAULT_LOGIN_CONTENT.section6Text}
-                </Typography>
-                <Box sx={{ mt: 0.9, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Button size="small" variant="contained" sx={{ textTransform: 'none', fontWeight: 700, fontSize: 'clamp(13px, 0.75vw, 16px)' }}>
-                    {DEFAULT_LOGIN_CONTENT.ctaPrimary}
-                  </Button>
-                </Box>
-              </Box>
-
-              <Box
-                sx={{
-                  mt: 0.2,
-                  px: 1.25,
-                  py: 0.95,
-                  borderRadius: 1.8,
-                  border: '1px solid rgba(96,165,250,0.2)',
-                  background: 'rgba(2,6,23,0.35)',
-                  gridColumn: { xs: '1 / -1', md: '1 / -1' },
-                }}
-              >
-                <Typography sx={{ color: '#bfdbfe', fontWeight: 800, fontSize: 'clamp(15px, 0.95vw, 21px)' }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.brand}
-                </Typography>
-                <Typography sx={{ color: '#93c5fd', fontSize: 'clamp(14px, 0.9vw, 18px)', mt: 0.2 }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.motto}
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', mt: 0.5 }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.location}
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)' }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.email}
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)' }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.web}
-                </Typography>
-                <Typography sx={{ color: '#94a3b8', fontSize: 'clamp(13px, 0.8vw, 16px)', mt: 0.45 }}>
-                  {DEFAULT_LOGIN_CONTENT.footer.copyright}
-                </Typography>
-              </Box>
+              
             </Box>
           </Card>
 
@@ -518,33 +416,6 @@ function LoginPage() {
             >
               <CardContent sx={{ p: 1.6 }}>
                 <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(16px, 0.95vw, 22px)', mb: 0.4 }}>
-                  Free Access Highlights
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
-                  - Real-time market pulse preview
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
-                  - Watchlist intelligence snapshots
-                </Typography>
-                <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
-                  - Daily and weekly strategic signals
-                </Typography>
-              </CardContent>
-            </Card>
-
-            <Card
-              sx={{
-                borderRadius: 2.4,
-                background: 'rgba(15,23,42,0.88)',
-                border: '1px solid rgba(96,165,250,0.35)',
-                fontFamily: CARD_FONT_FAMILY,
-                '& .MuiTypography-root': {
-                  fontFamily: CARD_FONT_FAMILY,
-                },
-              }}
-            >
-              <CardContent sx={{ p: 1.6 }}>
-                <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: 'clamp(16px, 0.95vw, 22px)', mb: 0.4 }}>
                   Contact & Support
                 </Typography>
                 <Typography sx={{ color: '#dbeafe', fontSize: 'clamp(14px, 0.9vw, 18px)', lineHeight: 1.45 }}>
@@ -558,135 +429,6 @@ function LoginPage() {
                 </Typography>
               </CardContent>
             </Card>
-          </Box>
-        </Box>
-
-        <Box
-          sx={{
-            px: { xs: 1.2, md: 2.4, xl: 4 },
-            py: { xs: 1.2, md: 1.4 },
-            borderRadius: 2.5,
-            border: '1px solid rgba(96,165,250,0.28)',
-            background: 'linear-gradient(120deg, rgba(10,22,52,0.92), rgba(20,52,128,0.42))',
-            boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
-          }}
-        >
-          <Typography
-            sx={{
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: 'clamp(16px, 1vw, 22px)',
-              mb: 1.2,
-              textAlign: { xs: 'left', md: 'center' },
-            }}
-          >
-            {'Product map & policies'}
-          </Typography>
-          <Typography
-            sx={{
-              color: '#cbd5e1',
-              fontSize: '0.82rem',
-              lineHeight: 1.5,
-              mb: 1.5,
-              textAlign: { xs: 'left', md: 'center' },
-              maxWidth: 900,
-              mx: { md: 'auto' },
-            }}
-          >
-            Use the links in About and Policies to open each topic on its own page (same content as /features, /pricing,
-            and the policy pages)—so this login screen stays compact.
-          </Typography>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, minmax(0, 1fr))' },
-              gap: 1.2,
-            }}
-          >
-            <Box
-              sx={{
-                p: 1.35,
-                borderRadius: 2,
-                border: '1px solid rgba(96,165,250,0.35)',
-                background: 'rgba(15,23,42,0.72)',
-              }}
-            >
-              <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
-                {'Markets & desk'}
-              </Typography>
-              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5 }}>Dashboard pulse and Overview (indices, flows, tables).</Typography>
-              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5, mt: 0.5 }}>
-                {'Portfolio Manager, Alerts, F&O, Commodities, Forex — premium after upgrade.'}
-              </Typography>
-              <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#93c5fd', fontSize: '0.78rem', fontWeight: 700, mt: 0.75, display: 'inline-block' }}>
-                Full product map →
-              </Link>
-            </Box>
-            <Box
-              sx={{
-                p: 1.35,
-                borderRadius: 2,
-                border: '1px solid rgba(96,165,250,0.35)',
-                background: 'rgba(15,23,42,0.72)',
-              }}
-            >
-              <Typography sx={{ color: '#93c5fd', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
-                Research modules
-              </Typography>
-              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5 }}>{'Long Term & Short Term outlook pages.'}</Typography>
-              <Typography sx={{ color: '#dbeafe', fontSize: '0.8rem', lineHeight: 1.5, mt: 0.5 }}>Screens and Financial Advisor for deeper work.</Typography>
-              <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#93c5fd', fontSize: '0.78rem', fontWeight: 700, mt: 0.75, display: 'inline-block' }}>
-                Full product map →
-              </Link>
-            </Box>
-            <Box
-              sx={{
-                p: 1.35,
-                borderRadius: 2,
-                border: '2px solid rgba(202, 138, 4, 0.85)',
-                background: 'rgba(202, 138, 4, 0.07)',
-                boxShadow: '0 0 0 1px rgba(202,138,4,0.2)',
-              }}
-            >
-              <Typography sx={{ color: '#fef9c3', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
-                Policies
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.45 }}>
-                <Link component={RouterLink} to="/privacy-policy" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
-                  Privacy policy
-                </Link>
-                <Link component={RouterLink} to="/terms-of-use" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
-                  Terms of use
-                </Link>
-                <Link component={RouterLink} to="/cancellation-policy" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
-                  Cancellation policy
-                </Link>
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                p: 1.35,
-                borderRadius: 2,
-                border: '2px solid rgba(202, 138, 4, 0.85)',
-                background: 'rgba(202, 138, 4, 0.07)',
-                boxShadow: '0 0 0 1px rgba(202,138,4,0.2)',
-              }}
-            >
-              <Typography sx={{ color: '#fef9c3', fontWeight: 800, fontSize: '0.85rem', mb: 0.75, letterSpacing: 0.06 }}>
-                About
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.45 }}>
-                <Link component={RouterLink} to="/features" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
-                  Features
-                </Link>
-                <Link component={RouterLink} to="/pricing" underline="hover" sx={{ color: '#fefce8', fontSize: '0.8rem', fontWeight: 600 }}>
-                  Pricing
-                </Link>
-                <Typography sx={{ color: '#e2e8f0', fontSize: '0.8rem', lineHeight: 1.45 }}>
-                  {"What's new — Events & notices (after you sign in)."}
-                </Typography>
-              </Box>
-            </Box>
           </Box>
         </Box>
 

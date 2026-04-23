@@ -4,7 +4,7 @@ import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, Menu
 import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchMondayPrevWeekHighCross, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 
@@ -228,6 +228,7 @@ const ALERT_COLS = [
 ];
 
 const CUSTOM_RS_TABLE_DISPLAY_LIMIT = 20;
+const MONDAY_PWH_TABLE_PAGE_SIZE = 10;
 
 function parseSortableNumber(v) {
   const n = Number(v);
@@ -304,6 +305,11 @@ function SignalsAlertsTab() {
   const [customSortCol, setCustomSortCol] = useState('');
   const [customSortDir, setCustomSortDir] = useState('desc');
   const [customSetupError, setCustomSetupError] = useState(null);
+  const [mondayPwhRows, setMondayPwhRows] = useState([]);
+  const [mondayPwhLoading, setMondayPwhLoading] = useState(false);
+  const [mondayPwhError, setMondayPwhError] = useState(null);
+  const [mondayPwhMeta, setMondayPwhMeta] = useState(null);
+  const [mondayPwhPage, setMondayPwhPage] = useState(1);
   const deferredSymbolFilter = useDeferredValue(symbolFilter);
 
   const handleSort = (col) => {
@@ -425,6 +431,37 @@ function SignalsAlertsTab() {
     if (view !== 'signals') return;
     loadCustomSetup(false);
   }, [view, loadCustomSetup]);
+
+  const loadMondayPrevWeekHigh = useCallback((refresh = false) => {
+    setMondayPwhLoading(true);
+    setMondayPwhError(null);
+    fetchMondayPrevWeekHighCross({ limit: 800, refresh, universe: 'all', require_cross: true })
+      .then((payload) => {
+        setMondayPwhRows(Array.isArray(payload?.data) ? payload.data : []);
+        setMondayPwhMeta({
+          reference_monday: payload?.reference_monday,
+          anchor: payload?.anchor,
+          rules: payload?.rules || {},
+          cached: payload?.cached,
+        });
+      })
+      .catch((err) => {
+        setMondayPwhRows([]);
+        setMondayPwhMeta(null);
+        setMondayPwhError(err?.message || 'Could not load Monday vs prior week high list.');
+      })
+      .finally(() => setMondayPwhLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'signals') return;
+    loadMondayPrevWeekHigh(false);
+  }, [view, loadMondayPrevWeekHigh]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(mondayPwhRows.length / MONDAY_PWH_TABLE_PAGE_SIZE));
+    setMondayPwhPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [mondayPwhRows.length]);
 
   useEffect(() => {
     setCustomSetupPage(1);
@@ -700,9 +737,304 @@ function SignalsAlertsTab() {
     customSetupPage * CUSTOM_RS_TABLE_DISPLAY_LIMIT,
     customSortedRows.length
   );
+  const mondayPwhTotalPages = Math.max(
+    1,
+    Math.ceil(mondayPwhRows.length / MONDAY_PWH_TABLE_PAGE_SIZE)
+  );
+  const mondayPwhDisplayedRows = useMemo(() => {
+    const start = (mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE;
+    return mondayPwhRows.slice(start, start + MONDAY_PWH_TABLE_PAGE_SIZE);
+  }, [mondayPwhRows, mondayPwhPage]);
+  const mondayRangeStart = mondayPwhRows.length === 0 ? 0 : ((mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE) + 1;
+  const mondayRangeEnd = Math.min(mondayPwhPage * MONDAY_PWH_TABLE_PAGE_SIZE, mondayPwhRows.length);
 
   return (
     <>
+      {view === 'signals' && (
+        <Box id="advisor-monday-prev-week-high" sx={{ mb: 2 }}>
+          <TableTitle style={{ fontSize: 15, marginBottom: 8, color: '#0b3d91' }}>
+            Monday close above prior week high (cross)
+          </TableTitle>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12, mb: 1, maxWidth: 920 }}>
+            NSE stocks where the latest Monday session (from NIFTY calendar) closed above the prior seven-day window high,
+            with the prior session at or below that high. Useful for weekly-break continuation after Monday&apos;s print.
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
+            {mondayPwhMeta?.reference_monday && (
+              <Chip
+                size="small"
+                label={`Ref Monday ${mondayPwhMeta.reference_monday}${mondayPwhMeta.anchor ? ` · anchor ${mondayPwhMeta.anchor}` : ''}`}
+                sx={{ fontWeight: 600, borderColor: '#1565c0', color: '#0d47a1' }}
+                variant="outlined"
+              />
+            )}
+            <Chip
+              size="small"
+              label={
+                mondayPwhRows.length === 0
+                  ? '0 names'
+                  : mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE
+                    ? `${mondayRangeStart}–${mondayRangeEnd} of ${mondayPwhRows.length} (${MONDAY_PWH_TABLE_PAGE_SIZE}/page)`
+                    : `${mondayPwhRows.length} names`
+              }
+              sx={{ fontWeight: 700, borderColor: '#1a3c5e', color: '#1a3c5e' }}
+              variant="outlined"
+            />
+            {mondayPwhMeta?.cached && (
+              <Chip size="small" label="Cached" sx={{ fontSize: 10, bgcolor: '#f3e5f5', color: '#6a1b9a' }} />
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={mondayPwhLoading}
+              onClick={() => loadMondayPrevWeekHigh(true)}
+              sx={{ textTransform: 'none', fontSize: 12, borderColor: '#1a3c5e', color: '#1a3c5e' }}
+            >
+              Refresh
+            </Button>
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
+            <Tooltip title="Select all symbols on this page of the Monday breakout list">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdSelectAll />}
+                onClick={() => {
+                  const visibleSyms = mondayPwhDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                  setCheckedSymbols((prev) => {
+                    const allChecked = visibleSyms.length > 0 && visibleSyms.every((s) => prev.has(s));
+                    const next = new Set(prev);
+                    if (allChecked) visibleSyms.forEach((s) => next.delete(s));
+                    else visibleSyms.forEach((s) => next.add(s));
+                    return next;
+                  });
+                }}
+                sx={{
+                  textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: '#1a3c5e', color: '#1a3c5e',
+                  '&:hover': { bgcolor: '#e3f2fd' },
+                }}
+              >
+                {checkedSymbols.size > 0 ? `${checkedSymbols.size} selected` : 'Select All'}
+              </Button>
+            </Tooltip>
+            <Tooltip title={copied ? 'Copied!' : 'Copy selected symbols, or full Monday breakout list if none selected (TradingView CSV)'}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={copied ? <MdCheck /> : <MdContentCopy />}
+                onClick={() => {
+                  const syms = checkedSymbols.size > 0
+                    ? [...checkedSymbols]
+                    : mondayPwhRows.map((row) => row.symbol).filter(Boolean);
+                  const csv = syms.map((s) => `NSE:${s}`).join(',');
+                  navigator.clipboard.writeText(csv).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+                sx={{
+                  textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0,
+                  borderColor: copied ? '#2e7d32' : '#1a3c5e',
+                  color: copied ? '#2e7d32' : '#1a3c5e',
+                  '&:hover': { borderColor: '#0b3d91', bgcolor: '#e3f2fd' },
+                }}
+              >
+                {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : mondayPwhRows.length})`}
+              </Button>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('short_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#1565c0' }}
+            >
+              {`Add ST (${checkedSymbols.size})`}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={checkedSymbols.size === 0}
+              onClick={() => handleAddSelected('long_term')}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1.5, minWidth: 0, bgcolor: '#2e7d32' }}
+            >
+              {`Add LT (${checkedSymbols.size})`}
+            </Button>
+            {checkedSymbols.size > 0 && (
+              <Button
+                size="small"
+                onClick={() => setCheckedSymbols(new Set())}
+                sx={{ textTransform: 'none', fontSize: 11, px: 1, color: '#888', minWidth: 0 }}
+              >
+                Clear
+              </Button>
+            )}
+          </Box>
+          {mondayPwhError && (
+            <Alert severity="warning" onClose={() => setMondayPwhError(null)} sx={{ mb: 1.5, '& .MuiAlert-message': { fontSize: 13 } }}>
+              {mondayPwhError}
+            </Alert>
+          )}
+          {!mondayPwhLoading && mondayPwhRows.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                mb: 1,
+              }}
+            >
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
+                Monday breakout list: {mondayRangeStart}–{mondayRangeEnd} of {mondayPwhRows.length}
+                {mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE ? ` (${MONDAY_PWH_TABLE_PAGE_SIZE} per page)` : ''}
+              </Typography>
+              {mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE && (
+                <Pagination
+                  count={mondayPwhTotalPages}
+                  page={mondayPwhPage}
+                  onChange={(_, v) => setMondayPwhPage(v)}
+                  color="primary"
+                  size="small"
+                  siblingCount={1}
+                  boundaryCount={1}
+                />
+              )}
+            </Box>
+          )}
+          {mondayPwhLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={28} /></Box>
+          ) : (
+            <TableWrapper>
+              <Table style={{ fontSize: 12, minWidth: 720 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...compact, width: 30, padding: '4px', color: '#fff' }}>
+                      <Checkbox
+                        size="small"
+                        sx={{ p: 0, color: '#fff', '&.Mui-checked': { color: '#fff' } }}
+                        checked={
+                          mondayPwhDisplayedRows.length > 0
+                          && mondayPwhDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                        }
+                        indeterminate={
+                          mondayPwhDisplayedRows.some((row) => checkedSymbols.has(row.symbol))
+                          && !mondayPwhDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                        }
+                        onChange={() => {
+                          const visible = mondayPwhDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                          setCheckedSymbols((prev) => {
+                            const allChecked = visible.length > 0 && visible.every((sym) => prev.has(sym));
+                            const next = new Set(prev);
+                            if (allChecked) visible.forEach((sym) => next.delete(sym));
+                            else visible.forEach((sym) => next.add(sym));
+                            return next;
+                          });
+                        }}
+                      />
+                    </th>
+                    <th style={{ ...compact, color: '#fff' }}>Symbol</th>
+                    <th style={{ ...compact, color: '#fff' }}>Sector</th>
+                    <th style={{ ...compact, color: '#fff' }}>Mon close</th>
+                    <th style={{ ...compact, color: '#fff' }}>Prev wk high</th>
+                    <th style={{ ...compact, color: '#fff' }}>Prior close</th>
+                    <th style={{ ...compact, color: '#fff' }}>% vs prev high</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mondayPwhDisplayedRows.map((r, i) => {
+                    const sym = r.symbol;
+                    const isChecked = sym && checkedSymbols.has(sym);
+                    const pct = r.pct_above_prev_week_high != null ? Number(r.pct_above_prev_week_high) : null;
+                    const pctColor = pct != null
+                      ? (pct >= 8 ? '#1b5e20' : pct >= 5 ? '#2e7d32' : '#1565c0')
+                      : '#888';
+                    const rowBg = isChecked
+                      ? '#e3f2fd'
+                      : (pct != null && pct >= 8
+                          ? '#e8f5e9'
+                          : (pct != null && pct >= 5 ? '#f0f8ff' : undefined));
+                    return (
+                    <tr key={`mon-pwh-${sym}-${(mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE + i}`} style={{ background: rowBg }}>
+                      <td style={{ padding: '4px', textAlign: 'center' }}>
+                        <Checkbox
+                          size="small"
+                          sx={{ p: 0 }}
+                          checked={Boolean(sym && isChecked)}
+                          onChange={() => {
+                            if (!sym) return;
+                            setCheckedSymbols((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(sym)) next.delete(sym);
+                              else next.add(sym);
+                              return next;
+                            });
+                          }}
+                        />
+                      </td>
+                      <td style={{ ...compact, fontWeight: 700 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {r.symbol}
+                          <TradingViewLink symbol={r.symbol} />
+                        </span>
+                      </td>
+                      <td style={{ ...compact, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sector || '—'}</td>
+                      <td style={{ ...compact, fontWeight: 600 }}>{r.monday_close != null ? fmt(r.monday_close) : '—'}</td>
+                      <td style={{ ...compact, color: '#1565c0', fontWeight: 600 }}>{r.prev_week_high != null ? fmt(r.prev_week_high) : '—'}</td>
+                      <td style={compact}>
+                        {r.prior_session_close != null ? fmt(r.prior_session_close) : '—'}
+                        {r.prior_session_date && (
+                          <span style={{ fontSize: 9, color: '#888', marginLeft: 4 }}>({String(r.prior_session_date).slice(0, 10)})</span>
+                        )}
+                      </td>
+                      <td style={{ ...compact, fontWeight: 700, color: pctColor }}>
+                        {pct != null && !Number.isNaN(pct)
+                          ? `${pct.toFixed(2)}%`
+                          : '—'}
+                      </td>
+                    </tr>
+                  )})}
+                  {mondayPwhRows.length === 0 && !mondayPwhError && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+                        No symbols matched (check EOD data and that a Monday exists on or before today).
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </TableWrapper>
+          )}
+          {!mondayPwhLoading && mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                mt: 1.5,
+              }}
+            >
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
+                {mondayRangeStart}–{mondayRangeEnd} of {mondayPwhRows.length}
+              </Typography>
+              <Pagination
+                count={mondayPwhTotalPages}
+                page={mondayPwhPage}
+                onChange={(_, v) => setMondayPwhPage(v)}
+                color="primary"
+                size="small"
+                siblingCount={1}
+                boundaryCount={1}
+              />
+            </Box>
+          )}
+        </Box>
+      )}
+
       {view === 'signals' && (
         <Box id="advisor-custom-rs-screen" sx={{ mb: 2 }}>
           {customSetupError && (

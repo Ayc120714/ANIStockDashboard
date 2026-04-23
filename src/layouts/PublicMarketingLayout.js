@@ -101,6 +101,21 @@ function PublicMarketingLayout() {
               flex: 1,
             }}
           >
+            <Box
+              sx={{
+                mb: 1.25,
+                px: 1.2,
+                py: 0.8,
+                borderRadius: 1.6,
+                border: '1px solid rgba(96,165,250,0.35)',
+                background: 'linear-gradient(120deg, rgba(30,64,175,0.24), rgba(14,165,233,0.2))',
+                color: '#dbeafe',
+                fontSize: 12.5,
+                fontWeight: 600,
+              }}
+            >
+              Note: This application is best viewed on a laptop or monitor; mobile view may feel condensed.
+            </Box>
             <Outlet />
           </Card>
 
