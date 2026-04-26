@@ -1,0 +1,16 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "types": ["react", "react-native", "jest"],
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@features/*": ["src/features/*"],
+      "@nav/*": ["src/navigation/*"],
+      "@components/*": ["src/components/*"]
+    }
+  },
+  "include": ["src", "index.js"]
+}
