@@ -82,6 +82,15 @@ Option B (share link):
 - Upload `app-release.apk` to your internal storage/download server
 - Download on device and install (enable unknown sources for your installer)
 
+### Download APK from GitHub
+
+1. Push your latest code to `main`.
+2. Open GitHub repo -> **Actions** -> **Android APK** workflow.
+3. Run workflow (or wait for automatic run on push).
+4. Open the successful run and download artifact:
+   - `ani-stock-mobile-debug-apk`
+5. Install downloaded `app-debug.apk` on Android device.
+
 ## Current parity implementation
 
 - Auth + OTP onboarding (`LoginScreen`, `OtpVerifyScreen`)
