@@ -41,6 +41,7 @@ export const logoutSession = (refreshToken) =>
   apiPost('/auth/logout', { refresh_token: refreshToken });
 
 export const fetchMe = () => apiGet('/auth/me');
+export const updateMyMobile = (mobile) => apiPost('/auth/me/mobile', { mobile: String(mobile || '') });
 
 export const fetchAdminUsers = (includeInactive = true) =>
   apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`);

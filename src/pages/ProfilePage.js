@@ -28,7 +28,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { brokerRowHasLiveTradingSession, fetchBrokerSetup, saveBrokerSetup, validateBrokerSetup } from '../api/brokers';
-import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus } from '../api/auth';
+import { deleteAiApiKey, fetchAiApiKeys, saveAiApiKey, setAiApiKeyStatus, updateMyMobile } from '../api/auth';
 import {
   fetchAngeloneHoldings,
   fetchAngeloneOrders,
@@ -47,7 +47,6 @@ import { ensureFyersBrokerSession } from '../api/fyersBroker';
 import { ensureZerodhaBrokerSession } from '../api/zerodhaBroker';
 import { resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
 import { PricingMarketingContent } from './PricingPage';
-import { FeaturesMarketingContent } from './FeaturesPage';
 
 const pickArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -171,7 +170,7 @@ const formatLastAuthIST = (value) => {
 };
 
 function ProfilePage() {
-  const { user, isAdmin, outlookPremium } = useAuth();
+  const { user, isAdmin, outlookPremium, hydrateMe } = useAuth();
   const paidPremiumLapsed =
     Boolean(user?.paid_premium_until) &&
     user?.paid_premium_active === false &&
@@ -189,12 +188,12 @@ function ProfilePage() {
   const onboardingPreferredBroker = String(location.state?.preferredBroker || '').toLowerCase();
   const activeTab = useMemo(() => {
     const t = String(searchParams.get('tab') || '').toLowerCase();
-    return t === 'broker' || t === 'pricing' || t === 'features' ? t : 'account';
+    return t === 'broker' || t === 'pricing' ? t : 'account';
   }, [searchParams]);
 
   const setActiveTab = useCallback(
     (value) => {
-      const v = value === 'broker' || value === 'pricing' || value === 'features' ? value : 'account';
+      const v = value === 'broker' || value === 'pricing' ? value : 'account';
       const next = new URLSearchParams(searchParams);
       if (v === 'account') {
         next.delete('tab');
@@ -216,6 +215,8 @@ function ProfilePage() {
   const [aiKeys, setAiKeys] = useState([]);
   const [aiKeyDrafts, setAiKeyDrafts] = useState({});
   const [aiBusy, setAiBusy] = useState(false);
+  const [mobileDraft, setMobileDraft] = useState('');
+  const [mobileBusy, setMobileBusy] = useState(false);
   /** Placeholder only — real password is never stored in the browser. Default: hidden (off). */
   const [showAccountPassword, setShowAccountPassword] = useState(false);
   const [aiKeyShowPassword, setAiKeyShowPassword] = useState({});
@@ -274,6 +275,8 @@ function ProfilePage() {
   const displayName = user?.name || user?.full_name || '—';
   const displayEmail = user?.email || '—';
   const displayMobile = user?.mobile || user?.phone || '—';
+  const mobileDigits = useMemo(() => String(mobileDraft || '').replace(/\D/g, ''), [mobileDraft]);
+  const mobileValid = useMemo(() => mobileDigits.length >= 8 && mobileDigits.length <= 15, [mobileDigits]);
   const aiRows = useMemo(() => {
     const byProvider = new Map((Array.isArray(aiKeys) ? aiKeys : []).map((r) => [String(r.provider || '').toLowerCase(), r]));
     return AI_KEY_PROVIDERS.map((provider) => {
@@ -1073,6 +1076,30 @@ function ProfilePage() {
     }
   };
 
+  useEffect(() => {
+    const current = String(user?.mobile || user?.phone || '').trim();
+    setMobileDraft(current);
+  }, [user?.mobile, user?.phone]);
+
+  const onSaveMobile = async () => {
+    if (!mobileValid) {
+      setError('Enter a valid mobile number with 8-15 digits.');
+      return;
+    }
+    setMobileBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await updateMyMobile(mobileDigits);
+      await hydrateMe();
+      setMessage('Mobile number saved successfully.');
+    } catch (e) {
+      setError(e?.message || 'Failed to save mobile number.');
+    } finally {
+      setMobileBusy(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
@@ -1093,7 +1120,6 @@ function ProfilePage() {
         <Tab value="account" label="Account Details" />
         <Tab value="broker" label="Broker Integration" />
         <Tab value="pricing" label="Pricing" />
-        <Tab value="features" label="Features" />
       </Tabs>
 
       {activeTab === 'account' ? (
@@ -1103,7 +1129,14 @@ function ProfilePage() {
             <Box sx={{ display: 'grid', gap: 1.2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' } }}>
               <TextField size="small" label="Name" value={displayName} disabled />
               <TextField size="small" label="Email ID" value={displayEmail} disabled />
-              <TextField size="small" label="Mobile Number" value={displayMobile} disabled />
+              <TextField
+                size="small"
+                label="Mobile Number"
+                value={mobileDraft}
+                onChange={(e) => setMobileDraft(e.target.value)}
+                inputProps={{ inputMode: 'tel', maxLength: 20 }}
+                helperText="You can add/update this later. Use 8-15 digits with country code."
+              />
               {showAccountPassword ? (
                 <TextField
                   key="profile-pw-shown"
@@ -1175,6 +1208,19 @@ function ProfilePage() {
               )}
             </Box>
             <Box sx={{ mt: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
+                <Button
+                  variant="outlined"
+                  sx={{ textTransform: 'none' }}
+                  disabled={mobileBusy || !mobileValid || mobileDigits === String(user?.mobile || user?.phone || '').trim()}
+                  onClick={onSaveMobile}
+                >
+                  Save Mobile
+                </Button>
+                <Typography sx={{ fontSize: 12, color: '#666', alignSelf: 'center' }}>
+                  Current: {displayMobile}
+                </Typography>
+              </Stack>
               <Button
                 variant="contained"
                 sx={{ textTransform: 'none' }}
@@ -1297,12 +1343,6 @@ function ProfilePage() {
       {activeTab === 'pricing' ? (
         <Box sx={{ py: 0.5 }}>
           <PricingMarketingContent />
-        </Box>
-      ) : null}
-
-      {activeTab === 'features' ? (
-        <Box sx={{ py: 0.5, maxWidth: 1000, mx: 'auto' }}>
-          <FeaturesMarketingContent />
         </Box>
       ) : null}
 

@@ -283,43 +283,67 @@ function AiPicksPage() {
 
   const renderSwingPlan = (rows) => {
     if (!rows.length) return null;
+    const validRows = rows
+      .map((r) => {
+        const pick = normalizePickTargets(r, true);
+        const rr = computeRRTargets(pick, true);
+        if (!pick.entry_price || !pick.stop_loss || !rr.risk) return null;
+        return { r, pick, rr };
+      })
+      .filter(Boolean);
+    if (!validRows.length) return null;
+
     return (
       <Box sx={{ mt: 2, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
         <Box sx={{ fontWeight: 700, fontSize: 14, mb: 1, color: '#1a3c5e' }}>
           Swing Trade Pyramiding Plan (3-6 Weeks) — Buy Side Only
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-          {rows.map(r => {
-            const pick = normalizePickTargets(r, true);
-            const rr = computeRRTargets(pick, true);
-            if (!pick.entry_price || !pick.stop_loss || !rr.risk) return null;
-            return (
-              <Box key={r.symbol} sx={{ p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '1px solid #e0e0e0' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{r.symbol}</span>
-                  <Chip label={r.grade} size="small"
-                    sx={{ fontWeight: 700, fontSize: 11, color: gradeColor[r.grade], bgcolor: gradeBg[r.grade] }} />
-                </Box>
-                <Box sx={{ fontSize: 12, lineHeight: 1.8 }}>
-                  <Box><span style={{ color: '#888', width: 90, display: 'inline-block' }}>Risk per share:</span>
-                    <strong style={{ color: '#c62828' }}>₹{rr.risk?.toFixed(2)}</strong>
-                    <span style={{ color: '#888', fontSize: 10, marginLeft: 4 }}>({pick.sl_pct?.toFixed(1)}%)</span>
-                  </Box>
-                  <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #1565c0' }}>
-                    <Box><strong>1.</strong> Enter at <strong style={{ color: '#1565c0' }}>{fmt(r.entry_price)}</strong>, SL at <strong style={{ color: '#c62828' }}>{fmt(r.stop_loss)}</strong></Box>
-                    <Box><strong>2.</strong> Price moves above T1 <strong style={{ color: '#2e7d32' }}>{fmt(pick.target_1)}</strong> → trail SL to entry (risk-free)</Box>
-                    <Box><strong>3.</strong> Add at T1, new SL at entry → <strong style={{ color: '#0d47a1' }}>T 4R {fmt(rr.t4r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t4r_pct?.toFixed(1)}%)</span></Box>
-                    <Box><strong>4.</strong> Add at T2 <strong>{fmt(pick.target_2)}</strong> → <strong style={{ color: '#283593' }}>T 6R {fmt(rr.t6r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t6r_pct?.toFixed(1)}%)</span></Box>
-                    <Box><strong>5.</strong> Hold runners → <strong style={{ color: '#4a148c' }}>T 10R {fmt(rr.t10r)}</strong>
-                      <span style={{ fontSize: 10, color: '#888' }}> (+{rr.t10r_pct?.toFixed(1)}%)</span></Box>
-                  </Box>
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
+        <TableWrapper>
+          <Table style={{ fontSize: 12, minWidth: 900 }}>
+            <thead style={{ backgroundColor: '#1b5e20' }}>
+              <tr>
+                <th style={compact}>Stock Name</th>
+                <th style={compact}>Entry</th>
+                <th style={compact}>SL</th>
+                <th style={compact}>TSL</th>
+                <th style={compact}>T1</th>
+                <th style={compact}>T2</th>
+                <th style={compact}>Hold winners</th>
+              </tr>
+            </thead>
+            <tbody>
+              {validRows.map(({ r, pick, rr }) => (
+                <tr key={`swing-plan-${r.symbol}`}>
+                  <td style={{ ...compact, fontWeight: 700 }}>
+                    {r.symbol}
+                    {r.grade ? (
+                      <Chip
+                        label={r.grade}
+                        size="small"
+                        sx={{
+                          ml: 0.7,
+                          fontWeight: 700,
+                          fontSize: 10,
+                          height: 20,
+                          color: gradeColor[r.grade],
+                          bgcolor: gradeBg[r.grade],
+                        }}
+                      />
+                    ) : null}
+                  </td>
+                  <td style={{ ...compact, color: '#1565c0', fontWeight: 700 }}>{fmt(r.entry_price)}</td>
+                  <td style={{ ...compact, color: '#c62828', fontWeight: 700 }}>{fmt(r.stop_loss)}</td>
+                  <td style={{ ...compact, color: '#0d47a1' }}>
+                    Above T1, trail to entry ({fmt(r.entry_price)})
+                  </td>
+                  <td style={{ ...compact, color: '#2e7d32', fontWeight: 700 }}>{fmt(pick.target_1)}</td>
+                  <td style={{ ...compact, color: '#2e7d32', fontWeight: 700 }}>{fmt(pick.target_2)}</td>
+                  <td style={{ ...compact, color: '#4a148c', fontWeight: 700 }}>{fmt(rr.t10r)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableWrapper>
       </Box>
     );
   };

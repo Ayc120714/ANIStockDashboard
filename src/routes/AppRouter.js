@@ -46,7 +46,7 @@ function AppRouter() {
         <Route path="/access-link-setup" element={<AccessLinkSetupPage />} />
 
         <Route element={<PublicMarketingLayout />}>
-          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/features" element={<Navigate to="/onboarding" replace />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-use" element={<TermsOfUsePage />} />
@@ -68,6 +68,7 @@ function AppRouter() {
           <Route path="/callback" element={<DhanCallbackPage />} />
           <Route path="/dhan-callback" element={<DhanCallbackPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/onboarding" element={<FeaturesPage />} />
           <Route path="/fno" element={<PremiumModuleRoute><FnOPage /></PremiumModuleRoute>} />
           <Route path="/commodities" element={<PremiumModuleRoute><CommoditiesPage /></PremiumModuleRoute>} />
           <Route path="/forex" element={<PremiumModuleRoute><ForexPage /></PremiumModuleRoute>} />

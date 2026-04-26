@@ -40,9 +40,9 @@ function Sidebar() {
   const { pathname, search } = useLocation();
   const profileTab = new URLSearchParams(search || '').get('tab');
   const onProfile = normalizePath(pathname) === '/profile';
-  const profileSidebarActive = onProfile && profileTab !== 'pricing' && profileTab !== 'features';
+  const profileSidebarActive = onProfile && profileTab !== 'pricing';
   const pricingSidebarActive = onProfile && profileTab === 'pricing';
-  const featuresSidebarActive = onProfile && profileTab === 'features';
+  const onboardingSidebarActive = routeActive(pathname, '/onboarding');
 
   return (
     <SidebarContainer collapsed={collapsed}>
@@ -155,14 +155,14 @@ function Sidebar() {
           </SidebarItem>
 
           <SidebarItem
-            to="/profile?tab=features"
+            to="/onboarding"
             collapsed={collapsed}
             pathname={pathname}
-            title={collapsed ? 'Features' : undefined}
-            active={featuresSidebarActive}
+            title={collapsed ? 'Onboarding' : undefined}
+            active={onboardingSidebarActive}
           >
             <MdViewModule />
-            <span className="label">Features</span>
+            <span className="label">Onboarding</span>
           </SidebarItem>
 
           <SidebarItem

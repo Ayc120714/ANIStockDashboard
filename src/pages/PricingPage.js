@@ -153,11 +153,11 @@ export function PricingMarketingContent() {
         <Typography variant="body2" sx={{ mt: 2 }}>
           <Link
             component={RouterLink}
-            to={isAuthenticated ? '/profile?tab=features' : '/features'}
+            to="/onboarding"
             underline="hover"
             fontWeight={700}
           >
-            Browse product features
+            Open onboarding guide
           </Link>
           {' · '}
           <Link component={RouterLink} to="/privacy-policy" underline="hover" fontWeight={700}>

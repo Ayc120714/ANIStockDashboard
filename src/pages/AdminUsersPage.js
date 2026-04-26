@@ -131,7 +131,8 @@ function AdminUsersPage() {
   const canCreate = useMemo(() => {
     const em = email.trim();
     const mb = mobile.replace(/\D/g, '');
-    return em.includes('@') && em.length > 5 && mb.length >= 8 && mb.length <= 15;
+    const mobileOk = !mb || (mb.length >= 8 && mb.length <= 15);
+    return em.includes('@') && em.length > 5 && mobileOk;
   }, [email, mobile]);
 
   const onCreate = async () => {
@@ -140,9 +141,10 @@ function AdminUsersPage() {
     setError('');
     setMessage('');
     try {
+      const cleanMobile = mobile.replace(/\D/g, '');
       const res = await addAdminUser({
         email: email.trim(),
-        mobile: mobile.replace(/\D/g, ''),
+        ...(cleanMobile ? { mobile: cleanMobile } : {}),
       });
       const pw = res?.temporary_password;
       setMessage(
@@ -353,7 +355,7 @@ function AdminUsersPage() {
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
             inputProps={{ inputMode: 'tel', maxLength: 20 }}
-            helperText="8–15 digits, country code included (no + or spaces)"
+            helperText="Optional: 8-15 digits, country code included (no + or spaces)"
           />
         </Box>
         <Box sx={{ mt: 1, fontSize: 12, color: 'text.secondary' }}>
