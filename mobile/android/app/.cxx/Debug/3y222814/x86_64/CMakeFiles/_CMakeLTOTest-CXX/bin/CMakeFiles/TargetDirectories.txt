@@ -1,4 +1,0 @@
-/opt/ani-stock/stockdashboard/mobile/android/app/.cxx/Debug/3y222814/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/foo.dir
-/opt/ani-stock/stockdashboard/mobile/android/app/.cxx/Debug/3y222814/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/boo.dir
-/opt/ani-stock/stockdashboard/mobile/android/app/.cxx/Debug/3y222814/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/edit_cache.dir
-/opt/ani-stock/stockdashboard/mobile/android/app/.cxx/Debug/3y222814/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/rebuild_cache.dir

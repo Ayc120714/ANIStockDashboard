@@ -3,5 +3,8 @@ node_modules
 .env
 .env.local
 android/app/build
-ios/build
-ios/Pods
+android/.gradle
+android/build
+android/app/.cxx
+ios/
+Gemfile
