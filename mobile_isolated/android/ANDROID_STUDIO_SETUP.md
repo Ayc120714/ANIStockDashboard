@@ -15,14 +15,14 @@ Use this sequence to build and verify the APK from Android Studio with fewer run
 ## 2) Open Project in Android Studio
 
 1. Open Android Studio.
-2. Click **Open** and select: `mobile/android`.
+2. Click **Open** and select: `mobile_isolated/android`.
 3. Wait for Gradle sync to complete.
 4. If prompted for SDK path, set it once in `local.properties`:
    - `sdk.dir=/path/to/Android/Sdk`
 
 ## 3) Environment for API
 
-Set production API values in `mobile/.env.production`:
+Set production API values in `mobile_isolated/.env.production`:
 
 - `MOBILE_API_URL=https://www.aycindustries.com:8443/api`
 - `MOBILE_TRADE_API_URL=https://www.aycindustries.com:8443/api`
@@ -59,18 +59,18 @@ Option A (recommended): **Build > Generate Signed Bundle / APK > APK > release**
 
 Option B (terminal):
 
-- `cd mobile/android && ./gradlew assembleRelease`
+- `cd mobile_isolated/android && ./gradlew assembleRelease`
 
 Output:
 
-- `mobile/android/app/build/outputs/apk/release/app-release.apk`
+- `mobile_isolated/android/app/build/outputs/apk/release/app-release.apk`
 
 ## 7) Install on Physical Device
 
 1. Enable Developer Options + USB Debugging on phone.
 2. Connect device and accept RSA prompt.
 3. Install:
-   - `adb install -r mobile/android/app/build/outputs/apk/release/app-release.apk`
+   - `adb install -r mobile_isolated/android/app/build/outputs/apk/release/app-release.apk`
 
 ## 8) Crash Check in Android Studio (Logcat)
 

@@ -10,6 +10,12 @@
 
 # production
 /build
+/mobile_isolated/node_modules
+/mobile_isolated/android/.gradle
+/mobile_isolated/android/build
+/mobile_isolated/android/app/build
+/mobile_isolated/android/app/.cxx
+/mobile_isolated/ios/build
 
 # tool caches
 .eslintcache

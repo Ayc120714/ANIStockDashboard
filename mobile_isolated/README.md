@@ -1,13 +1,13 @@
 # ANI Stock Mobile (Isolated React Native App)
 
-This is a standalone mobile workspace under `mobile/` and does not modify the existing web setup.
+This is a standalone mobile workspace under `mobile_isolated/` and does not modify the existing web setup.
 
 ## Isolation guarantees
 
 - Separate `package.json`, lockfile, Metro/Babel/TypeScript config.
-- Separate env (`mobile/.env.*`).
-- Separate CI workflow (`mobile/.github/workflows/mobile-ci.yml`).
-- Separate Android platform folder (`mobile/android`).
+- Separate env (`mobile_isolated/.env.*`).
+- Separate CI workflow (`.github/workflows/android-apk.yml` scoped to `mobile_isolated/**`).
+- Separate Android platform folder (`mobile_isolated/android`).
 
 ## Required versions
 
