@@ -1,0 +1,3 @@
+In Broker Integration, connect your broker APIs.
+Save setup and validate session.
+Once validated, execution-side workflows become consistent.

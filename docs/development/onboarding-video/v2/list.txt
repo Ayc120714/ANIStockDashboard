@@ -1,0 +1,8 @@
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_0.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_1.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_2.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_3.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_4.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_5.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_6.mp4'
+file '/opt/ani-stock/stockdashboard/docs/development/onboarding-video/v2/slide_7.mp4'

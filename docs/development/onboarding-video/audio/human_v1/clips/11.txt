@@ -1,0 +1,5 @@
+Now open Onboarding and Courses.
+For SMC development, focus on market structure,
+Break of Structure and Change of Character,
+liquidity sweeps, order blocks, and fair value gap context.
+Use these with strict risk and confirmation rules.

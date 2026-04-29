@@ -1,0 +1,3 @@
+Welcome to ANI Stock Dashboard.
+In this video, I will walk you through the platform in a simple daily flow.
+We will move step by step, just like a real trading routine.

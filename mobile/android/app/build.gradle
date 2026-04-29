@@ -58,6 +58,11 @@ react {
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = false
+def hasReleaseSigning =
+        project.hasProperty("ANI_UPLOAD_STORE_FILE") &&
+        project.hasProperty("ANI_UPLOAD_STORE_PASSWORD") &&
+        project.hasProperty("ANI_UPLOAD_KEY_ALIAS") &&
+        project.hasProperty("ANI_UPLOAD_KEY_PASSWORD")
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -92,15 +97,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(ANI_UPLOAD_STORE_FILE)
+                storePassword ANI_UPLOAD_STORE_PASSWORD
+                keyAlias ANI_UPLOAD_KEY_ALIAS
+                keyPassword ANI_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Uses release keystore when ANI_UPLOAD_* Gradle properties are present.
+            // Falls back to debug signing for local smoke tests only.
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

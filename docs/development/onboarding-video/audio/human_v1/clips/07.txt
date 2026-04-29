@@ -1,0 +1,3 @@
+Open Portfolio Manager.
+Track open positions, exposure, and balance across holdings.
+This is your core risk-control page.

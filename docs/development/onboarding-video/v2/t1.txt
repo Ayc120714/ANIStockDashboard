@@ -1,0 +1,2 @@
+1) Profile -> Account Details
+Check account info, mobile, and password

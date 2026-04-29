@@ -1,0 +1,2 @@
+2) Profile -> Broker Integration
+Select broker, save setup, validate session

@@ -31,6 +31,12 @@ const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return is
 const fmtPct = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`; };
 const fmtCur = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 const pctColor = (v) => { const n = +v; if (isNaN(n) || n === 0) return '#666'; return n > 0 ? '#2e7d32' : '#c62828'; };
+const parsePctNumber = (v) => {
+  if (v == null) return null;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  const n = Number(String(v).replace(/[^\d.+-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
 /** First match wins: Dhan, then Angel One, then Samco, Upstox (same family as Profile). */
 const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
@@ -603,6 +609,122 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
   );
 }
 
+// ─── Relative To Index (Regime Buckets) ─────────────────────────────────────
+function RelativeRegimeBoard({ watchlist = [], indices = null }) {
+  const [statusMsg, setStatusMsg] = useState('');
+  const benchmark = useMemo(() => {
+    const cards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
+    if (!cards.length) return 0;
+    const preferred = cards.filter((c) => /nifty 50|sensex/i.test(String(c?.title || '')));
+    const pool = preferred.length ? preferred : cards;
+    const vals = pool
+      .map((c) => parsePctNumber(c?.change))
+      .filter((v) => Number.isFinite(v));
+    if (!vals.length) return 0;
+    return vals.reduce((s, x) => s + x, 0) / vals.length;
+  }, [indices]);
+
+  const groupedRows = useMemo(() => {
+    const byType = {
+      accelerating: new Set(),
+      recovering: new Set(),
+      decelerating: new Set(),
+      underperforming: new Set(),
+    };
+    const rows = Array.isArray(watchlist) ? watchlist : [];
+    rows.forEach((row) => {
+      const symbol = String(row?.symbol || '').trim().toUpperCase();
+      if (!symbol) return;
+      const day1d = Number(row?.day1d);
+      if (!Number.isFinite(day1d)) return;
+      const day1w = Number(row?.day1w);
+      const alpha = day1d - benchmark;
+
+      if (day1d > benchmark + 0.4) {
+        byType.accelerating.add(symbol);
+      } else if (day1d > 0 && alpha < -0.4) {
+        byType.decelerating.add(symbol);
+      } else if (day1d <= 0 && alpha < 0) {
+        byType.underperforming.add(symbol);
+      } else if (day1d > 0 && (day1w < 0 || alpha <= 0.4)) {
+        byType.recovering.add(symbol);
+      }
+    });
+
+    const ordered = [
+      { key: 'accelerating', label: 'accelerating' },
+      { key: 'recovering', label: 'recovering' },
+      { key: 'decelerating', label: 'decelerating' },
+      { key: 'underperforming', label: 'underperforming' },
+    ];
+    return ordered
+      .map(({ key, label }) => {
+        const symbols = [...byType[key]].sort();
+        return {
+          regimeType: label,
+          count: symbols.length,
+          symbols,
+          csv: symbols.join(','),
+        };
+      })
+      .filter((r) => r.count > 0);
+  }, [watchlist, benchmark]);
+
+  const handleCopyCsv = async (csvText, label) => {
+    if (!csvText) return;
+    try {
+      await navigator.clipboard.writeText(csvText);
+      const cnt = csvText.split(',').filter(Boolean).length;
+      setStatusMsg(`Copied ${cnt} symbols for ${label}.`);
+    } catch (_) {
+      setStatusMsg(`Copy failed for ${label}.`);
+    }
+  };
+
+  return (
+    <Card>
+      <SectionTitle>Stocks vs Indices Regime Board</SectionTitle>
+      <Box sx={{ fontSize: 11, color: '#666', mb: 1 }}>
+        Benchmark uses NIFTY 50 / SENSEX day change when available (fallback: average index change). Current benchmark: <b>{fmtPct(benchmark)}</b>
+      </Box>
+      {statusMsg ? <Alert severity="info" sx={{ mb: 1 }}>{statusMsg}</Alert> : null}
+      <Box sx={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 700 }}>Regime</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 700 }}>Unique Stocks</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 700 }}>Symbols (CSV)</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 700 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groupedRows.map((r) => (
+              <tr key={r.regimeType} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '6px 8px', fontWeight: 700 }}>{r.regimeType}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{r.count}</td>
+                <td style={{ padding: '6px 8px', wordBreak: 'break-word' }}>{r.csv}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  <Button size="small" variant="text" sx={{ textTransform: 'none' }} onClick={() => handleCopyCsv(r.csv, r.regimeType)}>
+                    Copy CSV
+                  </Button>
+                </td>
+              </tr>
+            ))}
+            {!groupedRows.length ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
+                  Not enough watchlist/index data to classify right now.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </Box>
+    </Card>
+  );
+}
+
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
 function WeeklyEntries({ weeklyData = [] }) {
   const rows = weeklyData;
@@ -1003,6 +1125,62 @@ function RecentAlerts({ alerts }) {
   );
 }
 
+function TrendingStocksPanel({ alerts }) {
+  const rows = (Array.isArray(alerts) ? alerts : [])
+    .filter((a) => String(a?.alert_type || '').toLowerCase().startsWith('entry_early_'))
+    .sort((a, b) => new Date(b?.timestamp || 0).getTime() - new Date(a?.timestamp || 0).getTime());
+
+  const symbolRows = useMemo(() => {
+    const bySymbol = new Map();
+    rows.forEach((r) => {
+      const symbol = String(r?.symbol || '').trim().toUpperCase();
+      if (!symbol) return;
+      if (!bySymbol.has(symbol)) bySymbol.set(symbol, r);
+    });
+    return [...bySymbol.values()].slice(0, 20);
+  }, [rows]);
+
+  if (!symbolRows.length) {
+    return (
+      <Card>
+        <SectionTitle>Trending Stocks (Early Entry)</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          No trending stocks yet. Stocks will appear here when ENTRY_EARLY conditions are met.
+        </Box>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <SectionTitle>Trending Stocks (Early Entry)</SectionTitle>
+      <Box sx={{ fontSize: 11, color: '#666', mb: 1 }}>
+        Live list from `ENTRY_EARLY` conditions (accepted breakout with volume confirmation).
+      </Box>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {symbolRows.map((a, i) => {
+          const t = String(a?.alert_type || '').toLowerCase();
+          const isUp = t.includes('_up_');
+          return (
+            <Chip
+              key={`${a.symbol}_${i}`}
+              label={`${a.symbol} ${isUp ? '▲' : '▼'}`}
+              size="small"
+              sx={{
+                fontWeight: 700,
+                bgcolor: isUp ? '#e8f5e9' : '#ffebee',
+                color: isUp ? '#1b5e20' : '#b71c1c',
+                border: `1px solid ${isUp ? '#81c784' : '#ef9a9a'}`,
+              }}
+              title={a.message || ''}
+            />
+          );
+        })}
+      </Box>
+    </Card>
+  );
+}
+
 // ─── AI Ratings Summary ─────────────────────────────────────────────────────
 function LatestRatings({ ratings }) {
   const navigate = useNavigate();
@@ -1220,7 +1398,7 @@ function DashboardPage() {
         fetchSectorOutlook(),
         fetchPriceShockers('gainers', 8, 'day'),
         fetchPriceShockers('losers', 8, 'day'),
-        fetchAlerts({ limit: 10 }),
+        fetchAlerts({ limit: 25 }),
         fetchRatings({ limit: 8 }),
         apiGet('/system/status'),
       ]);
@@ -1431,6 +1609,7 @@ function DashboardPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) minmax(300px,360px)' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
+              <RelativeRegimeBoard watchlist={watchlist} indices={indices} />
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <WeeklyEntries weeklyData={weeklyData} />
                 <OrderBlockZones obData={obData} />
@@ -1439,6 +1618,7 @@ function DashboardPage() {
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 800px)': { gridTemplateColumns: '1fr' } }}>
                 <MarketMovers gainers={gainers} losers={losers} />
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <TrendingStocksPanel alerts={alerts} />
                   <LatestRatings ratings={ratings} />
                   <RecentAlerts alerts={alerts} />
                 </Box>

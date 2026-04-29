@@ -1,0 +1,25 @@
+Welcome to ANI Stock Dashboard. This is your main command center. Start here each day to check the market pulse, then move into detailed analysis modules for better decisions.
+
+Overview is your daily starting point. Use it to understand market breadth, index direction, and sector momentum before selecting any trading opportunities.
+
+Long Term helps you view structural trend direction. Use this section to align your ideas with the broader market trend and avoid short-term noise.
+
+Short Term is for tactical opportunity tracking. Use it to identify near-term momentum and swing setups while staying aligned with the larger trend.
+
+Screens converts market context into actionable stock lists. Apply filters, scan candidates, and shortlist symbols that match your setup criteria.
+
+Advisor gives guided interpretation to support your trade planning. Use it after screening to improve conviction, risk clarity, and execution quality.
+
+Portfolio Manager is your risk and position control hub. Review open positions, monitor performance, and keep exposure balanced across your portfolio.
+
+Alerts keeps your workflow proactive. Instead of watching everything manually, use alert triggers so you can act quickly when important levels are reached.
+
+In Account Details, verify your profile information, update mobile number, and manage password security. Keep this section updated for smooth account access.
+
+Broker Integration connects your account to broker APIs. Select your broker, save the setup, and validate the session to enable downstream trading workflows.
+
+Onboarding is your learning hub. Watch the onboarding video and use course links to build stronger understanding of fundamentals, technicals, and execution flow.
+
+Events is where updates and important sessions are published. Check this section regularly for announcements and learning opportunities.
+
+Your daily routine is simple: Dashboard, Overview, opportunity modules, risk review, and continuous learning from Onboarding. Follow this process consistently to improve decision quality.
