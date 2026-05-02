@@ -4,6 +4,7 @@ import { MdRefresh } from 'react-icons/md';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { fetchWeeklyPicks, triggerWeeklyPicks, generateWeeklyPicks } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
+import TradingViewLink from '../components/TradingViewLink';
 
 const gradeColor = { A: '#1b5e20', B: '#2e7d32', C: '#f57f17', D: '#c62828' };
 const gradeBg = { A: '#e8f5e9', B: '#f1f8e9', C: '#fff8e1', D: '#ffebee' };
@@ -206,13 +207,16 @@ function AiPicksPage() {
                   <tr key={r.symbol}>
                     <td style={{ ...compact, fontWeight: 600, color: '#888' }}>{String(i + 1).padStart(2, '0')}</td>
                     <td style={{ ...compact, fontWeight: 700 }}>
-                      {r.symbol}
-                      {r.is_fno && (
-                        <span style={{
-                          marginLeft: 3, fontSize: 8, padding: '1px 3px', borderRadius: 2,
-                          background: '#0d47a1', color: '#fff', fontWeight: 600, verticalAlign: 'super'
-                        }}>F&O</span>
-                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <TradingViewLink symbol={r.symbol} />
+                        <span>{r.symbol}</span>
+                        {r.is_fno && (
+                          <span style={{
+                            fontSize: 8, padding: '1px 3px', borderRadius: 2,
+                            background: '#0d47a1', color: '#fff', fontWeight: 600,
+                          }}>F&O</span>
+                        )}
+                      </span>
                     </td>
                     <td style={compact}>
                       <span style={{
@@ -281,73 +285,6 @@ function AiPicksPage() {
     );
   };
 
-  const renderSwingPlan = (rows) => {
-    if (!rows.length) return null;
-    const validRows = rows
-      .map((r) => {
-        const pick = normalizePickTargets(r, true);
-        const rr = computeRRTargets(pick, true);
-        if (!pick.entry_price || !pick.stop_loss || !rr.risk) return null;
-        return { r, pick, rr };
-      })
-      .filter(Boolean);
-    if (!validRows.length) return null;
-
-    return (
-      <Box sx={{ mt: 2, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-        <Box sx={{ fontWeight: 700, fontSize: 14, mb: 1, color: '#1a3c5e' }}>
-          Swing Trade Pyramiding Plan (3-6 Weeks) — Buy Side Only
-        </Box>
-        <TableWrapper>
-          <Table style={{ fontSize: 12, minWidth: 900 }}>
-            <thead style={{ backgroundColor: '#1b5e20' }}>
-              <tr>
-                <th style={compact}>Stock Name</th>
-                <th style={compact}>Entry</th>
-                <th style={compact}>SL</th>
-                <th style={compact}>TSL</th>
-                <th style={compact}>T1</th>
-                <th style={compact}>T2</th>
-                <th style={compact}>Hold winners</th>
-              </tr>
-            </thead>
-            <tbody>
-              {validRows.map(({ r, pick, rr }) => (
-                <tr key={`swing-plan-${r.symbol}`}>
-                  <td style={{ ...compact, fontWeight: 700 }}>
-                    {r.symbol}
-                    {r.grade ? (
-                      <Chip
-                        label={r.grade}
-                        size="small"
-                        sx={{
-                          ml: 0.7,
-                          fontWeight: 700,
-                          fontSize: 10,
-                          height: 20,
-                          color: gradeColor[r.grade],
-                          bgcolor: gradeBg[r.grade],
-                        }}
-                      />
-                    ) : null}
-                  </td>
-                  <td style={{ ...compact, color: '#1565c0', fontWeight: 700 }}>{fmt(r.entry_price)}</td>
-                  <td style={{ ...compact, color: '#c62828', fontWeight: 700 }}>{fmt(r.stop_loss)}</td>
-                  <td style={{ ...compact, color: '#0d47a1' }}>
-                    Above T1, trail to entry ({fmt(r.entry_price)})
-                  </td>
-                  <td style={{ ...compact, color: '#2e7d32', fontWeight: 700 }}>{fmt(pick.target_1)}</td>
-                  <td style={{ ...compact, color: '#2e7d32', fontWeight: 700 }}>{fmt(pick.target_2)}</td>
-                  <td style={{ ...compact, color: '#4a148c', fontWeight: 700 }}>{fmt(rr.t10r)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
-      </Box>
-    );
-  };
-
   return (
     <div>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -357,7 +294,7 @@ function AiPicksPage() {
           </h2>
           <span style={{ fontSize: 12, color: '#666' }}>
             {data.pick_date ? `Generated: ${data.pick_date}` : ''}
-            {' · '}Targets: 4R / 6R / 10R for pyramiding (3-6 week swing)
+            {' · '}Extended targets: 4R / 6R / 10R (risk multiples from entry)
           </span>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -389,11 +326,10 @@ function AiPicksPage() {
 
       {!loading && !error && (
         <>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {renderTable(data.bullish, 'bullish')}
             {renderTable(data.bearish, 'bearish')}
           </Box>
-          {renderSwingPlan(data.bullish)}
 
           {(data.fno_bullish?.length > 0 || data.fno_bearish?.length > 0) && (
             <Box sx={{ mt: 4 }}>
@@ -414,11 +350,10 @@ function AiPicksPage() {
                   (Stocks available for derivatives trading on NSE)
                 </span>
               </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {renderTable(data.fno_bullish, 'bullish', 'F&O Bullish Picks')}
                 {renderTable(data.fno_bearish, 'bearish', 'F&O Bearish Picks')}
               </Box>
-              {renderSwingPlan(data.fno_bullish)}
             </Box>
           )}
         </>

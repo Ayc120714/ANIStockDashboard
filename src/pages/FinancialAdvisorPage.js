@@ -5,7 +5,9 @@ import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
 import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchMondayPrevWeekHighCross, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import TrendReversalTab from './TrendReversalTab';
 import { addToWatchlist } from '../api/watchlist';
+import TradingViewLink from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
 
 const trendColors = { bullish: '#1b5e20', bearish: '#c62828', sideways: '#f57f17' };
@@ -188,12 +190,14 @@ function FinancialAdvisorPage() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tab label="Signals & Alerts" />
+        <Tab label="Trend Reversal" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
-      {tab === 1 && <AnalysisTab />}
-      {tab === 2 && <PortfolioTab />}
+      {tab === 1 && <TrendReversalTab />}
+      {tab === 2 && <AnalysisTab />}
+      {tab === 3 && <PortfolioTab />}
     </TableSection>
   );
 }
@@ -251,29 +255,6 @@ function cmpNullableString(a, b, mul) {
   if (!sa) return 1;
   if (!sb) return -1;
   return mul * sa.localeCompare(sb, undefined, { sensitivity: 'base' });
-}
-
-function TradingViewLink({ symbol }) {
-  const s = String(symbol || '').trim();
-  if (!s) return null;
-  return (
-    <a
-      href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s)}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`View ${s} on TradingView`}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 18, height: 18, borderRadius: '50%', background: '#131722',
-        textDecoration: 'none', flexShrink: 0,
-      }}
-    >
-      <svg width="10" height="10" viewBox="0 0 36 28" fill="none">
-        <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF" />
-        <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF" />
-      </svg>
-    </a>
-  );
 }
 
 function SignalsAlertsTab() {

@@ -60,6 +60,34 @@ export const fetchCustomRsMacdSetup = async ({
   return apiGet(`/advisor/signals/custom-rs-macd-weekly-setup?${params.toString()}`);
 };
 
+/** Trend reversal: tier S↔B (``buy_sell_tier``), legacy RSI+MACD, Pine DMI on OHLC (``technical_signals`` + candles). */
+export const fetchTrendReversal = async ({
+  timeframe = 'daily',
+  refresh = false,
+  symbol_limit = 120,
+  require_screener_crosses = true,
+  include_multi_summary = false,
+  buy_tier = '',
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('require_screener_crosses', require_screener_crosses ? 'true' : 'false');
+  if (include_multi_summary) params.set('include_multi_summary', 'true');
+  const bt = String(buy_tier || '').trim().toUpperCase();
+  if (bt === 'B1' || bt === 'B2' || bt === 'B3') params.set('buy_tier', bt);
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/trend-reversal?${params.toString()}`);
+};
+
+/** Daily / weekly / monthly × B1 B2 B3 — latest-bar buy_sell_tier buckets (card grid). */
+export const fetchBuyTierCardGrid = async ({ refresh = false, symbol_limit = 800 } = {}) => {
+  const params = new URLSearchParams();
+  params.set('symbol_limit', String(symbol_limit));
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/buy-tier-cards?${params.toString()}`);
+};
+
 export const fetchLiveScreenerSignals = async ({
   limit = 150,
   symbols = '',
