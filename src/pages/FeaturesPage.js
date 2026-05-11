@@ -52,6 +52,11 @@ const defaultCourses = [
     url: 'https://www.youtube.com/watch?v=f18gazn0nYE&t=53s&pp=ygUTb3JkZXIgYmxvY2tzIGNvdXJzZdIHCQnUCgGHKiGM7w%3D%3D',
   },
   {
+    id: 'adv-order-flow-strategy',
+    title: 'Course 3 (Advanced): Order Flow Strategy',
+    url: 'https://www.youtube.com/watch?v=Rqu-AoD9BUo&pp=ygUTb3JkZXIgZmxvdyB0cmFkaW5nINIHCQkDCwGHKiGM7w%3D%3D',
+  },
+  {
     id: 'adv-squeeze-momentum-1',
     title: 'Course 3 (Advanced): Squeeze Momentum (Part 1)',
     url: 'https://www.youtube.com/watch?v=Xz3l0OSvrVE&pp=ygUjc3F1ZWV6ZSBtb21lbnR1bSBpbmRpY2F0b3IgbGF6eWJlYXI%3D',
