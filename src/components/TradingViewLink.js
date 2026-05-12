@@ -1,17 +1,20 @@
 import React from 'react';
 
 /**
- * Opens NSE symbol on TradingView (same URL pattern as LongTerm / ShortTerm / Advisor tables).
+ * Opens a symbol on TradingView.
+ * - Default: equity `symbol` → `NSE:{symbol}` (LongTerm / ShortTerm / Advisor tables).
+ * - Optional `chartSymbol`: full TV id e.g. `NSE:CNX500`, `BSE:SENSEX` (market / sector outlook indices).
  */
-export default function TradingViewLink({ symbol }) {
-  const s = String(symbol || '').trim();
-  if (!s) return null;
+export default function TradingViewLink({ symbol, chartSymbol }) {
+  const full = String(chartSymbol || '').trim() || (String(symbol || '').trim() ? `NSE:${String(symbol).trim()}` : '');
+  if (!full) return null;
   return (
     <a
-      href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s)}`}
+      href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(full)}`}
       target="_blank"
       rel="noopener noreferrer"
-      title={`View ${s} on TradingView`}
+      title={`View ${full} on TradingView`}
+      onClick={(e) => e.stopPropagation()}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

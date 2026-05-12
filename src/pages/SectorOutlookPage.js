@@ -13,6 +13,8 @@ import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { useAuth } from '../auth/AuthContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
+import TradingViewLink from '../components/TradingViewLink';
+import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 
 const SECTOR_REFRESH_MS = 30000;
 
@@ -188,9 +190,14 @@ const extractNumeric = (value) => {
                 <tr key={row.id} className={getSectorRowClass(row)}>
                   <td className="index">{row.id}</td>
                   <td
-                    style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                    style={{ cursor: 'pointer' }}
                     onClick={() => onSectorClick && onSectorClick(row.name)}
-                  >{row.name}</td>
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <TradingViewLink chartSymbol={getTradingViewChartSymbol(row.name)} />
+                      <span style={{ color: '#007bff', textDecoration: 'underline' }}>{row.name}</span>
+                    </span>
+                  </td>
                   <td className={getSectorTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>

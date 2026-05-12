@@ -8,6 +8,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
+import TradingViewLink from '../components/TradingViewLink';
+import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import {
   CardContainer,
   Card,
@@ -577,7 +579,12 @@ function MarketOutlookContent({ apiReady, timedOut }) {
               {paginatedTableRows.map((row) => (
                 <tr key={row.id} className={getMarketIndexRowClass(row)}>
                   <td className="index">{row.id}</td>
-                  <td>{row.name}</td>
+                  <td>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <TradingViewLink chartSymbol={getTradingViewChartSymbol(row.name)} />
+                      <span>{row.name}</span>
+                    </span>
+                  </td>
                   <td className={getMarketIndexTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>
                   <td><span className="percentage">{row.percentile}</span></td>
