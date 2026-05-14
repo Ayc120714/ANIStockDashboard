@@ -3,7 +3,7 @@ import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.s
 import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdRefresh, MdClose, MdDeleteSweep, MdSelectAll, MdContentCopy, MdCheck } from 'react-icons/md';
-import { fetchWatchlist, addToWatchlist, fetchWatchlistSignals, bulkDeleteFromWatchlist } from '../api/watchlist';
+import { fetchWatchlist, addToWatchlist, fetchWatchlistSignals, bulkDeleteFromWatchlist, backfillWatchlistMarketData } from '../api/watchlist';
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
@@ -275,6 +275,7 @@ function ShortTermPage() {
   const [sortConfig, setSortConfig] = useState({ key: null, ascending: true });
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [copiedCsv, setCopiedCsv] = useState(false);
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [triggeredAlert, setTriggeredAlert] = useState('');
@@ -441,6 +442,20 @@ function ShortTermPage() {
       load();
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }
     setDeleting(false);
+  };
+
+  const handleBackfillSelected = async () => {
+    const syms = [...checkedSymbols];
+    if (!syms.length) return;
+    setBackfilling(true);
+    try {
+      await backfillWatchlistMarketData(syms);
+      setCheckedSymbols(new Set());
+      await load();
+    } catch (e) {
+      alert(e?.message || 'Could not load market data for selected symbols');
+    }
+    setBackfilling(false);
   };
 
   const parsePrice = (value) => {
@@ -866,6 +881,10 @@ function ShortTermPage() {
             Clear
           </Button>
           <Box sx={{ flex: 1 }} />
+          <Button size="small" variant="outlined" onClick={handleBackfillSelected} disabled={backfilling}
+            sx={{ textTransform: 'none', fontSize: 11, borderColor: '#1a3c5e', color: '#1a3c5e' }}>
+            {backfilling ? 'Loading…' : 'Fill prices & signals'}
+          </Button>
           <Button size="small" variant="contained" color="error" startIcon={<MdDeleteSweep />}
             onClick={handleBulkDelete} disabled={deleting}
             sx={{ textTransform: 'none', fontSize: 11 }}>

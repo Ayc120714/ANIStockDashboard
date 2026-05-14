@@ -27,6 +27,10 @@ export const addToWatchlist = async (symbol, listType = 'long_term', notes = '')
   return apiPost('/watchlist', { symbol, list_type: listType, notes });
 };
 
+/** Samco candles + technical + rating for symbols already on your watchlist (any list). */
+export const backfillWatchlistMarketData = async (symbols) =>
+  apiPost('/watchlist/backfill-market-data', { symbols });
+
 export const removeFromWatchlist = async (symbol, listType = 'long_term', options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const params = new URLSearchParams();

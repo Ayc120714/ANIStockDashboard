@@ -20,6 +20,35 @@ const responseInterceptors = [];
 let authTokenGetter = null;
 let unauthorizedHandler = null;
 
+/** In-memory GET response cache (ms). Set REACT_APP_API_GET_CACHE_MS=0 to disable. */
+const GET_CACHE_TTL_MS = (() => {
+  const raw = process.env.REACT_APP_API_GET_CACHE_MS;
+  if (raw === '0' || raw === '') return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 120_000) : 12_000;
+})();
+const GET_CACHE_MAX_ENTRIES = 120;
+const getResponseCache = new Map();
+
+const cacheKeyForGet = (endpoint, tokenPrefix) => {
+  const t = tokenPrefix || 'anon';
+  return `${t}|${buildUrl(endpoint)}`;
+};
+
+const cloneForCache = (data) => {
+  if (data === null || typeof data !== 'object') return data;
+  try {
+    if (typeof structuredClone === 'function') return structuredClone(data);
+  } catch (_) {
+    /* fall through */
+  }
+  return JSON.parse(JSON.stringify(data));
+};
+
+export const clearApiGetCache = () => {
+  getResponseCache.clear();
+};
+
 export const addRequestInterceptor = (interceptor) => {
   requestInterceptors.push(interceptor);
 };
@@ -153,6 +182,19 @@ const decodeObfuscatedPayload = async (payload, token) => {
 
 export const apiRequest = async (endpoint, options = {}) => {
   const bearerToken = authTokenGetter ? authTokenGetter() : null;
+  const method = (options.method || 'GET').toUpperCase();
+  const tokenPrefix =
+    bearerToken && typeof bearerToken === 'string' ? bearerToken.slice(0, 16) : '';
+  const skipGetCache = options.skipCache === true || GET_CACHE_TTL_MS <= 0;
+
+  if (method === 'GET' && !skipGetCache) {
+    const ck = cacheKeyForGet(endpoint, tokenPrefix);
+    const hit = getResponseCache.get(ck);
+    if (hit && Date.now() - hit.ts < GET_CACHE_TTL_MS) {
+      return cloneForCache(hit.data);
+    }
+  }
+
   const config = await runRequestInterceptors({
     method: 'GET',
     ...options,
@@ -205,7 +247,16 @@ export const apiRequest = async (endpoint, options = {}) => {
   const contentType = interceptedResponse.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const parsed = await interceptedResponse.json();
-    return decodeObfuscatedPayload(parsed, bearerToken);
+    const decoded = await decodeObfuscatedPayload(parsed, bearerToken);
+    if (method === 'GET' && !skipGetCache && interceptedResponse.ok) {
+      const ck = cacheKeyForGet(endpoint, tokenPrefix);
+      if (getResponseCache.size >= GET_CACHE_MAX_ENTRIES) {
+        const firstKey = getResponseCache.keys().next().value;
+        if (firstKey !== undefined) getResponseCache.delete(firstKey);
+      }
+      getResponseCache.set(ck, { ts: Date.now(), data: cloneForCache(decoded) });
+    }
+    return decoded;
   }
 
   return interceptedResponse.text();

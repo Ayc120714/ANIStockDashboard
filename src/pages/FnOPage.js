@@ -7,7 +7,7 @@ import { MdRefresh } from 'react-icons/md';
 import { SiTradingview } from 'react-icons/si';
 import {
   fetchFnOSymbols, fetchOptionChain, fetchOptionsSummary, fetchTopMovers,
-  fetchExpiryDates, calculatePayoff,
+  fetchExpiryDates, calculatePayoff, fetchNseEquitySymbols,
 } from '../api/fno';
 import {
   PageWrapper, PageHeader, Title, ControlRow, TabBar, Tab,
@@ -18,7 +18,7 @@ import {
   ChartWrapper, GreeksRow, RefreshBtn, EmptyState,
 } from './FnOPage.styles';
 
-const TABS = ['Options Summary', 'Open Interest', 'Options Chain', 'Movers', 'Strategy Simulator'];
+const TABS = ['Options Summary', 'Open Interest', 'Options Chain', 'Movers', 'Strategy Simulator', 'NSE cash (non-F&O)'];
 
 const STRATEGIES = {
   Bullish: [
@@ -73,6 +73,12 @@ export default function FnOPage() {
   const [moversFilter, setMoversFilter] = useState('volume');
   const [loading, setLoading] = useState(false);
   const [moverSort, setMoverSort] = useState({ col: null, dir: 'desc' });
+
+  const [equityPayload, setEquityPayload] = useState(null);
+  const [equityLoading, setEquityLoading] = useState(false);
+  const [equityError, setEquityError] = useState('');
+  const [equityFilter, setEquityFilter] = useState('');
+  const [equityLoaded, setEquityLoaded] = useState(false);
 
   const [direction, setDirection] = useState('Bullish');
   const [selectedStrategy, setSelectedStrategy] = useState(null);
@@ -129,6 +135,26 @@ export default function FnOPage() {
     }, 300000); // refresh every 5 minutes
     return () => clearInterval(id);
   }, [expiry, tab, loadData, loadMovers]);
+
+  useEffect(() => {
+    if (tab !== 5 || equityLoaded) return undefined;
+    let cancelled = false;
+    setEquityLoading(true);
+    setEquityError('');
+    fetchNseEquitySymbols({ exclude_fno: true, limit: 8000 })
+      .then((resp) => {
+        if (cancelled) return;
+        setEquityPayload(resp);
+        setEquityLoaded(true);
+      })
+      .catch((e) => {
+        if (!cancelled) setEquityError(e?.message || 'Failed to load NSE equity list');
+      })
+      .finally(() => {
+        if (!cancelled) setEquityLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tab, equityLoaded]);
 
   const chain = useMemo(() => chainData?.chain || [], [chainData]);
   const spot = chainData?.spotPrice || summary?.spotPrice || 0;
@@ -417,6 +443,79 @@ export default function FnOPage() {
     </>
   );
 
+  const filteredEquityRows = useMemo(() => {
+    const rows = Array.isArray(equityPayload?.data) ? equityPayload.data : [];
+    const q = String(equityFilter || '').trim().toUpperCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.symbol || '').toUpperCase().includes(q) || String(r.name || '').toUpperCase().includes(q));
+  }, [equityPayload, equityFilter]);
+
+  const renderEquityCashTab = () => (
+    <div style={{ padding: '4px 0' }}>
+      <p style={{ fontSize: 12, color: '#475569', margin: '0 0 12px' }}>
+        NSE series <strong>EQ</strong> from Dhan scrip master, excluding symbols that appear as F&amp;O underlyings in this app.
+        Use the filter to narrow; TradingView link uses <code>NSE:SYMBOL</code> for cash.
+      </p>
+      {equityPayload && equityPayload.ok !== false && (
+        <div style={{ fontSize: 12, color: '#334155', marginBottom: 10, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <span>Dhan EQ total: <strong>{equityPayload.dhan_nse_eq_total ?? '—'}</strong></span>
+          <span>Non-F&amp;O EQ: <strong>{equityPayload.dhan_eq_not_in_fno_total ?? '—'}</strong></span>
+          <span>Loaded rows: <strong>{(equityPayload.data || []).length}</strong></span>
+        </div>
+      )}
+      <div style={{ marginBottom: 10 }}>
+        <input
+          type="text"
+          placeholder="Filter by symbol or company name…"
+          value={equityFilter}
+          onChange={(e) => setEquityFilter(e.target.value)}
+          style={{ width: '100%', maxWidth: 420, padding: '8px 10px', fontSize: 13, border: '1px solid #cbd5e1', borderRadius: 6 }}
+        />
+      </div>
+      {equityLoading && <EmptyState>Loading Dhan NSE equity list…</EmptyState>}
+      {equityError && <div style={{ color: '#b91c1c', padding: 12 }}>{equityError}</div>}
+      {!equityLoading && !equityError && equityPayload?.ok === false && (
+        <EmptyState>Dhan scrip master unavailable — check network or try again later.</EmptyState>
+      )}
+      {!equityLoading && !equityError && equityPayload?.ok !== false && (
+        <div style={{ maxHeight: 480, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+          <ChainTable>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Symbol</th>
+                <th style={{ textAlign: 'left' }}>Company</th>
+                <th style={{ textAlign: 'left' }}>Dhan security_id</th>
+                <th style={{ textAlign: 'center' }}>TV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEquityRows.slice(0, 1500).map((r) => (
+                <MoverRow key={r.symbol}>
+                  <td style={{ fontWeight: 700 }}>{r.symbol}</td>
+                  <td style={{ fontSize: 12 }}>{r.name}</td>
+                  <td style={{ fontSize: 11, fontFamily: 'monospace' }}>{r.security_id}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <a
+                      href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(r.symbol)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open in TradingView"
+                    >
+                      <SiTradingview size={14} />
+                    </a>
+                  </td>
+                </MoverRow>
+              ))}
+              {!filteredEquityRows.length && (
+                <tr><td colSpan={4}><EmptyState>No rows match the filter.</EmptyState></td></tr>
+              )}
+            </tbody>
+          </ChainTable>
+        </div>
+      )}
+    </div>
+  );
+
   const renderStrategyTab = () => (
     <StrategySection>
       <DirectionTabs>
@@ -504,7 +603,7 @@ export default function FnOPage() {
     </StrategySection>
   );
 
-  const tabContent = [renderSummaryTab, renderOITab, renderChainTab, renderMoversTab, renderStrategyTab];
+  const tabContent = [renderSummaryTab, renderOITab, renderChainTab, renderMoversTab, renderStrategyTab, renderEquityCashTab];
 
   return (
     <PageWrapper>
