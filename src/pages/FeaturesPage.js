@@ -71,6 +71,11 @@ const defaultCourses = [
     title: 'Course 3 (Advanced): Fibonacci Retracement and Extension',
     url: 'https://www.youtube.com/watch?v=oVMeymdZwWI&pp=ygUjZmlib25hY2NpIHJldHJhY2VtZW50IGFuZCBleHRlbnNpb24%3D',
   },
+  {
+    id: 'market-profile',
+    title: 'Course 4 (Advanced): Market Profile',
+    url: 'https://www.youtube.com/watch?v=z-ae7tLVdoo&list=PL9myHLrE5hrMetuIrDc8FmYGW58BgofEy',
+  },
 ];
 
 const envCourses = (process.env.REACT_APP_ONBOARDING_COURSE_LINKS || '')
