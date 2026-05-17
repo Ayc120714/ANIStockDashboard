@@ -52,6 +52,55 @@ export const fetchEarlyDetectionRecent = async ({
   return apiGet(`/advisor/signals/early-detection/recent?${params.toString()}`);
 };
 
+/** Early-detection rows for a selected date range (history view). */
+export const fetchEarlyDetectionHistory = async ({
+  from_date,
+  to_date,
+  timeframe = 'daily',
+  limit = 2000,
+  sqz_set = '',
+  sort_by = 'trigger_date',
+  sort_dir = 'desc',
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('from_date', String(from_date || '').slice(0, 10));
+  params.set('to_date', String(to_date || '').slice(0, 10));
+  params.set('limit', String(limit));
+  params.set('sort_by', String(sort_by || 'trigger_date'));
+  params.set('sort_dir', String(sort_dir || 'desc'));
+  const sqz = String(sqz_set || '').trim().toLowerCase();
+  if (sqz && sqz !== 'all') params.set('sqz_set', sqz);
+  return apiGet(`/advisor/signals/early-detection/history?${params.toString()}`);
+};
+
+/** Recompute setup for selected dates (optional single symbol). */
+export const fetchEarlyDetectionVerify = async ({
+  from_date,
+  to_date,
+  timeframe = 'daily',
+  symbol = '',
+  universe = 'sector',
+  symbol_limit = 400,
+  sqz_set = '',
+  sort_by = 'trigger_date',
+  sort_dir = 'desc',
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('from_date', String(from_date || '').slice(0, 10));
+  params.set('to_date', String(to_date || '').slice(0, 10));
+  params.set('universe', String(universe || 'sector'));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('sort_by', String(sort_by || 'trigger_date'));
+  params.set('sort_dir', String(sort_dir || 'desc'));
+  const sym = String(symbol || '').trim().toUpperCase();
+  if (sym) params.set('symbol', sym);
+  const sqz = String(sqz_set || '').trim().toLowerCase();
+  if (sqz && sqz !== 'all') params.set('sqz_set', sqz);
+  return apiGet(`/advisor/signals/early-detection/verify?${params.toString()}`);
+};
+
 /** Monday close above prior calendar week's high (optional cross from prior session). */
 export const fetchMondayPrevWeekHighCross = async ({
   limit = 500,

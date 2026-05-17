@@ -5,6 +5,53 @@
 
 export const SQZ_SET_ORDER = { brown: 0, lime: 1, green: 2, unknown: 3 };
 
+/** Calendar days for API recent window (2 days / 2 weeks / 2 months). */
+export function recentLookbackDaysForTimeframe(timeframe) {
+  const tf = String(timeframe || 'daily').toLowerCase();
+  if (tf === 'weekly') return 14;
+  if (tf === 'monthly') return 62;
+  return 2;
+}
+
+export function recentWindowDates(timeframe) {
+  const tf = String(timeframe || 'daily').toLowerCase();
+  const today = new Date();
+  const pad = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const to = new Date(today);
+  const from = new Date(today);
+  from.setDate(from.getDate() - recentLookbackDaysForTimeframe(tf));
+  return { from: pad(from), to: pad(to) };
+}
+
+export function defaultHistoryDateRange(timeframe) {
+  const tf = String(timeframe || 'daily').toLowerCase();
+  const today = new Date();
+  const pad = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const to = new Date(today);
+  const from = new Date(today);
+  if (tf === 'weekly') {
+    to.setDate(to.getDate() - 15);
+    from.setDate(from.getDate() - 365);
+  } else if (tf === 'monthly') {
+    to.setDate(to.getDate() - 63);
+    from.setDate(from.getDate() - 730);
+  } else {
+    to.setDate(to.getDate() - 3);
+    from.setDate(from.getDate() - 120);
+  }
+  return { from: pad(from), to: pad(to) };
+}
+
 const VALID_SQZ_SETS = new Set(['brown', 'lime', 'green']);
 const STATUS_ORDER = { confirmed: 0, active: 1, watch: 2 };
 

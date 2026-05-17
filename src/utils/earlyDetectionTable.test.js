@@ -1,7 +1,9 @@
 import {
   buildEarlyDetectionTableModel,
+  defaultHistoryDateRange,
   earlyDetectionStatusLabel,
   normalizeEarlyDetectionRow,
+  recentLookbackDaysForTimeframe,
   sortEarlyDetectionRows,
   sqzColorToSet,
 } from './earlyDetectionTable';
@@ -75,5 +77,16 @@ describe('earlyDetectionTable', () => {
   test('status labels', () => {
     expect(earlyDetectionStatusLabel('confirmed')).toBe('Confirmed');
     expect(earlyDetectionStatusLabel('active')).toBe('Active');
+  });
+
+  test('recent lookback days by timeframe', () => {
+    expect(recentLookbackDaysForTimeframe('daily')).toBe(2);
+    expect(recentLookbackDaysForTimeframe('weekly')).toBe(14);
+    expect(recentLookbackDaysForTimeframe('monthly')).toBe(62);
+  });
+
+  test('default history range has from before to', () => {
+    const { from, to } = defaultHistoryDateRange('daily');
+    expect(from < to).toBe(true);
   });
 });

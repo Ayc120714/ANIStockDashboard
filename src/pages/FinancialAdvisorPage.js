@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem, Autocomplete, Tooltip, Checkbox, Alert, Typography } from '@mui/material';
+import {
+  Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem,
+  Autocomplete, Tooltip, Checkbox, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
+} from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchEarlyDetectionRecent, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchEarlyDetectionRecent, fetchEarlyDetectionHistory, fetchEarlyDetectionVerify, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
 import {
   buildEarlyDetectionTableModel,
+  defaultHistoryDateRange,
   earlyDetectionStatusLabel,
+  recentLookbackDaysForTimeframe,
+  recentWindowDates,
 } from '../utils/earlyDetectionTable';
 import TrendReversalTab from './TrendReversalTab';
 import { addToWatchlist } from '../api/watchlist';
@@ -299,6 +305,13 @@ function SignalsAlertsTab() {
   const [earlyDetectionSqzFilter, setEarlyDetectionSqzFilter] = useState('all');
   const [earlyDetectionSortCol, setEarlyDetectionSortCol] = useState('trigger_date');
   const [earlyDetectionSortDir, setEarlyDetectionSortDir] = useState('desc');
+  const [earlyDetectionViewMode, setEarlyDetectionViewMode] = useState('recent');
+  const [earlyDetectionHistoryFrom, setEarlyDetectionHistoryFrom] = useState('');
+  const [earlyDetectionHistoryTo, setEarlyDetectionHistoryTo] = useState('');
+  const [earlyDetectionVerifySymbol, setEarlyDetectionVerifySymbol] = useState('');
+  const [earlyDetectionVerifyOpen, setEarlyDetectionVerifyOpen] = useState(false);
+  const [earlyDetectionVerifyResult, setEarlyDetectionVerifyResult] = useState(null);
+  const [earlyDetectionVerifyLoading, setEarlyDetectionVerifyLoading] = useState(false);
   const deferredSymbolFilter = useDeferredValue(symbolFilter);
 
   const handleSort = (col) => {
@@ -447,13 +460,20 @@ function SignalsAlertsTab() {
     setEarlyDetectionError(null);
     fetchEarlyDetectionRecent({
       timeframe: earlyDetectionTimeframe,
+      lookback_days: recentLookbackDaysForTimeframe(earlyDetectionTimeframe),
       limit: 1000,
       dedupe_symbol: true,
+      sqz_set: earlyDetectionSqzFilter,
+      sort_by: earlyDetectionSortCol,
+      sort_dir: earlyDetectionSortDir,
     })
       .then((payload) => {
         setEarlyDetectionRawRows(Array.isArray(payload?.data) ? payload.data : []);
         setEarlyDetectionMeta({
           timeframe: payload?.timeframe,
+          view_mode: 'recent',
+          from_date: payload?.from_date,
+          to_date: payload?.to_date,
           market_hours: Boolean(payload?.market_hours),
           live_refresh_sec: payload?.live_refresh_sec,
         });
@@ -464,20 +484,145 @@ function SignalsAlertsTab() {
         setEarlyDetectionError(err?.message || 'Could not load early detection setup list.');
       })
       .finally(() => setEarlyDetectionLoading(false));
-  }, [earlyDetectionTimeframe]);
+  }, [
+    earlyDetectionTimeframe,
+    earlyDetectionSqzFilter,
+    earlyDetectionSortCol,
+    earlyDetectionSortDir,
+  ]);
+
+  const loadEarlyDetectionHistory = useCallback(() => {
+    const from = String(earlyDetectionHistoryFrom || '').slice(0, 10);
+    const to = String(earlyDetectionHistoryTo || '').slice(0, 10);
+    if (!from || !to) {
+      setEarlyDetectionError('Select both start and end dates for history.');
+      return;
+    }
+    setEarlyDetectionLoading(true);
+    setEarlyDetectionError(null);
+    fetchEarlyDetectionHistory({
+      timeframe: earlyDetectionTimeframe,
+      from_date: from,
+      to_date: to,
+      limit: 2000,
+      sqz_set: earlyDetectionSqzFilter,
+      sort_by: earlyDetectionSortCol,
+      sort_dir: earlyDetectionSortDir,
+    })
+      .then((payload) => {
+        setEarlyDetectionRawRows(Array.isArray(payload?.data) ? payload.data : []);
+        setEarlyDetectionMeta({
+          timeframe: payload?.timeframe,
+          view_mode: 'history',
+          from_date: payload?.from_date,
+          to_date: payload?.to_date,
+        });
+      })
+      .catch((err) => {
+        setEarlyDetectionRawRows([]);
+        setEarlyDetectionMeta(null);
+        setEarlyDetectionError(err?.message || 'Could not load history.');
+      })
+      .finally(() => setEarlyDetectionLoading(false));
+  }, [
+    earlyDetectionTimeframe,
+    earlyDetectionHistoryFrom,
+    earlyDetectionHistoryTo,
+    earlyDetectionSqzFilter,
+    earlyDetectionSortCol,
+    earlyDetectionSortDir,
+  ]);
+
+  const resolveEarlyDetectionDateRange = useCallback(() => {
+    if (earlyDetectionViewMode === 'recent') {
+      return recentWindowDates(earlyDetectionTimeframe);
+    }
+    const from = String(earlyDetectionHistoryFrom || '').slice(0, 10);
+    const to = String(earlyDetectionHistoryTo || '').slice(0, 10);
+    return { from, to };
+  }, [earlyDetectionViewMode, earlyDetectionTimeframe, earlyDetectionHistoryFrom, earlyDetectionHistoryTo]);
+
+  const loadEarlyDetectionVerify = useCallback(() => {
+    const { from, to } = resolveEarlyDetectionDateRange();
+    if (!from || !to) {
+      setEarlyDetectionError('Select a valid date range before verifying.');
+      return;
+    }
+    const sym = String(earlyDetectionVerifySymbol || '').trim().toUpperCase();
+    setEarlyDetectionVerifyLoading(true);
+    setEarlyDetectionError(null);
+    fetchEarlyDetectionVerify({
+      from_date: from,
+      to_date: to,
+      timeframe: earlyDetectionTimeframe,
+      symbol: sym,
+      sqz_set: earlyDetectionSqzFilter,
+      sort_by: earlyDetectionSortCol,
+      sort_dir: earlyDetectionSortDir,
+    })
+      .then((payload) => {
+        if (sym) {
+          setEarlyDetectionVerifyResult(payload);
+          setEarlyDetectionVerifyOpen(true);
+          return;
+        }
+        setEarlyDetectionRawRows(Array.isArray(payload?.data) ? payload.data : []);
+        setEarlyDetectionMeta({
+          timeframe: payload?.timeframe,
+          view_mode: 'verify',
+          from_date: payload?.from_date,
+          to_date: payload?.to_date,
+          symbols_scanned: payload?.symbols_scanned,
+        });
+        setEarlyDetectionPage(1);
+      })
+      .catch((err) => {
+        setEarlyDetectionError(err?.message || 'Setup verification failed.');
+      })
+      .finally(() => setEarlyDetectionVerifyLoading(false));
+  }, [
+    resolveEarlyDetectionDateRange,
+    earlyDetectionTimeframe,
+    earlyDetectionVerifySymbol,
+    earlyDetectionSqzFilter,
+    earlyDetectionSortCol,
+    earlyDetectionSortDir,
+  ]);
+
+  const loadEarlyDetectionTable = useCallback(() => {
+    if (earlyDetectionViewMode === 'history') {
+      loadEarlyDetectionHistory();
+    } else {
+      loadEarlyDetectionRecent();
+    }
+  }, [earlyDetectionViewMode, loadEarlyDetectionHistory, loadEarlyDetectionRecent]);
+
+  useEffect(() => {
+    const recent = recentWindowDates('daily');
+    setEarlyDetectionHistoryFrom(recent.from);
+    setEarlyDetectionHistoryTo(recent.to);
+  }, []);
 
   useEffect(() => {
     if (view !== 'signals') return;
     setEarlyDetectionPage(1);
-    loadEarlyDetectionRecent();
-  }, [view, loadEarlyDetectionRecent]);
+    if (earlyDetectionViewMode === 'recent') {
+      loadEarlyDetectionRecent();
+    }
+  }, [
+    view,
+    earlyDetectionViewMode,
+    earlyDetectionTimeframe,
+    earlyDetectionSqzFilter,
+    loadEarlyDetectionRecent,
+  ]);
 
   useEffect(() => {
-    if (view !== 'signals') return undefined;
+    if (view !== 'signals' || earlyDetectionViewMode !== 'recent') return undefined;
     const intervalMs = 5 * 60 * 1000;
     const id = setInterval(() => loadEarlyDetectionRecent(), intervalMs);
     return () => clearInterval(id);
-  }, [view, loadEarlyDetectionRecent]);
+  }, [view, earlyDetectionViewMode, loadEarlyDetectionRecent]);
 
   const earlyDetectionTable = useMemo(
     () => buildEarlyDetectionTableModel(earlyDetectionRawRows, {
@@ -807,13 +952,195 @@ function SignalsAlertsTab() {
           </Typography>
           <Tabs
             value={earlyDetectionTimeframe}
-            onChange={(_, v) => setEarlyDetectionTimeframe(v)}
+            onChange={(_, v) => {
+              setEarlyDetectionTimeframe(v);
+              setEarlyDetectionViewMode('recent');
+              const { from, to } = defaultHistoryDateRange(v);
+              setEarlyDetectionHistoryFrom(from);
+              setEarlyDetectionHistoryTo(to);
+              const recent = recentWindowDates(v);
+              if (earlyDetectionViewMode === 'recent') {
+                setEarlyDetectionHistoryFrom(recent.from);
+                setEarlyDetectionHistoryTo(recent.to);
+              }
+            }}
             sx={{ minHeight: 32, mb: 1, '& .MuiTab-root': { minHeight: 32, py: 0.5, fontSize: 12, textTransform: 'none' } }}
           >
             <Tab value="daily" label="Daily" />
             <Tab value="weekly" label="Weekly" />
             <Tab value="monthly" label="Monthly" />
           </Tabs>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1 }}>
+            <Button
+              size="small"
+              variant={earlyDetectionViewMode === 'recent' ? 'contained' : 'outlined'}
+              onClick={() => {
+                setEarlyDetectionViewMode('recent');
+                setEarlyDetectionPage(1);
+                const { from, to } = recentWindowDates(earlyDetectionTimeframe);
+                setEarlyDetectionHistoryFrom(from);
+                setEarlyDetectionHistoryTo(to);
+                loadEarlyDetectionRecent();
+              }}
+              sx={{ textTransform: 'none', fontSize: 12 }}
+            >
+              Recent
+            </Button>
+            <Button
+              size="small"
+              variant={earlyDetectionViewMode === 'history' ? 'contained' : 'outlined'}
+              onClick={() => {
+                setEarlyDetectionViewMode('history');
+                setEarlyDetectionPage(1);
+                if (!earlyDetectionHistoryFrom || !earlyDetectionHistoryTo) {
+                  const { from, to } = defaultHistoryDateRange(earlyDetectionTimeframe);
+                  setEarlyDetectionHistoryFrom(from);
+                  setEarlyDetectionHistoryTo(to);
+                }
+              }}
+              sx={{ textTransform: 'none', fontSize: 12 }}
+            >
+              History
+            </Button>
+            <TextField
+              label="From"
+              type="date"
+              size="small"
+              value={earlyDetectionHistoryFrom}
+              onChange={(e) => setEarlyDetectionHistoryFrom(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 150, '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }}
+            />
+            <TextField
+              label="To"
+              type="date"
+              size="small"
+              value={earlyDetectionHistoryTo}
+              onChange={(e) => setEarlyDetectionHistoryTo(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 150, '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }}
+            />
+            <TextField
+              label="Symbol (optional)"
+              size="small"
+              value={earlyDetectionVerifySymbol}
+              onChange={(e) => setEarlyDetectionVerifySymbol(String(e.target.value || '').toUpperCase())}
+              placeholder="e.g. RELIANCE"
+              sx={{ width: 140, '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }}
+            />
+            {earlyDetectionViewMode === 'history' && (
+              <Button
+                size="small"
+                variant="contained"
+                disabled={earlyDetectionLoading}
+                onClick={() => {
+                  setEarlyDetectionPage(1);
+                  loadEarlyDetectionHistory();
+                }}
+                sx={{ textTransform: 'none', fontSize: 12 }}
+              >
+                Load history
+              </Button>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={earlyDetectionLoading || earlyDetectionVerifyLoading}
+              onClick={() => {
+                setEarlyDetectionPage(1);
+                loadEarlyDetectionVerify();
+              }}
+              sx={{ textTransform: 'none', fontSize: 12, borderColor: '#6a1b9a', color: '#6a1b9a' }}
+            >
+              {earlyDetectionVerifyLoading ? 'Verifying…' : 'Verify setup'}
+            </Button>
+            {earlyDetectionMeta?.view_mode === 'recent' && (
+              <Chip
+                size="small"
+                label="Recent window"
+                sx={{ fontSize: 10, bgcolor: '#e3f2fd', color: '#0d47a1' }}
+              />
+            )}
+            {earlyDetectionMeta?.view_mode === 'history' && earlyDetectionMeta?.from_date && earlyDetectionMeta?.to_date && (
+              <Chip
+                size="small"
+                label={`${earlyDetectionMeta.from_date} → ${earlyDetectionMeta.to_date}`}
+                sx={{ fontSize: 10, bgcolor: '#f3e5f5', color: '#4a148c' }}
+              />
+            )}
+            {earlyDetectionMeta?.view_mode === 'verify' && (
+              <Chip
+                size="small"
+                label={
+                  earlyDetectionMeta?.symbols_scanned
+                    ? `Verified · ${earlyDetectionMeta.symbols_scanned} symbols scanned`
+                    : 'Verified (recomputed)'
+                }
+                sx={{ fontSize: 10, bgcolor: '#ede7f6', color: '#6a1b9a' }}
+              />
+            )}
+          </Box>
+          <Dialog
+            open={earlyDetectionVerifyOpen}
+            onClose={() => setEarlyDetectionVerifyOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle sx={{ fontSize: 16 }}>Setup verification</DialogTitle>
+            <DialogContent dividers>
+              {earlyDetectionVerifyResult ? (
+                <Box sx={{ display: 'grid', gap: 1, fontSize: 13 }}>
+                  <Typography variant="body2">
+                    <b>{earlyDetectionVerifyResult.symbol}</b>
+                    {' · '}
+                    {earlyDetectionVerifyResult.from_date} → {earlyDetectionVerifyResult.to_date}
+                  </Typography>
+                  <Typography variant="body2">
+                    Status:{' '}
+                    <span style={{
+                      color: earlyDetectionVerifyResult.status === 'confirmed' ? '#2e7d32' : '#f57f17',
+                      fontWeight: 700,
+                    }}
+                    >
+                      {earlyDetectionStatusLabel(earlyDetectionVerifyResult.status)}
+                    </span>
+                    {earlyDetectionVerifyResult.trigger_date
+                      ? ` · Trigger ${String(earlyDetectionVerifyResult.trigger_date).slice(0, 10)}`
+                      : ''}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {earlyDetectionVerifyResult.matched_db
+                      ? 'Matches a saved trigger in this range.'
+                      : 'No matching saved trigger for this evaluation (recomputed only).'}
+                    {earlyDetectionVerifyResult.db_trigger_count > 0
+                      ? ` (${earlyDetectionVerifyResult.db_trigger_count} saved in range)`
+                      : ''}
+                  </Typography>
+                  {(earlyDetectionVerifyResult.completions_in_range || []).length > 0 && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+                        Completions in range ({earlyDetectionVerifyResult.completions_in_range.length})
+                      </Typography>
+                      {(earlyDetectionVerifyResult.completions_in_range || []).map((c) => (
+                        <Typography key={`${c.symbol}-${c.trigger_date}`} variant="caption" display="block">
+                          {String(c.trigger_date || '').slice(0, 10)} — {earlyDetectionStatusLabel(c.status)}
+                          {c.sqz_set ? ` · ${c.sqz_set}` : ''}
+                          {c.rvol != null ? ` · RVOL ${Number(c.rvol).toFixed(2)}` : ''}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <Typography variant="body2">No verification data.</Typography>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setEarlyDetectionVerifyOpen(false)} sx={{ textTransform: 'none' }}>
+                Close
+              </Button>
+            </DialogActions>
+          </Dialog>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mb: 1 }}>
             {['all', 'brown', 'lime', 'green'].map((sqz) => {
               const cnt = earlyDetectionSqzCounts[sqz] ?? 0;
@@ -880,7 +1207,7 @@ function SignalsAlertsTab() {
               size="small"
               variant="outlined"
               disabled={earlyDetectionLoading}
-              onClick={() => loadEarlyDetectionRecent()}
+              onClick={() => loadEarlyDetectionTable()}
               sx={{ textTransform: 'none', fontSize: 12, borderColor: '#1a3c5e', color: '#1a3c5e' }}
             >
               Refresh
