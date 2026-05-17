@@ -3,7 +3,8 @@ import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.s
 import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { MdRefresh, MdClose, MdDeleteSweep, MdSelectAll, MdContentCopy, MdCheck } from 'react-icons/md';
-import { fetchWatchlist, addToWatchlist, fetchWatchlistSignals, bulkDeleteFromWatchlist, backfillWatchlistMarketData } from '../api/watchlist';
+import { fetchWatchlist, addToWatchlist, fetchWatchlistSignals, bulkDeleteFromWatchlist, backfillWatchlistMarketData, refreshWatchlistFundamentals } from '../api/watchlist';
+import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel';
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
@@ -276,6 +277,9 @@ function ShortTermPage() {
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [fundRefreshing, setFundRefreshing] = useState(false);
+  const [detailSymbol, setDetailSymbol] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
   const [copiedCsv, setCopiedCsv] = useState(false);
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [triggeredAlert, setTriggeredAlert] = useState('');
@@ -456,6 +460,19 @@ function ShortTermPage() {
       alert(e?.message || 'Could not load market data for selected symbols');
     }
     setBackfilling(false);
+  };
+
+  const handleRefreshFundamentals = async () => {
+    const syms = checkedSymbols.size ? [...checkedSymbols] : data.map((r) => r.symbol);
+    if (!syms.length) return;
+    setFundRefreshing(true);
+    try {
+      await refreshWatchlistFundamentals(syms.slice(0, 25));
+      await load();
+    } catch (e) {
+      alert(e?.message || 'Fundamentals refresh failed');
+    }
+    setFundRefreshing(false);
   };
 
   const parsePrice = (value) => {
@@ -656,12 +673,20 @@ function ShortTermPage() {
     );
   }, [merged, search, routeSymbolFilter]);
 
+  const fundField = (row, key) => {
+    const f = row?.fundamentals || {};
+    if (key === 'fund_pe') return f.pe_ttm;
+    if (key === 'fund_div') return f.div_yield_pct;
+    if (key === 'fund_fiscal') return f.fiscal_period;
+    return row?.[key];
+  };
+
   const sorted = useMemo(() => {
     if (!sortConfig.key) return filtered;
     return [...filtered].sort((a, b) => {
-      const av = a[sortConfig.key] ?? '';
-      const bv = b[sortConfig.key] ?? '';
-      const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      const av = fundField(a, sortConfig.key) ?? '';
+      const bv = fundField(b, sortConfig.key) ?? '';
+      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
       return sortConfig.ascending ? cmp : -cmp;
     });
   }, [filtered, sortConfig]);
@@ -686,6 +711,9 @@ function ShortTermPage() {
     { key: 'symbol', label: 'Symbol' },
     { key: 'price', label: 'CMP' },
     { key: 'day1d', label: '1D %' },
+    { key: 'fund_pe', label: 'P/E' },
+    { key: 'fund_div', label: 'Div %' },
+    { key: 'fund_fiscal', label: 'Fiscal' },
     { key: 'market_cap', label: 'Mkt Cap' },
     { key: 'buy_sell_tier', label: 'Signal Tier' },
     { key: 'supertrend_direction', label: 'SuperTrend' },
@@ -885,6 +913,10 @@ function ShortTermPage() {
             sx={{ textTransform: 'none', fontSize: 11, borderColor: '#1a3c5e', color: '#1a3c5e' }}>
             {backfilling ? 'Loading…' : 'Fill prices & signals'}
           </Button>
+          <Button size="small" variant="outlined" onClick={handleRefreshFundamentals} disabled={fundRefreshing}
+            sx={{ textTransform: 'none', fontSize: 11 }}>
+            {fundRefreshing ? 'Updating…' : 'Update fundamentals'}
+          </Button>
           <Button size="small" variant="contained" color="error" startIcon={<MdDeleteSweep />}
             onClick={handleBulkDelete} disabled={deleting}
             sx={{ textTransform: 'none', fontSize: 11 }}>
@@ -915,19 +947,30 @@ function ShortTermPage() {
             </thead>
             <tbody>
               {paged.map(row => (
-                <tr key={row.symbol} style={{ background: checkedSymbols.has(row.symbol) ? '#e3f2fd' : undefined }}>
-                  <td style={{ padding: '4px', textAlign: 'center' }}>
+                <tr
+                  key={row.symbol}
+                  style={{
+                    background: detailSymbol === row.symbol ? '#fff8e1' : checkedSymbols.has(row.symbol) ? '#e3f2fd' : undefined,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setDetailSymbol(row.symbol);
+                    setDetailRow(row);
+                  }}
+                >
+                  <td style={{ padding: '4px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <Checkbox size="small" sx={{ p: 0 }}
                       checked={checkedSymbols.has(row.symbol)}
                       onChange={() => toggleCheck(row.symbol)} />
                   </td>
                   <td style={{ fontWeight: 600 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {row.symbol}
+                      <span style={{ textDecoration: detailSymbol === row.symbol ? 'underline' : 'none' }}>{row.symbol}</span>
                       <a
                         href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(row.symbol)}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         title={`View ${row.symbol} on TradingView`}
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -946,6 +989,9 @@ function ShortTermPage() {
                   <td style={{ fontWeight: 600, color: (row.day1d || 0) > 0 ? '#2e7d32' : (row.day1d || 0) < 0 ? '#c62828' : undefined }}>
                     {row.day1d != null ? `${row.day1d > 0 ? '+' : ''}${row.day1d.toFixed(2)}%` : '—'}
                   </td>
+                  <td>{row.fundamentals?.pe_ttm != null ? Number(row.fundamentals.pe_ttm).toFixed(1) : '—'}</td>
+                  <td>{row.fundamentals?.div_yield_pct != null ? `${Number(row.fundamentals.div_yield_pct).toFixed(2)}%` : '—'}</td>
+                  <td style={{ fontSize: 11 }}>{row.fundamentals?.fiscal_period || '—'}</td>
                   <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{row.market_cap || '—'}</td>
                   <td>
                     {deriveTier(row) ? (
@@ -1016,11 +1062,40 @@ function ShortTermPage() {
         </TableWrapper>
       )}
 
+      <WatchlistSymbolDetailPanel
+        symbol={detailSymbol}
+        row={detailRow}
+        listType="short_term"
+        onClose={() => { setDetailSymbol(null); setDetailRow(null); }}
+        onFundamentalsUpdated={(sym, data) => {
+          setData((prev) => prev.map((r) => {
+            if (r.symbol !== sym) return r;
+            const tabs = data?.tabs || {};
+            const val = tabs.valuation || {};
+            const div = tabs.dividends || {};
+            const prof = tabs.profitability || {};
+            return {
+              ...r,
+              fundamentals: {
+                fiscal_period: data.fiscal_period,
+                pe_ttm: val.pe_ttm,
+                div_yield_pct: div.div_yield_pct || div.div_yield_pct_ttm,
+                roe_pct: prof.roe_pct,
+              },
+            };
+          }));
+          if (detailRow?.symbol === sym) {
+            setDetailRow((prev) => (prev ? { ...prev, fundamentals: data } : prev));
+          }
+        }}
+      />
+
       {totalPages > 1 && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" />
         </Box>
       )}
+
     </TableSection>
   );
 }

@@ -4,7 +4,11 @@ import { Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, Menu
 import Pagination from '@mui/material/Pagination';
 import { MdCheck, MdContentCopy, MdSelectAll } from 'react-icons/md';
 import { FaSortUp, FaSortDown, FaSort } from 'react-icons/fa';
-import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchMondayPrevWeekHighCross, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import { fetchLatestSignalsPayload, fetchMonthlyMacdSetup, fetchCustomRsMacdSetup, fetchEarlyDetectionRecent, fetchAlerts, markAlertRead, triggerAnalysis, fetchAnalysis, fetchPortfolioHealth, compareStocks, refreshAdvisor } from '../api/advisor';
+import {
+  buildEarlyDetectionTableModel,
+  earlyDetectionStatusLabel,
+} from '../utils/earlyDetectionTable';
 import TrendReversalTab from './TrendReversalTab';
 import { addToWatchlist } from '../api/watchlist';
 import TradingViewLink from '../components/TradingViewLink';
@@ -232,7 +236,7 @@ const ALERT_COLS = [
 ];
 
 const CUSTOM_RS_TABLE_DISPLAY_LIMIT = 20;
-const MONDAY_PWH_TABLE_PAGE_SIZE = 10;
+const EARLY_DETECTION_TABLE_PAGE_SIZE = 10;
 
 function parseSortableNumber(v) {
   const n = Number(v);
@@ -286,11 +290,15 @@ function SignalsAlertsTab() {
   const [customSortCol, setCustomSortCol] = useState('');
   const [customSortDir, setCustomSortDir] = useState('desc');
   const [customSetupError, setCustomSetupError] = useState(null);
-  const [mondayPwhRows, setMondayPwhRows] = useState([]);
-  const [mondayPwhLoading, setMondayPwhLoading] = useState(false);
-  const [mondayPwhError, setMondayPwhError] = useState(null);
-  const [mondayPwhMeta, setMondayPwhMeta] = useState(null);
-  const [mondayPwhPage, setMondayPwhPage] = useState(1);
+  const [earlyDetectionRawRows, setEarlyDetectionRawRows] = useState([]);
+  const [earlyDetectionLoading, setEarlyDetectionLoading] = useState(false);
+  const [earlyDetectionError, setEarlyDetectionError] = useState(null);
+  const [earlyDetectionMeta, setEarlyDetectionMeta] = useState(null);
+  const [earlyDetectionPage, setEarlyDetectionPage] = useState(1);
+  const [earlyDetectionTimeframe, setEarlyDetectionTimeframe] = useState('daily');
+  const [earlyDetectionSqzFilter, setEarlyDetectionSqzFilter] = useState('all');
+  const [earlyDetectionSortCol, setEarlyDetectionSortCol] = useState('trigger_date');
+  const [earlyDetectionSortDir, setEarlyDetectionSortDir] = useState('desc');
   const deferredSymbolFilter = useDeferredValue(symbolFilter);
 
   const handleSort = (col) => {
@@ -413,36 +421,89 @@ function SignalsAlertsTab() {
     loadCustomSetup(false);
   }, [view, loadCustomSetup]);
 
-  const loadMondayPrevWeekHigh = useCallback((refresh = false) => {
-    setMondayPwhLoading(true);
-    setMondayPwhError(null);
-    fetchMondayPrevWeekHighCross({ limit: 800, refresh, universe: 'all', require_cross: true })
+  const EarlyDetectionSortIcon = ({ col }) => {
+    if (earlyDetectionSortCol !== col) {
+      return <FaSort style={{ opacity: 0.35, marginLeft: 2, fontSize: 9 }} />;
+    }
+    return earlyDetectionSortDir === 'asc'
+      ? <FaSortUp style={{ color: '#fff', marginLeft: 2, fontSize: 9 }} />
+      : <FaSortDown style={{ color: '#fff', marginLeft: 2, fontSize: 9 }} />;
+  };
+
+  const handleEarlyDetectionSort = (col) => {
+    if (!col) return;
+    if (earlyDetectionSortCol === col) {
+      setEarlyDetectionSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setEarlyDetectionSortCol(col);
+      const stringAsc = ['symbol', 'sector', 'sqz_set', 'trigger_date'].includes(col);
+      setEarlyDetectionSortDir(stringAsc ? 'asc' : 'desc');
+    }
+    setEarlyDetectionPage(1);
+  };
+
+  const loadEarlyDetectionRecent = useCallback(() => {
+    setEarlyDetectionLoading(true);
+    setEarlyDetectionError(null);
+    fetchEarlyDetectionRecent({
+      timeframe: earlyDetectionTimeframe,
+      limit: 1000,
+      dedupe_symbol: true,
+    })
       .then((payload) => {
-        setMondayPwhRows(Array.isArray(payload?.data) ? payload.data : []);
-        setMondayPwhMeta({
-          reference_monday: payload?.reference_monday,
-          anchor: payload?.anchor,
-          rules: payload?.rules || {},
-          cached: payload?.cached,
+        setEarlyDetectionRawRows(Array.isArray(payload?.data) ? payload.data : []);
+        setEarlyDetectionMeta({
+          timeframe: payload?.timeframe,
+          market_hours: Boolean(payload?.market_hours),
+          live_refresh_sec: payload?.live_refresh_sec,
         });
       })
       .catch((err) => {
-        setMondayPwhRows([]);
-        setMondayPwhMeta(null);
-        setMondayPwhError(err?.message || 'Could not load Monday vs prior week high list.');
+        setEarlyDetectionRawRows([]);
+        setEarlyDetectionMeta(null);
+        setEarlyDetectionError(err?.message || 'Could not load early detection setup list.');
       })
-      .finally(() => setMondayPwhLoading(false));
-  }, []);
+      .finally(() => setEarlyDetectionLoading(false));
+  }, [earlyDetectionTimeframe]);
 
   useEffect(() => {
     if (view !== 'signals') return;
-    loadMondayPrevWeekHigh(false);
-  }, [view, loadMondayPrevWeekHigh]);
+    setEarlyDetectionPage(1);
+    loadEarlyDetectionRecent();
+  }, [view, loadEarlyDetectionRecent]);
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(mondayPwhRows.length / MONDAY_PWH_TABLE_PAGE_SIZE));
-    setMondayPwhPage((p) => Math.min(Math.max(1, p), totalPages));
-  }, [mondayPwhRows.length]);
+    if (view !== 'signals') return undefined;
+    const intervalMs = 5 * 60 * 1000;
+    const id = setInterval(() => loadEarlyDetectionRecent(), intervalMs);
+    return () => clearInterval(id);
+  }, [view, loadEarlyDetectionRecent]);
+
+  const earlyDetectionTable = useMemo(
+    () => buildEarlyDetectionTableModel(earlyDetectionRawRows, {
+      sqzFilter: earlyDetectionSqzFilter,
+      sortCol: earlyDetectionSortCol,
+      sortDir: earlyDetectionSortDir,
+    }),
+    [
+      earlyDetectionRawRows,
+      earlyDetectionSqzFilter,
+      earlyDetectionSortCol,
+      earlyDetectionSortDir,
+    ],
+  );
+
+  const earlyDetectionSorted = earlyDetectionTable.sorted;
+  const earlyDetectionSqzCounts = earlyDetectionTable.counts;
+
+  useEffect(() => {
+    setEarlyDetectionPage(1);
+  }, [earlyDetectionSqzFilter, earlyDetectionSortCol, earlyDetectionSortDir, earlyDetectionTimeframe]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(earlyDetectionSorted.length / EARLY_DETECTION_TABLE_PAGE_SIZE));
+    setEarlyDetectionPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [earlyDetectionSorted.length]);
 
   useEffect(() => {
     setCustomSetupPage(1);
@@ -718,70 +779,121 @@ function SignalsAlertsTab() {
     customSetupPage * CUSTOM_RS_TABLE_DISPLAY_LIMIT,
     customSortedRows.length
   );
-  const mondayPwhTotalPages = Math.max(
+  const earlyDetectionTotalPages = Math.max(
     1,
-    Math.ceil(mondayPwhRows.length / MONDAY_PWH_TABLE_PAGE_SIZE)
+    Math.ceil(earlyDetectionSorted.length / EARLY_DETECTION_TABLE_PAGE_SIZE)
   );
-  const mondayPwhDisplayedRows = useMemo(() => {
-    const start = (mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE;
-    return mondayPwhRows.slice(start, start + MONDAY_PWH_TABLE_PAGE_SIZE);
-  }, [mondayPwhRows, mondayPwhPage]);
-  const mondayRangeStart = mondayPwhRows.length === 0 ? 0 : ((mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE) + 1;
-  const mondayRangeEnd = Math.min(mondayPwhPage * MONDAY_PWH_TABLE_PAGE_SIZE, mondayPwhRows.length);
+  const earlyDetectionDisplayedRows = useMemo(() => {
+    const start = (earlyDetectionPage - 1) * EARLY_DETECTION_TABLE_PAGE_SIZE;
+    return earlyDetectionSorted.slice(start, start + EARLY_DETECTION_TABLE_PAGE_SIZE);
+  }, [earlyDetectionSorted, earlyDetectionPage]);
+  const earlyDetectionRangeStart = earlyDetectionSorted.length === 0
+    ? 0
+    : ((earlyDetectionPage - 1) * EARLY_DETECTION_TABLE_PAGE_SIZE) + 1;
+  const earlyDetectionRangeEnd = Math.min(
+    earlyDetectionPage * EARLY_DETECTION_TABLE_PAGE_SIZE,
+    earlyDetectionSorted.length
+  );
 
   return (
     <>
       {view === 'signals' && (
-        <Box id="advisor-monday-prev-week-high" sx={{ mb: 2 }}>
+        <Box id="advisor-early-detection" sx={{ mb: 2 }}>
           <TableTitle style={{ fontSize: 15, marginBottom: 8, color: '#0b3d91' }}>
-            Monday close above prior week high (cross)
+            Early detection
           </TableTitle>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12, mb: 1, maxWidth: 920 }}>
-            NSE stocks where the latest Monday session (from NIFTY calendar) closed above the prior seven-day window high,
-            with the prior session at or below that high. Useful for weekly-break continuation after Monday&apos;s print.
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12, mb: 1, maxWidth: 720 }}>
+            Momentum setups by timeframe. Filter by squeeze colour below.
           </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
-            {mondayPwhMeta?.reference_monday && (
+          <Tabs
+            value={earlyDetectionTimeframe}
+            onChange={(_, v) => setEarlyDetectionTimeframe(v)}
+            sx={{ minHeight: 32, mb: 1, '& .MuiTab-root': { minHeight: 32, py: 0.5, fontSize: 12, textTransform: 'none' } }}
+          >
+            <Tab value="daily" label="Daily" />
+            <Tab value="weekly" label="Weekly" />
+            <Tab value="monthly" label="Monthly" />
+          </Tabs>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mb: 1 }}>
+            {['all', 'brown', 'lime', 'green'].map((sqz) => {
+              const cnt = earlyDetectionSqzCounts[sqz] ?? 0;
+              const label = sqz === 'all'
+                ? `All SQZ (${cnt})`
+                : `${sqz.charAt(0).toUpperCase() + sqz.slice(1)} (${cnt})`;
+              return (
+              <Chip
+                key={sqz}
+                size="small"
+                label={label}
+                onClick={() => {
+                  setEarlyDetectionSqzFilter(sqz);
+                  setEarlyDetectionPage(1);
+                }}
+                sx={{
+                  fontWeight: earlyDetectionSqzFilter === sqz ? 700 : 500,
+                  cursor: 'pointer',
+                  bgcolor: earlyDetectionSqzFilter === sqz
+                    ? (sqz === 'brown' ? '#efebe9' : sqz === 'lime' ? '#f1f8e9' : sqz === 'green' ? '#e8f5e9' : '#e3f2fd')
+                    : '#f5f5f5',
+                  color: sqz === 'brown' ? '#4e342e' : sqz === 'lime' ? '#33691e' : sqz === 'green' ? '#1b5e20' : '#1565c0',
+                  border: earlyDetectionSqzFilter === sqz ? '1px solid' : '1px solid #e0e0e0',
+                }}
+              />
+            );
+            })}
+            {earlyDetectionSqzCounts.pending_confirm > 0 && (
               <Chip
                 size="small"
-                label={`Ref Monday ${mondayPwhMeta.reference_monday}${mondayPwhMeta.anchor ? ` · anchor ${mondayPwhMeta.anchor}` : ''}`}
-                sx={{ fontWeight: 600, borderColor: '#1565c0', color: '#0d47a1' }}
-                variant="outlined"
+                label={`Pending confirmation (${earlyDetectionSqzCounts.pending_confirm})`}
+                sx={{ fontSize: 10, bgcolor: '#fff8e1', color: '#f57f17' }}
               />
             )}
+            {earlyDetectionSqzCounts.legacy > 0 && (
+              <Chip
+                size="small"
+                label={`Incomplete (${earlyDetectionSqzCounts.legacy} hidden)`}
+                sx={{ fontSize: 10, bgcolor: '#fff3e0', color: '#e65100' }}
+              />
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
             <Chip
               size="small"
               label={
-                mondayPwhRows.length === 0
+                earlyDetectionSorted.length === 0
                   ? '0 names'
-                  : mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE
-                    ? `${mondayRangeStart}–${mondayRangeEnd} of ${mondayPwhRows.length} (${MONDAY_PWH_TABLE_PAGE_SIZE}/page)`
-                    : `${mondayPwhRows.length} names`
+                  : earlyDetectionSorted.length > EARLY_DETECTION_TABLE_PAGE_SIZE
+                    ? `${earlyDetectionRangeStart}–${earlyDetectionRangeEnd} of ${earlyDetectionSorted.length} (${EARLY_DETECTION_TABLE_PAGE_SIZE}/page)`
+                    : `${earlyDetectionSorted.length} names`
               }
               sx={{ fontWeight: 700, borderColor: '#1a3c5e', color: '#1a3c5e' }}
               variant="outlined"
             />
-            {mondayPwhMeta?.cached && (
-              <Chip size="small" label="Cached" sx={{ fontSize: 10, bgcolor: '#f3e5f5', color: '#6a1b9a' }} />
+            {earlyDetectionMeta?.market_hours && (
+              <Chip
+                size="small"
+                label={`Live · auto-refresh ${Math.round((earlyDetectionMeta.live_refresh_sec || 300) / 60)}m`}
+                sx={{ fontSize: 10, bgcolor: '#e8f5e9', color: '#1b5e20', fontWeight: 600 }}
+              />
             )}
             <Button
               size="small"
               variant="outlined"
-              disabled={mondayPwhLoading}
-              onClick={() => loadMondayPrevWeekHigh(true)}
+              disabled={earlyDetectionLoading}
+              onClick={() => loadEarlyDetectionRecent()}
               sx={{ textTransform: 'none', fontSize: 12, borderColor: '#1a3c5e', color: '#1a3c5e' }}
             >
               Refresh
             </Button>
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
-            <Tooltip title="Select all symbols on this page of the Monday breakout list">
+            <Tooltip title="Select all symbols on this page of the early detection list">
               <Button
                 size="small"
                 variant="outlined"
                 startIcon={<MdSelectAll />}
                 onClick={() => {
-                  const visibleSyms = mondayPwhDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                  const visibleSyms = earlyDetectionDisplayedRows.map((row) => row.symbol).filter(Boolean);
                   setCheckedSymbols((prev) => {
                     const allChecked = visibleSyms.length > 0 && visibleSyms.every((s) => prev.has(s));
                     const next = new Set(prev);
@@ -799,7 +911,7 @@ function SignalsAlertsTab() {
                 {checkedSymbols.size > 0 ? `${checkedSymbols.size} selected` : 'Select All'}
               </Button>
             </Tooltip>
-            <Tooltip title={copied ? 'Copied!' : 'Copy selected symbols, or full Monday breakout list if none selected (TradingView CSV)'}>
+            <Tooltip title={copied ? 'Copied!' : 'Copy selected symbols, or full early detection list if none selected (TradingView CSV)'}>
               <Button
                 size="small"
                 variant="outlined"
@@ -807,7 +919,7 @@ function SignalsAlertsTab() {
                 onClick={() => {
                   const syms = checkedSymbols.size > 0
                     ? [...checkedSymbols]
-                    : mondayPwhRows.map((row) => row.symbol).filter(Boolean);
+                    : earlyDetectionSorted.map((row) => row.symbol).filter(Boolean);
                   const csv = syms.map((s) => `NSE:${s}`).join(',');
                   navigator.clipboard.writeText(csv).then(() => {
                     setCopied(true);
@@ -821,7 +933,7 @@ function SignalsAlertsTab() {
                   '&:hover': { borderColor: '#0b3d91', bgcolor: '#e3f2fd' },
                 }}
               >
-                {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : mondayPwhRows.length})`}
+                {copied ? 'Copied!' : `Copy (${checkedSymbols.size > 0 ? checkedSymbols.size : earlyDetectionSorted.length})`}
               </Button>
             </Tooltip>
             <Button
@@ -852,12 +964,12 @@ function SignalsAlertsTab() {
               </Button>
             )}
           </Box>
-          {mondayPwhError && (
-            <Alert severity="warning" onClose={() => setMondayPwhError(null)} sx={{ mb: 1.5, '& .MuiAlert-message': { fontSize: 13 } }}>
-              {mondayPwhError}
+          {earlyDetectionError && (
+            <Alert severity="warning" onClose={() => setEarlyDetectionError(null)} sx={{ mb: 1.5, '& .MuiAlert-message': { fontSize: 13 } }}>
+              {earlyDetectionError}
             </Alert>
           )}
-          {!mondayPwhLoading && mondayPwhRows.length > 0 && (
+          {!earlyDetectionLoading && earlyDetectionSorted.length > 0 && (
             <Box
               sx={{
                 display: 'flex',
@@ -869,14 +981,15 @@ function SignalsAlertsTab() {
               }}
             >
               <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
-                Monday breakout list: {mondayRangeStart}–{mondayRangeEnd} of {mondayPwhRows.length}
-                {mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE ? ` (${MONDAY_PWH_TABLE_PAGE_SIZE} per page)` : ''}
+                Early detection list: {earlyDetectionRangeStart}–{earlyDetectionRangeEnd} of {earlyDetectionSorted.length}
+                {earlyDetectionSorted.length > EARLY_DETECTION_TABLE_PAGE_SIZE ? ` (${EARLY_DETECTION_TABLE_PAGE_SIZE} per page)` : ''}
+                {earlyDetectionSortCol ? ` · sorted by ${earlyDetectionSortCol} ${earlyDetectionSortDir}` : ''}
               </Typography>
-              {mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE && (
+              {earlyDetectionSorted.length > EARLY_DETECTION_TABLE_PAGE_SIZE && (
                 <Pagination
-                  count={mondayPwhTotalPages}
-                  page={mondayPwhPage}
-                  onChange={(_, v) => setMondayPwhPage(v)}
+                  count={earlyDetectionTotalPages}
+                  page={earlyDetectionPage}
+                  onChange={(_, v) => setEarlyDetectionPage(v)}
                   color="primary"
                   size="small"
                   siblingCount={1}
@@ -885,7 +998,7 @@ function SignalsAlertsTab() {
               )}
             </Box>
           )}
-          {mondayPwhLoading ? (
+          {earlyDetectionLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={28} /></Box>
           ) : (
             <TableWrapper>
@@ -897,15 +1010,15 @@ function SignalsAlertsTab() {
                         size="small"
                         sx={{ p: 0, color: '#fff', '&.Mui-checked': { color: '#fff' } }}
                         checked={
-                          mondayPwhDisplayedRows.length > 0
-                          && mondayPwhDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                          earlyDetectionDisplayedRows.length > 0
+                          && earlyDetectionDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
                         }
                         indeterminate={
-                          mondayPwhDisplayedRows.some((row) => checkedSymbols.has(row.symbol))
-                          && !mondayPwhDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
+                          earlyDetectionDisplayedRows.some((row) => checkedSymbols.has(row.symbol))
+                          && !earlyDetectionDisplayedRows.every((row) => checkedSymbols.has(row.symbol))
                         }
                         onChange={() => {
-                          const visible = mondayPwhDisplayedRows.map((row) => row.symbol).filter(Boolean);
+                          const visible = earlyDetectionDisplayedRows.map((row) => row.symbol).filter(Boolean);
                           setCheckedSymbols((prev) => {
                             const allChecked = visible.length > 0 && visible.every((sym) => prev.has(sym));
                             const next = new Set(prev);
@@ -916,29 +1029,77 @@ function SignalsAlertsTab() {
                         }}
                       />
                     </th>
-                    <th style={{ ...compact, color: '#fff' }}>Symbol</th>
-                    <th style={{ ...compact, color: '#fff' }}>Sector</th>
-                    <th style={{ ...compact, color: '#fff' }}>Mon close</th>
-                    <th style={{ ...compact, color: '#fff' }}>Prev wk high</th>
-                    <th style={{ ...compact, color: '#fff' }}>Prior close</th>
-                    <th style={{ ...compact, color: '#fff' }}>% vs prev high</th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('symbol')}
+                    >
+                      Symbol <EarlyDetectionSortIcon col="symbol" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('sector')}
+                    >
+                      Sector <EarlyDetectionSortIcon col="sector" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('trigger_date')}
+                    >
+                      Trigger <EarlyDetectionSortIcon col="trigger_date" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('status')}
+                    >
+                      Status <EarlyDetectionSortIcon col="status" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('rvol')}
+                    >
+                      RVOL <EarlyDetectionSortIcon col="rvol" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('sqz_set')}
+                    >
+                      SQZ set <EarlyDetectionSortIcon col="sqz_set" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('close')}
+                    >
+                      Close <EarlyDetectionSortIcon col="close" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('ema_fast')}
+                    >
+                      Fast MA <EarlyDetectionSortIcon col="ema_fast" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('ema_slow')}
+                    >
+                      Slow MA <EarlyDetectionSortIcon col="ema_slow" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mondayPwhDisplayedRows.map((r, i) => {
+                  {earlyDetectionDisplayedRows.map((r, i) => {
                     const sym = r.symbol;
                     const isChecked = sym && checkedSymbols.has(sym);
-                    const pct = r.pct_above_prev_week_high != null ? Number(r.pct_above_prev_week_high) : null;
-                    const pctColor = pct != null
-                      ? (pct >= 8 ? '#1b5e20' : pct >= 5 ? '#2e7d32' : '#1565c0')
+                    const rvol = r.rvol != null ? Number(r.rvol) : null;
+                    const rvolColor = rvol != null
+                      ? (rvol >= 2 ? '#1b5e20' : rvol >= 1.5 ? '#2e7d32' : '#1565c0')
                       : '#888';
+                    const sqzSet = (r.sqz_set || '').toLowerCase();
+                    const sqzBg = sqzSet === 'brown' ? '#efebe9' : sqzSet === 'lime' ? '#f1f8e9' : sqzSet === 'green' ? '#e8f5e9' : undefined;
                     const rowBg = isChecked
                       ? '#e3f2fd'
-                      : (pct != null && pct >= 8
-                          ? '#e8f5e9'
-                          : (pct != null && pct >= 5 ? '#f0f8ff' : undefined));
+                      : sqzBg;
                     return (
-                    <tr key={`mon-pwh-${sym}-${(mondayPwhPage - 1) * MONDAY_PWH_TABLE_PAGE_SIZE + i}`} style={{ background: rowBg }}>
+                    <tr key={`ed-${sym}-${(earlyDetectionPage - 1) * EARLY_DETECTION_TABLE_PAGE_SIZE + i}`} style={{ background: rowBg }}>
                       <td style={{ padding: '4px', textAlign: 'center' }}>
                         <Checkbox
                           size="small"
@@ -962,25 +1123,46 @@ function SignalsAlertsTab() {
                         </span>
                       </td>
                       <td style={{ ...compact, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sector || '—'}</td>
-                      <td style={{ ...compact, fontWeight: 600 }}>{r.monday_close != null ? fmt(r.monday_close) : '—'}</td>
-                      <td style={{ ...compact, color: '#1565c0', fontWeight: 600 }}>{r.prev_week_high != null ? fmt(r.prev_week_high) : '—'}</td>
-                      <td style={compact}>
-                        {r.prior_session_close != null ? fmt(r.prior_session_close) : '—'}
-                        {r.prior_session_date && (
-                          <span style={{ fontSize: 9, color: '#888', marginLeft: 4 }}>({String(r.prior_session_date).slice(0, 10)})</span>
-                        )}
+                      <td style={{ ...compact, fontWeight: 600 }}>{r.trigger_date ? String(r.trigger_date).slice(0, 10) : '—'}</td>
+                      <td style={{ ...compact, fontWeight: 600 }}>
+                        <span style={{
+                          color: r.status === 'confirmed' ? '#2e7d32' : r.status === 'active' ? '#f57f17' : '#666',
+                        }}
+                        >
+                          {r.status_label || earlyDetectionStatusLabel(r.status)}
+                        </span>
                       </td>
-                      <td style={{ ...compact, fontWeight: 700, color: pctColor }}>
-                        {pct != null && !Number.isNaN(pct)
-                          ? `${pct.toFixed(2)}%`
-                          : '—'}
+                      <td style={{ ...compact, fontWeight: 700, color: rvolColor }}>
+                        {rvol != null && !Number.isNaN(rvol) ? rvol.toFixed(2) : '—'}
+                      </td>
+                      <td style={{ ...compact, fontWeight: 700, textTransform: 'capitalize', color: sqzSet === 'brown' ? '#4e342e' : sqzSet === 'lime' ? '#33691e' : sqzSet === 'green' ? '#1b5e20' : '#888' }}>
+                        {r.sqz_set || r.sqz_color || '—'}
+                      </td>
+                      <td style={{ ...compact, fontWeight: 600 }}>{r.close != null ? fmt(r.close) : '—'}</td>
+                      <td style={{
+                        ...compact,
+                        color: r.ema_fast == null ? '#888' : (r.close != null && r.close > r.ema_fast ? '#2e7d32' : '#c62828'),
+                        fontWeight: r.ema_fast != null ? 600 : 400,
+                      }}
+                      >
+                        {r.ema_fast != null ? fmt(r.ema_fast) : '—'}
+                      </td>
+                      <td style={{
+                        ...compact,
+                        color: r.ema_slow == null ? '#888' : (r.close != null && r.close > r.ema_slow ? '#2e7d32' : '#c62828'),
+                        fontWeight: r.ema_slow != null ? 600 : 400,
+                      }}
+                      >
+                        {r.ema_slow != null ? fmt(r.ema_slow) : '—'}
                       </td>
                     </tr>
                   )})}
-                  {mondayPwhRows.length === 0 && !mondayPwhError && (
+                  {earlyDetectionSorted.length === 0 && !earlyDetectionError && (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
-                        No symbols matched (check EOD data and that a Monday exists on or before today).
+                      <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+                        {earlyDetectionRawRows.length > 0
+                          ? `No ${earlyDetectionSqzFilter === 'all' ? '' : `${earlyDetectionSqzFilter} `}completions match this filter (${earlyDetectionRawRows.length} loaded).`
+                          : 'No signals for this timeframe yet.'}
                       </td>
                     </tr>
                   )}
@@ -988,7 +1170,7 @@ function SignalsAlertsTab() {
               </Table>
             </TableWrapper>
           )}
-          {!mondayPwhLoading && mondayPwhRows.length > MONDAY_PWH_TABLE_PAGE_SIZE && (
+          {!earlyDetectionLoading && earlyDetectionSorted.length > EARLY_DETECTION_TABLE_PAGE_SIZE && (
             <Box
               sx={{
                 display: 'flex',
@@ -1000,12 +1182,12 @@ function SignalsAlertsTab() {
               }}
             >
               <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
-                {mondayRangeStart}–{mondayRangeEnd} of {mondayPwhRows.length}
+                {earlyDetectionRangeStart}–{earlyDetectionRangeEnd} of {earlyDetectionSorted.length}
               </Typography>
               <Pagination
-                count={mondayPwhTotalPages}
-                page={mondayPwhPage}
-                onChange={(_, v) => setMondayPwhPage(v)}
+                count={earlyDetectionTotalPages}
+                page={earlyDetectionPage}
+                onChange={(_, v) => setEarlyDetectionPage(v)}
                 color="primary"
                 size="small"
                 siblingCount={1}

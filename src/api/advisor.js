@@ -28,6 +28,30 @@ export const fetchMonthlyMacdSetup = async (limit = 200) => {
   return data?.data ?? [];
 };
 
+/** Recent early-detection signals (public-safe API payload). */
+export const fetchEarlyDetectionRecent = async ({
+  lookback_days = null,
+  timeframe = 'daily',
+  limit = 500,
+  dedupe_symbol = true,
+  sqz_set = '',
+  sort_by = 'trigger_date',
+  sort_dir = 'desc',
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('limit', String(limit));
+  params.set('dedupe_symbol', dedupe_symbol ? 'true' : 'false');
+  params.set('sort_by', String(sort_by || 'trigger_date'));
+  params.set('sort_dir', String(sort_dir || 'desc'));
+  if (lookback_days != null && lookback_days !== '') {
+    params.set('lookback_days', String(lookback_days));
+  }
+  const sqz = String(sqz_set || '').trim().toLowerCase();
+  if (sqz && sqz !== 'all') params.set('sqz_set', sqz);
+  return apiGet(`/advisor/signals/early-detection/recent?${params.toString()}`);
+};
+
 /** Monday close above prior calendar week's high (optional cross from prior session). */
 export const fetchMondayPrevWeekHighCross = async ({
   limit = 500,

@@ -2,7 +2,9 @@
 
 The **FastAPI backend is not inside the React app folder**. It lives **one directory level up** from `stockdashboard`, as a **sibling** folder under the same parent (e.g. `ANIStockProject`).
 
-## Local development (Windows / Mac / Linux)
+## Local development (Linux server / Mac / Linux desktop)
+
+**Production VPS layout** (this server): `/opt/ani-stock/stockdashboard` + `/opt/ani-stock/backend_stockdashboard`.
 
 Typical parent folder:
 
@@ -24,9 +26,9 @@ ANIStockProject/                    ← parent (one level above stockdashboard)
 
 This matches:
 
-- **`stockdashboard/.vscode/settings.json`**: e.g. `python.defaultInterpreterPath` → `${workspaceFolder}/../backend_stockdashboard/.venv/Scripts/python.exe`
-- **`stockdashboard/fullstack.code-workspace`**: second folder is `../backend_stockdashboard`
-- **Parent `ANIStockProject/fullstack.code-workspace`**: same sibling layout when you open the parent repo
+- **`/opt/ani-stock/fullstack.code-workspace`** (recommended on this VPS): multi-root frontend + backend, Linux Python path
+- **`stockdashboard/.vscode/settings.json`**: `${workspaceFolder}/../backend_stockdashboard/.venv/bin/python`
+- **Do not use** Windows paths (`Scripts/python.exe`, `Activate.ps1`) on this server
 
 **Do not** rely on `stockdashboard/backend_stockdashboard` unless you intentionally maintain a nested copy (duplicate, easy to forget to pull).
 

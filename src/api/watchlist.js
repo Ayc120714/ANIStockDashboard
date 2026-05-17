@@ -31,6 +31,12 @@ export const addToWatchlist = async (symbol, listType = 'long_term', notes = '')
 export const backfillWatchlistMarketData = async (symbols) =>
   apiPost('/watchlist/backfill-market-data', { symbols });
 
+export const fetchWatchlistFundamentals = async (symbol) =>
+  apiGet(`/watchlist/fundamentals/${encodeURIComponent(symbol)}`);
+
+export const refreshWatchlistFundamentals = async (symbols) =>
+  apiPost('/watchlist/refresh-fundamentals', { symbols: symbols || [] });
+
 export const removeFromWatchlist = async (symbol, listType = 'long_term', options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const params = new URLSearchParams();
