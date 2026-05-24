@@ -46,6 +46,18 @@ export const updateMyMobile = (mobile) => apiPost('/auth/me/mobile', { mobile: S
 export const fetchAdminUsers = (includeInactive = true) =>
   apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`);
 
+export const fetchAdminNotifications = ({ unreadOnly = false, limit = 50 } = {}) => {
+  const params = new URLSearchParams();
+  params.set('unread_only', unreadOnly ? 'true' : 'false');
+  params.set('limit', String(limit));
+  return apiGet(`/auth/admin/notifications?${params.toString()}`);
+};
+
+export const markAdminNotificationRead = (notificationId) =>
+  apiRequest(`/auth/admin/notifications/${encodeURIComponent(String(notificationId))}/read`, {
+    method: 'PUT',
+  });
+
 export const addAdminUser = (payload) =>
   apiPost('/auth/admin/users', payload);
 

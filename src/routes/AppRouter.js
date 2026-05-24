@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import usePageVisitTracker from '../hooks/usePageVisitTracker';
 import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../pages/DashboardPage';
 import LongTermPage from '../pages/LongTermPage';
@@ -34,9 +35,15 @@ import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 import PremiumModuleRoute from './PremiumModuleRoute';
 
+function PageVisitTracker() {
+  usePageVisitTracker();
+  return null;
+}
+
 function AppRouter() {
   return (
     <Router>
+      <PageVisitTracker />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />

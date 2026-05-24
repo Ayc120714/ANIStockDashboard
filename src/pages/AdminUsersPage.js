@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -23,6 +24,7 @@ import {
   setUserPaidPremium,
 } from '../api/auth';
 import AdminUserDirectoryTables from '../components/AdminUserDirectoryTables';
+import AdminPageVisitStats from '../components/AdminPageVisitStats';
 import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.styles';
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
@@ -33,12 +35,14 @@ const isMissingResourceError = (err) => {
 };
 
 function AdminUsersPage() {
+  const location = useLocation();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [includeInactive, setIncludeInactive] = useState(true);
   const [search, setSearch] = useState('');
+  const [highlightUserId, setHighlightUserId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -91,6 +95,17 @@ function AdminUsersPage() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    const id = location.state?.highlightUserId;
+    if (!id) return;
+    setHighlightUserId(Number(id));
+    const row = rows.find((r) => r.id === Number(id));
+    if (row?.email) {
+      setSearch(String(row.email));
+      setMessage(`Opened from notification — review ${row.email}.`);
+    }
+  }, [location.state?.highlightUserId, rows]);
 
   useEffect(() => {
     loadPremiumEmails();
@@ -236,6 +251,8 @@ function AdminUsersPage() {
   return (
     <TableSection>
       <TableTitle>Admin User Management</TableTitle>
+
+      <AdminPageVisitStats />
 
       <Box sx={{ fontSize: 13, color: 'text.secondary', mb: 2, lineHeight: 1.5 }}>
         Creating or approving a user only activates their <strong>basic</strong> workspace (when the paywall is on).
@@ -395,6 +412,7 @@ function AdminUsersPage() {
           tierLifetimeUsers={tierLifetimeUsers}
           tierYearlyOtherPremiumUsers={tierYearlyOtherPremiumUsers}
           tierBasicUsers={tierBasicUsers}
+          highlightUserId={highlightUserId}
           busy={busy}
           setBusy={setBusy}
           setError={setError}

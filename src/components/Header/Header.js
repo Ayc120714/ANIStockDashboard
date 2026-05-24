@@ -2,9 +2,10 @@ import React, { useMemo } from 'react';
 import { HeaderContainer } from './Header.styles';
 import { Box, Button } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
+import AdminNotificationBell from './AdminNotificationBell';
 
 function Header() {
-  const { user, logout, outlookPremium } = useAuth();
+  const { user, logout, outlookPremium, isSuperAdmin } = useAuth();
 
   const planLabel = useMemo(() => {
     if (user?.premium_lifetime === true) return 'Lifetime';
@@ -70,6 +71,7 @@ function Header() {
             {planLabel}
           </Box>
         </Box>
+        {isSuperAdmin ? <AdminNotificationBell /> : null}
         <Button size="small" variant="outlined" onClick={logout}>
           Logout
         </Button>

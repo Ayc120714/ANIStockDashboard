@@ -37,6 +37,7 @@ function UserRows({
   selectable,
   selectedIds,
   onToggleRow,
+  highlightUserId,
 }) {
   const run = async (fn) => {
     setBusy(true);
@@ -63,7 +64,14 @@ function UserRows({
   }
 
   return rows.map((row) => (
-    <tr key={`${listKind}-${row.id}`}>
+    <tr
+      key={`${listKind}-${row.id}`}
+      style={
+        highlightUserId && row.id === highlightUserId
+          ? { background: 'rgba(255, 193, 7, 0.22)', outline: '2px solid rgba(255, 152, 0, 0.55)' }
+          : undefined
+      }
+    >
       {selectable ? (
         <td style={checkboxCompact}>
           <Checkbox
@@ -284,6 +292,7 @@ export default function AdminUserDirectoryTables({
   tierLifetimeUsers,
   tierYearlyOtherPremiumUsers,
   tierBasicUsers,
+  highlightUserId,
   busy,
   setBusy,
   setError,
@@ -428,6 +437,7 @@ export default function AdminUserDirectoryTables({
                 selectable={false}
                 selectedIds={[]}
                 onToggleRow={() => {}}
+                highlightUserId={highlightUserId}
               />
             </tbody>
           </Table>
@@ -470,6 +480,7 @@ export default function AdminUserDirectoryTables({
                 selectable
                 selectedIds={selectedYearly}
                 onToggleRow={toggleYearlyRow}
+                highlightUserId={highlightUserId}
               />
             </tbody>
           </Table>
@@ -521,6 +532,7 @@ export default function AdminUserDirectoryTables({
                 selectable
                 selectedIds={selectedBasic}
                 onToggleRow={toggleBasicRow}
+                highlightUserId={highlightUserId}
               />
             </tbody>
           </Table>
