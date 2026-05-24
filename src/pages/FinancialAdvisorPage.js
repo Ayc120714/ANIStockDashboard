@@ -463,7 +463,6 @@ function SignalsAlertsTab() {
       lookback_days: recentLookbackDaysForTimeframe(earlyDetectionTimeframe),
       limit: 1000,
       dedupe_symbol: true,
-      sqz_set: earlyDetectionSqzFilter,
       sort_by: earlyDetectionSortCol,
       sort_dir: earlyDetectionSortDir,
     })
@@ -484,12 +483,7 @@ function SignalsAlertsTab() {
         setEarlyDetectionError(err?.message || 'Could not load early detection setup list.');
       })
       .finally(() => setEarlyDetectionLoading(false));
-  }, [
-    earlyDetectionTimeframe,
-    earlyDetectionSqzFilter,
-    earlyDetectionSortCol,
-    earlyDetectionSortDir,
-  ]);
+  }, [earlyDetectionTimeframe, earlyDetectionSortCol, earlyDetectionSortDir]);
 
   const loadEarlyDetectionHistory = useCallback(() => {
     const from = String(earlyDetectionHistoryFrom || '').slice(0, 10);
@@ -505,7 +499,6 @@ function SignalsAlertsTab() {
       from_date: from,
       to_date: to,
       limit: 2000,
-      sqz_set: earlyDetectionSqzFilter,
       sort_by: earlyDetectionSortCol,
       sort_dir: earlyDetectionSortDir,
     })
@@ -528,7 +521,6 @@ function SignalsAlertsTab() {
     earlyDetectionTimeframe,
     earlyDetectionHistoryFrom,
     earlyDetectionHistoryTo,
-    earlyDetectionSqzFilter,
     earlyDetectionSortCol,
     earlyDetectionSortDir,
   ]);
@@ -556,7 +548,6 @@ function SignalsAlertsTab() {
       to_date: to,
       timeframe: earlyDetectionTimeframe,
       symbol: sym,
-      sqz_set: earlyDetectionSqzFilter,
       sort_by: earlyDetectionSortCol,
       sort_dir: earlyDetectionSortDir,
     })
@@ -584,7 +575,6 @@ function SignalsAlertsTab() {
     resolveEarlyDetectionDateRange,
     earlyDetectionTimeframe,
     earlyDetectionVerifySymbol,
-    earlyDetectionSqzFilter,
     earlyDetectionSortCol,
     earlyDetectionSortDir,
   ]);
@@ -609,13 +599,7 @@ function SignalsAlertsTab() {
     if (earlyDetectionViewMode === 'recent') {
       loadEarlyDetectionRecent();
     }
-  }, [
-    view,
-    earlyDetectionViewMode,
-    earlyDetectionTimeframe,
-    earlyDetectionSqzFilter,
-    loadEarlyDetectionRecent,
-  ]);
+  }, [view, earlyDetectionViewMode, earlyDetectionTimeframe, loadEarlyDetectionRecent]);
 
   useEffect(() => {
     if (view !== 'signals' || earlyDetectionViewMode !== 'recent') return undefined;

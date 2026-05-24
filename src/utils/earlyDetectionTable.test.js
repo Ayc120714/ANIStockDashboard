@@ -49,6 +49,25 @@ describe('earlyDetectionTable', () => {
     expect(row.status_label).toBe('Active');
   });
 
+  test('pill counts include all SQZ buckets while table respects filter', () => {
+    const raw = [
+      { symbol: 'A', status: 'confirmed', sqz_set: 'brown', trigger_date: '2026-05-01' },
+      { symbol: 'B', status: 'confirmed', sqz_set: 'lime', trigger_date: '2026-05-02' },
+      { symbol: 'C', status: 'confirmed', sqz_set: 'green', trigger_date: '2026-05-03' },
+    ];
+    const { sorted, counts } = buildEarlyDetectionTableModel(raw, {
+      sqzFilter: 'brown',
+      sortCol: 'trigger_date',
+      sortDir: 'desc',
+    });
+    expect(counts.all).toBe(3);
+    expect(counts.brown).toBe(1);
+    expect(counts.lime).toBe(1);
+    expect(counts.green).toBe(1);
+    expect(sorted).toHaveLength(1);
+    expect(sorted[0].symbol).toBe('A');
+  });
+
   test('filter and sort by sqz_set then rvol', () => {
     const raw = [
       { symbol: 'A', status: 'confirmed', sqz_set: 'brown', rvol: 1.2, trigger_date: '2026-05-01' },
