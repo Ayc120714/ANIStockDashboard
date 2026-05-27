@@ -1258,7 +1258,7 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
     0
   );
 
-  const visibleRows = compact ? holdings.slice(0, 8) : holdings;
+  const visibleRows = holdings;
   return (
     <Card sx={compact ? { p: 1.5 } : undefined}>
       <SectionTitle
@@ -1321,9 +1321,6 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
           </tbody>
         </table>
       </Box>
-      {compact && holdings.length > visibleRows.length ? (
-        <Box sx={{ mt: 0.8, fontSize: 11, color: '#777' }}>Showing {visibleRows.length} of {holdings.length} holdings.</Box>
-      ) : null}
     </Card>
   );
 }
