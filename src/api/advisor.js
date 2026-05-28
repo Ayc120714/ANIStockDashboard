@@ -28,6 +28,42 @@ export const fetchMonthlyMacdSetup = async (limit = 200) => {
   return data?.data ?? [];
 };
 
+/** Super-admin: user's next-week monitor symbol list. */
+export const fetchNextWeekMonitorSymbols = async () =>
+  apiGet('/advisor/signals/next-week-setup/monitor-symbols');
+
+export const saveNextWeekMonitorSymbols = async (symbols) =>
+  apiRequest('/advisor/signals/next-week-setup/monitor-symbols', {
+    method: 'PUT',
+    body: JSON.stringify({ symbols: symbols || [] }),
+  });
+
+/** Super-admin: monitor list + live rows for the Next Week Setup page. */
+export const fetchNextWeekMonitorDashboard = async ({ trade_ready_only = false, timeframe = 'daily' } = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('trade_ready_only', trade_ready_only ? 'true' : 'false');
+  return apiGet(`/advisor/signals/next-week-setup/monitor-dashboard?${params.toString()}`);
+};
+
+/** Live next-week setup rows (WebSocket screener worker). */
+export const fetchNextWeekSetupLive = async ({
+  timeframe = 'daily',
+  min_step = null,
+  trade_ready_only = false,
+  limit = 500,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'daily'));
+  params.set('limit', String(limit));
+  params.set('trade_ready_only', trade_ready_only ? 'true' : 'false');
+  if (min_step != null && min_step !== '') params.set('min_step', String(min_step));
+  return apiGet(`/advisor/signals/next-week-setup/live?${params.toString()}`);
+};
+
+export const fetchNextWeekSetupStatus = async () =>
+  apiGet('/advisor/signals/next-week-setup/status');
+
 /** Recent early-detection signals (public-safe API payload). */
 export const fetchEarlyDetectionRecent = async ({
   lookback_days = null,

@@ -283,6 +283,10 @@ function AdminUsersPage() {
           action.
         </Box>
         <Box component="li">
+          <strong>Lifetime → complimentary (multi-select):</strong> open <strong>Lifetime members</strong>, select rows, then{' '}
+          <strong>Move selected to complimentary</strong>. Or use <strong>Move to complimentary</strong> on a single row.
+        </Box>
+        <Box component="li">
           Single-row actions (Block, Record payment, etc.) stay in each row’s <strong>Action</strong> column.
         </Box>
       </Box>

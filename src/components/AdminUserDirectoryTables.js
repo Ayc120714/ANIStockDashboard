@@ -3,9 +3,11 @@ import { Box, Button, Checkbox, Typography } from '@mui/material';
 import {
   approveAdminUserAccessLink,
   blockAdminUser,
+  bulkMoveUserLifetimeToComplimentary,
   bulkSetUserComplimentaryPremium,
   bulkSetUserLifetimePremium,
   clearUserPaidPremium,
+  moveUserLifetimeToComplimentary,
   rejectAdminUserRequest,
   setUserComplimentaryPremium,
   setUserLifetimePremium,
@@ -222,6 +224,22 @@ function UserRows({
               Lifetime premium
             </Button>
           ) : null}
+          {!row.is_pending_approval && listKind === 'lifetime' && row.premium_lifetime ? (
+            <Button
+              size="small"
+              color="secondary"
+              variant="outlined"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await moveUserLifetimeToComplimentary(row.id);
+                  setMessage(`Moved ${row.email} from lifetime to complimentary premium.`);
+                })
+              }
+            >
+              Move to complimentary
+            </Button>
+          ) : null}
           {!row.is_pending_approval && (listKind === 'lifetime' || listKind === 'yearly_other') && row.premium_lifetime ? (
             <Button
               size="small"
@@ -303,9 +321,11 @@ export default function AdminUserDirectoryTables({
 }) {
   const [selectedBasic, setSelectedBasic] = useState([]);
   const [selectedYearly, setSelectedYearly] = useState([]);
+  const [selectedLifetime, setSelectedLifetime] = useState([]);
 
   const basicVisibleIds = useMemo(() => tierBasicUsers.map((r) => r.id), [tierBasicUsers]);
   const yearlyVisibleIds = useMemo(() => tierYearlyOtherPremiumUsers.map((r) => r.id), [tierYearlyOtherPremiumUsers]);
+  const lifetimeVisibleIds = useMemo(() => tierLifetimeUsers.map((r) => r.id), [tierLifetimeUsers]);
 
   const allBasicHeaderChecked =
     basicVisibleIds.length > 0 && basicVisibleIds.every((id) => selectedBasic.includes(id));
@@ -317,12 +337,21 @@ export default function AdminUserDirectoryTables({
   const yearlyHeaderIndeterminate =
     yearlyVisibleIds.some((id) => selectedYearly.includes(id)) && !allYearlyHeaderChecked;
 
+  const allLifetimeHeaderChecked =
+    lifetimeVisibleIds.length > 0 && lifetimeVisibleIds.every((id) => selectedLifetime.includes(id));
+  const lifetimeHeaderIndeterminate =
+    lifetimeVisibleIds.some((id) => selectedLifetime.includes(id)) && !allLifetimeHeaderChecked;
+
   const toggleBasicRow = useCallback((id) => {
     setSelectedBasic((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
   const toggleYearlyRow = useCallback((id) => {
     setSelectedYearly((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const toggleLifetimeRow = useCallback((id) => {
+    setSelectedLifetime((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
   const toggleBasicAll = useCallback(() => {
@@ -340,6 +369,14 @@ export default function AdminUserDirectoryTables({
       return [...new Set([...prev, ...yearlyVisibleIds])];
     });
   }, [yearlyVisibleIds]);
+
+  const toggleLifetimeAll = useCallback(() => {
+    setSelectedLifetime((prev) => {
+      const allOn = lifetimeVisibleIds.length > 0 && lifetimeVisibleIds.every((id) => prev.includes(id));
+      if (allOn) return prev.filter((id) => !lifetimeVisibleIds.includes(id));
+      return [...new Set([...prev, ...lifetimeVisibleIds])];
+    });
+  }, [lifetimeVisibleIds]);
 
   const runBulk = useCallback(
     async (fn) => {
@@ -385,6 +422,15 @@ export default function AdminUserDirectoryTables({
     });
   }, [runBulk, selectedYearly, setMessage]);
 
+  const onBulkLifetimeToComplimentary = useCallback(() => {
+    if (!selectedLifetime.length) return;
+    runBulk(async () => {
+      const res = await bulkMoveUserLifetimeToComplimentary(selectedLifetime);
+      setMessage(`Moved ${res.updated} user(s) from lifetime to complimentary (database updated).`);
+      setSelectedLifetime([]);
+    });
+  }, [runBulk, selectedLifetime, setMessage]);
+
   const tableHead = (selectable, headerChecked, headerIndeterminate, onHeaderChange) => (
     <thead>
       <tr>
@@ -418,11 +464,23 @@ export default function AdminUserDirectoryTables({
       <Box>
         <TableTitle>Lifetime members ({tierLifetimeUsers.length})</TableTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1, maxWidth: 720 }}>
-          Permanent premium until you remove lifetime on the row.
+          Permanent premium until you remove lifetime or move users to complimentary (row action or bulk below).
         </Typography>
+        <BulkBar count={selectedLifetime.length} busy={busy} onClear={() => setSelectedLifetime([])}>
+          <Button
+            size="small"
+            color="secondary"
+            variant="contained"
+            disabled={busy || selectedLifetime.length === 0}
+            onClick={onBulkLifetimeToComplimentary}
+            title="Clear lifetime and grant complimentary for selected users (one DB commit)"
+          >
+            Move selected to complimentary
+          </Button>
+        </BulkBar>
         <TableWrapper>
           <Table>
-            {tableHead(false, false, false, () => {})}
+            {tableHead(true, allLifetimeHeaderChecked, lifetimeHeaderIndeterminate, toggleLifetimeAll)}
             <tbody>
               <UserRows
                 rows={tierLifetimeUsers}
@@ -434,9 +492,9 @@ export default function AdminUserDirectoryTables({
                 loadUsers={loadUsers}
                 setPaidTarget={setPaidTarget}
                 setDeleteTarget={setDeleteTarget}
-                selectable={false}
-                selectedIds={[]}
-                onToggleRow={() => {}}
+                selectable
+                selectedIds={selectedLifetime}
+                onToggleRow={toggleLifetimeRow}
                 highlightUserId={highlightUserId}
               />
             </tbody>

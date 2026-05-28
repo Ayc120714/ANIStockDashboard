@@ -77,6 +77,11 @@ const defaultCourses = [
     url: 'https://www.youtube.com/watch?v=2Ti2QTLH08Y&pp=ygUaZGkgcGx1cyBkaSBtaW51cyBpbmRpY2F0b3LSBwkJCgsBhyohjO8%3D',
   },
   {
+    id: 'chapter3-adx-di',
+    title: 'Chapter 3: ADX DI',
+    url: 'https://youtu.be/O0I1XMgVDg8',
+  },
+  {
     id: 'market-profile',
     title: 'Course 4 (Advanced): Market Profile',
     url: 'https://www.youtube.com/watch?v=z-ae7tLVdoo&list=PL9myHLrE5hrMetuIrDc8FmYGW58BgofEy',

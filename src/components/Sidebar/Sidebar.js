@@ -105,6 +105,13 @@ function Sidebar() {
             <span className="label">Advisor</span>
           </SidebarItem>
 
+          {isSuperAdmin ? (
+            <SidebarItem to="/next-week-setup" collapsed={collapsed} pathname={pathname} title={collapsed ? 'Next Week Setup' : undefined}>
+              <MdTrendingUp />
+              <span className="label">Next Week Setup</span>
+            </SidebarItem>
+          ) : null}
+
           <SidebarItem to="/portfolio-manager" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Portfolio Manager' : undefined}>
             <MdAccountBalanceWallet />
             <span className="label">Portfolio Manager</span>

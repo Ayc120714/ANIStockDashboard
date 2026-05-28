@@ -113,6 +113,19 @@ export const bulkSetUserLifetimePremium = (userIds, enabled = true) =>
     enabled: Boolean(enabled),
   });
 
+/** Clear lifetime and grant complimentary premium (single DB commit). */
+export const moveUserLifetimeToComplimentary = (userId) =>
+  apiPost(
+    `/auth/admin/users/${encodeURIComponent(String(userId))}/move-lifetime-to-complimentary`,
+    {},
+  );
+
+/** Bulk move lifetime users to complimentary (single DB commit). Max 200 IDs. */
+export const bulkMoveUserLifetimeToComplimentary = (userIds) =>
+  apiPost('/auth/admin/users/bulk-move-lifetime-to-complimentary', {
+    user_ids: userIds.map((id) => Number(id)).filter((n) => n > 0),
+  });
+
 export const completeAccessLinkSetup = (flowId, token, newPassword, trustDevice = true) =>
   apiPost('/auth/access-link/complete', {
     flow_id: flowId,

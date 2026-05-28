@@ -9,6 +9,7 @@ import OutlookPage from '../pages/OutlookPage';
 import ScreensPage from '../pages/ScreensPage';
 import StockAlertsPage from '../pages/StockAlertsPage';
 import FinancialAdvisorPage from '../pages/FinancialAdvisorPage';
+import NextWeekSetupPage from '../pages/NextWeekSetupPage';
 import PortfolioManagerPage from '../pages/PortfolioManagerPage';
 import ProfilePage from '../pages/ProfilePage';
 import EventsPage from '../pages/EventsPage';
@@ -67,6 +68,7 @@ function AppRouter() {
           <Route path="/outlook" element={<OutlookPage />} />
           <Route path="/screens" element={<PremiumModuleRoute><ScreensPage /></PremiumModuleRoute>} />
           <Route path="/advisor" element={<PremiumModuleRoute><FinancialAdvisorPage /></PremiumModuleRoute>} />
+          <Route path="/next-week-setup" element={<AdminRoute><NextWeekSetupPage /></AdminRoute>} />
           <Route path="/video-screener" element={<Navigate to="/screens" replace />} />
           <Route path="/portfolio-manager" element={<PremiumModuleRoute><PortfolioManagerPage /></PremiumModuleRoute>} />
           <Route path="/alerts" element={<PremiumModuleRoute><StockAlertsPage /></PremiumModuleRoute>} />
