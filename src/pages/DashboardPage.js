@@ -7,24 +7,20 @@ import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchPriceShockers } from '../api/stocks';
 import { fetchAlerts, fetchRatings } from '../api/advisor';
-import { apiGet } from '../api/apiClient';
+import { apiGet, clearApiGetCache } from '../api/apiClient';
 import {
   fetchWatchlist,
   fetchWatchlistSignals,
   fetchWeeklyIndicators,
   fetchOrderBlocks,
 } from '../api/watchlist';
-import { fetchBrokerSetup } from '../api/brokers';
-import {
-  fetchAngeloneHoldings,
-  fetchAngeloneOrders,
-  fetchAngelonePositions,
-} from '../api/angelone';
-import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
-import { loadRestBrokerPortfolioSlices } from '../api/restBrokerPortfolio';
 import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { readBrokerHoldingsCache } from '../utils/brokerHoldingsCache';
+import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
+import { readPageCache, writePageCache } from '../utils/pageDataCache';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -38,8 +34,6 @@ const parsePctNumber = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
-/** First match wins: Dhan, then Angel One, then Samco, Upstox (same family as Profile). */
-const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const deriveDirectionFromRow = (row) => {
   const reco = String(row?.recommendation || '').toLowerCase();
@@ -50,182 +44,6 @@ const deriveDirectionFromRow = (row) => {
   return 1;
 };
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
-const getCachedBrokerRows = (userId) => {
-  if (!userId) return [];
-  try {
-    const raw = localStorage.getItem(`dhan_live_positions_${userId}`);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    return [];
-  }
-};
-const toNumber = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-};
-const pickArrayRows = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.positions)) return payload.positions;
-  if (Array.isArray(payload?.holdings)) return payload.holdings;
-  if (Array.isArray(payload?.result)) return payload.result;
-  if (Array.isArray(payload?.open_positions)) return payload.open_positions;
-  return [];
-};
-const normalizeBrokerRows = (payload) => {
-  const rows = pickArrayRows(payload);
-  const normalized = rows
-    .map((row) => {
-      const symbol = String(
-        row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
-      ).trim().toUpperCase();
-      const buyQty = toNumber(row?.buyQty ?? row?.buy_qty ?? row?.buyQuantity);
-      const sellQty = toNumber(row?.sellQty ?? row?.sell_qty ?? row?.sellQuantity);
-      const computedHoldingQty = toNumber(
-        (row?.dpQty ?? row?.dp_qty ?? row?.dpQuantity ?? 0)
-        + (row?.t1Qty ?? row?.t1_qty ?? row?.t1Quantity ?? 0)
-        + (row?.availableQty ?? row?.available_qty ?? row?.availableQuantity ?? 0)
-      );
-      const netQty = toNumber(
-        row?.netQty
-        ?? row?.net_qty
-        ?? row?.netQuantity
-        ?? row?.authorisedquantity
-        ?? row?.authorisedQuantity
-        ?? row?.quantity
-        ?? row?.qty
-        ?? row?.availableQty
-        ?? row?.available_qty
-        ?? row?.availableQuantity
-        ?? row?.holdingQty
-        ?? row?.holding_qty
-        ?? row?.holdingQuantity
-        ?? row?.totalQty
-        ?? row?.total_qty
-        ?? row?.totalQuantity
-        ?? computedHoldingQty
-        ?? (buyQty - sellQty)
-      );
-      if (!symbol || netQty === 0) return null;
-      const avgPrice = toNumber(
-        row?.buyAvg
-        ?? row?.buyavg
-        ?? row?.buyAvgPrice
-        ?? row?.buyavgprice
-        ?? row?.buyaverageprice
-        ?? row?.avgPrice
-        ?? row?.averagePrice
-        ?? row?.averageprice
-        ?? row?.avg_price
-        ?? row?.costPrice
-        ?? row?.avgCostPrice
-      );
-      const ltp = toNumber(
-        row?.ltp
-        ?? row?.Ltp
-        ?? row?.lastPrice
-        ?? row?.lastTradedPrice
-        ?? row?.close
-        ?? row?.price
-      );
-      const unrealized = toNumber(
-        row?.pnl
-        ?? row?.unrealizedPnl
-        ?? row?.unrealized_pnl
-        ?? row?.holdingPnl
-        ?? row?.holding_pnl
-        ?? row?.profitandloss
-        ?? row?.profitAndLoss
-        ?? row?.profit_and_loss
-        ?? row?.mtm
-        ?? row?.m2m
-      );
-      const computedUnrealized = avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0;
-      const unrealizedPnl = unrealized || computedUnrealized;
-      return {
-        symbol,
-        product_type: String(row?.productType || row?.product_type || row?.product || 'INTRADAY').toUpperCase(),
-        net_qty: netQty,
-        avg_price: avgPrice,
-        ltp,
-        unrealized_pnl: unrealizedPnl,
-        realized_pnl: toNumber(row?.realizedPnl ?? row?.realized_pnl),
-        state: 'OPEN',
-      };
-    })
-    .filter(Boolean);
-
-  const unique = new Map();
-  normalized.forEach((row) => {
-    unique.set(`${row.symbol}_${row.product_type}`, row);
-  });
-  return [...unique.values()];
-};
-const deriveRowsFromDhanOrders = (payload) => {
-  const rows = pickArrayRows(payload);
-  const bySymbol = new Map();
-  rows.forEach((row) => {
-    const status = String(row?.orderStatus || row?.status || '').toUpperCase();
-    if (!['FILLED', 'PARTIAL', 'COMPLETE'].includes(status)) return;
-    const symbol = String(
-      row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
-    ).trim().toUpperCase();
-    if (!symbol) return;
-    const side = String(row?.transactionType || row?.side || '').toUpperCase();
-    const qty = toNumber(row?.filledQty ?? row?.quantity ?? row?.qty);
-    if (qty <= 0) return;
-    const price = toNumber(row?.averagePrice ?? row?.avgPrice ?? row?.price);
-    const current = bySymbol.get(symbol) || { symbol, net_qty: 0, avg_num: 0, avg_den: 0 };
-    if (side === 'BUY') {
-      current.net_qty += qty;
-      if (price > 0) {
-        current.avg_num += qty * price;
-        current.avg_den += qty;
-      }
-    } else if (side === 'SELL') {
-      current.net_qty -= qty;
-    }
-    bySymbol.set(symbol, current);
-  });
-  return [...bySymbol.values()]
-    .filter((r) => Math.abs(r.net_qty) > 0)
-    .map((r) => ({
-      symbol: r.symbol,
-      product_type: 'DELIVERY',
-      net_qty: r.net_qty,
-      avg_price: r.avg_den > 0 ? r.avg_num / r.avg_den : 0,
-      ltp: 0,
-      unrealized_pnl: 0,
-      realized_pnl: 0,
-      state: 'OPEN',
-    }));
-};
-
-const mergePositionsHoldingsOrders = (livePositionsResult, liveHoldingsResult, liveOrdersResult) => {
-  const fromPositions = livePositionsResult.status === 'fulfilled'
-    ? normalizeBrokerRows(livePositionsResult.value)
-    : [];
-  const fromHoldings = liveHoldingsResult.status === 'fulfilled'
-    ? normalizeBrokerRows(liveHoldingsResult.value)
-    : [];
-  const fromOrders = liveOrdersResult?.status === 'fulfilled'
-    ? deriveRowsFromDhanOrders(liveOrdersResult.value)
-    : [];
-  const merged = new Map();
-  [...fromPositions, ...fromHoldings, ...fromOrders].forEach((row) => {
-    merged.set(`${row.symbol}_${row.product_type}`, row);
-  });
-  return [...merged.values()];
-};
-
-const brokerRowDrivesDashboardHoldings = (row) => {
-  if (!row) return false;
-  const b = String(row.broker || '').toLowerCase();
-  if (b === 'dhan') return Boolean(row.has_session);
-  return Boolean(row.live_enabled ?? row.has_session);
-};
 
 const Card = ({ children, sx, ...props }) => (
   <Box sx={{ bgcolor: '#fff', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', p: 2, ...sx }} {...props}>{children}</Box>
@@ -1361,18 +1179,25 @@ function DashboardPage() {
     || indices
   );
 
+  const refreshBrokerHoldings = useCallback(async ({ forceLive = false } = {}) => {
+    if (!userId) {
+      setBrokerAuthenticated(false);
+      setHoldings([]);
+      return;
+    }
+    const broker = await resolveDashboardBrokerHoldings(userId, { forceLive });
+    setBrokerAuthenticated(broker.authenticated);
+    setHoldings(broker.rows);
+  }, [userId]);
+
   const loadAll = useCallback(async ({ forceSpinner = false } = {}) => {
     try {
       if (forceSpinner && !hasHydratedData) {
         setLoading(true);
       }
-      let cached = null;
-      try {
-        const raw = sessionStorage.getItem(DASHBOARD_CACHE_KEY);
-        cached = raw ? JSON.parse(raw) : null;
-      } catch (_) {
-        cached = null;
-      }
+      const session = await ensureMarketSession();
+      const cachedWrap = readPageCache(DASHBOARD_CACHE_KEY);
+      const cached = cachedWrap?.data || null;
       if (cached) {
         setIndices(cached.indices || null);
         setWatchlist(Array.isArray(cached.watchlist) ? cached.watchlist : []);
@@ -1384,6 +1209,28 @@ function DashboardPage() {
         setLosers(Array.isArray(cached.losers) ? cached.losers : []);
         setAlerts(Array.isArray(cached.alerts) ? cached.alerts : []);
         setRatings(Array.isArray(cached.ratings) ? cached.ratings : []);
+        if (cached.marketMode) setMarketMode(cached.marketMode);
+        setLastUpdated(cached.updatedAt ? new Date(cached.updatedAt) : new Date());
+        setLoading(false);
+      }
+      const brokerCached = readBrokerHoldingsCache(userId);
+      if (brokerCached?.rows?.length) {
+        setBrokerAuthenticated(Boolean(brokerCached.broker));
+        setHoldings(brokerCached.rows);
+      }
+
+      const skipNetwork =
+        !session.isLiveMarket
+        && cached
+        && cachedWrap
+        && Date.now() - (cachedWrap.updatedAt || 0) < 24 * 60 * 60_000;
+      if (skipNetwork) {
+        await refreshBrokerHoldings({ forceLive: false });
+        return;
+      }
+
+      if (session.isLiveMarket) {
+        clearApiGetCache();
       }
 
       const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys] = await Promise.allSettled([
@@ -1422,97 +1269,70 @@ function DashboardPage() {
       setAlerts(nextAlerts);
       setRatings(nextRatings);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
-      setBrokerAuthenticated(false);
       setLastUpdated(new Date());
-      try {
-        sessionStorage.setItem(
-          DASHBOARD_CACHE_KEY,
-          JSON.stringify({
-            indices: nextIndices,
-            watchlist: nextWatchlist,
-            signals: nextSignals,
-            weeklyData: nextWeekly,
-            obData: nextOrderBlocks,
-            sectors: nextSectors,
-            gainers: nextGainers,
-            losers: nextLosers,
-            alerts: nextAlerts,
-            ratings: nextRatings,
-            updatedAt: Date.now(),
-          })
-        );
-      } catch (_) {
-        // ignore cache failures
-      }
+      writePageCache(DASHBOARD_CACHE_KEY, {
+        indices: nextIndices,
+        watchlist: nextWatchlist,
+        signals: nextSignals,
+        weeklyData: nextWeekly,
+        obData: nextOrderBlocks,
+        sectors: nextSectors,
+        gainers: nextGainers,
+        losers: nextLosers,
+        alerts: nextAlerts,
+        ratings: nextRatings,
+        marketMode: sys.status === 'fulfilled' ? (sys.value?.orchestrator?.mode || 'unknown') : marketMode,
+        updatedAt: Date.now(),
+      });
       setLoading(false);
 
-      let authenticated = false;
-      let activeBroker = null;
-      if (userId) {
-        try {
-          const setupRows = await fetchBrokerSetup({ userId });
-          activeBroker = DASHBOARD_BROKER_PRIORITY.find((b) => {
-            const r = setupRows.find((x) => String(x.broker || '').toLowerCase() === b);
-            return brokerRowDrivesDashboardHoldings(r);
-          }) || null;
-          authenticated = Boolean(activeBroker);
-        } catch (_) {
-          authenticated = false;
-          activeBroker = null;
-        }
-      }
-
-      let liveBrokerPositions = [];
-      if (authenticated && userId && activeBroker) {
-        try {
-          if (activeBroker === 'dhan') {
-            const [livePositionsResult, liveHoldingsResult] = await Promise.allSettled([
-              fetchDhanPositions({ userId }),
-              fetchDhanHoldings({ userId }),
-            ]);
-            const [ord0] = await Promise.allSettled([fetchDhanOrders({ userId })]);
-            liveBrokerPositions = mergePositionsHoldingsOrders(
-              livePositionsResult,
-              liveHoldingsResult,
-              ord0,
-            );
-          } else if (activeBroker === 'angelone') {
-            const [p, h] = await Promise.allSettled([
-              fetchAngelonePositions({ userId }),
-              fetchAngeloneHoldings({ userId }),
-            ]);
-            const [o] = await Promise.allSettled([fetchAngeloneOrders({ userId })]);
-            liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
-          } else {
-            const slices = await loadRestBrokerPortfolioSlices(activeBroker, userId);
-            if (slices) {
-              const [p, h, o] = slices;
-              liveBrokerPositions = mergePositionsHoldingsOrders(p, h, o);
-            }
-          }
-        } catch (_) {
-          liveBrokerPositions = [];
-        }
-      }
-      if (!liveBrokerPositions.length && authenticated && activeBroker === 'dhan') {
-        const cachedRows = getCachedBrokerRows(userId);
-        if (cachedRows.length) {
-          liveBrokerPositions = normalizeBrokerRows(cachedRows);
-        }
-      }
-      const finalHoldings = liveBrokerPositions;
-      setBrokerAuthenticated(authenticated);
-      setHoldings(finalHoldings);
+      const forceBrokerLive = Boolean(session.isMarketHours && session.isTradingDay);
+      await refreshBrokerHoldings({ forceLive: forceBrokerLive });
     } finally {
       setLoading(false);
     }
-  }, [userId, isAdmin, hasHydratedData]);
+  }, [userId, hasHydratedData, marketMode, refreshBrokerHoldings]);
 
   useEffect(() => {
-    loadAll({ forceSpinner: true });
-    const timer = setInterval(() => loadAll({ forceSpinner: false }), marketMode === 'websocket' ? 60000 : 180000);
-    return () => clearInterval(timer);
+    let timer;
+    let cancelled = false;
+    (async () => {
+      await loadAll({ forceSpinner: true });
+      if (cancelled) return;
+      const session = await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(
+        session.isWebSocketStreaming ? 45_000 : 90_000,
+        0,
+      );
+      if (pollMs > 0 && session.isLiveMarket) {
+        timer = setInterval(() => loadAll({ forceSpinner: false }), pollMs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [loadAll, marketMode]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    let timer;
+    let cancelled = false;
+    (async () => {
+      const session = await ensureMarketSession();
+      if (cancelled || !session.isMarketHours || !session.isTradingDay) return;
+      const tick = async () => {
+        if (cancelled) return;
+        await refreshBrokerHoldings({ forceLive: true });
+      };
+      await tick();
+      timer = setInterval(tick, 30000);
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [userId, refreshBrokerHoldings]);
 
   useEffect(() => {
     if (location.state?.brokerConsentLimited) {

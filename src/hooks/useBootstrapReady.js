@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../api/apiClient';
+import { ensureMarketSession } from '../utils/marketSession';
 
 /**
  * Unblocks the UI as soon as the API responds (GET /api/system/status).
@@ -48,18 +49,23 @@ export function useBootstrapReady(pollMs = 2000, maxWaitForApiMs = 60000) {
   useEffect(() => {
     if (!apiReady && !timedOut) return undefined;
     let cancelled = false;
-    const id = setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const r = await apiGet('/system/readiness');
-        if (r && r.bootstrap_complete) {
-          setBootstrapComplete(true);
-          clearInterval(id);
+    let id;
+    (async () => {
+      const session = await ensureMarketSession();
+      const readinessPollMs = session.isLiveMarket ? pollMs : Math.max(pollMs, 30000);
+      id = setInterval(async () => {
+        if (cancelled) return;
+        try {
+          const r = await apiGet('/system/readiness');
+          if (r && r.bootstrap_complete) {
+            setBootstrapComplete(true);
+            clearInterval(id);
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
-    }, pollMs);
+      }, readinessPollMs);
+    })();
     return () => {
       cancelled = true;
       clearInterval(id);

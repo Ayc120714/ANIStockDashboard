@@ -1,4 +1,4 @@
-import { tradeApiGet, tradeApiPost } from './tradeApiClient';
+import { tradeApiGet, tradeApiGetLive, tradeApiPost } from './tradeApiClient';
 
 const withUser = (userId) => `user_id=${encodeURIComponent(String(userId || ''))}`;
 
@@ -16,15 +16,15 @@ export const ensureFyersBrokerSession = async ({ user_id } = {}) => {
 
 export const fetchFyersBrokerPositions = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/fyers/positions?${withUser(userId)}`);
+  return tradeApiGetLive(`/fyers/positions?${withUser(userId)}`);
 };
 
 export const fetchFyersBrokerHoldings = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/fyers/holdings?${withUser(userId)}`);
+  return tradeApiGetLive(`/fyers/holdings?${withUser(userId)}`);
 };
 
 export const fetchFyersBrokerOrders = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/fyers/orders?${withUser(userId)}`);
+  return tradeApiGetLive(`/fyers/orders?${withUser(userId)}`);
 };

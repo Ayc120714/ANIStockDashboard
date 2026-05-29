@@ -15,7 +15,10 @@ import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import TradingViewLink from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { runScreenTableFetch } from '../utils/screenPageLoader';
 
+const SECTOR_CACHE_KEY = 'sectorOutlookData';
 const SECTOR_REFRESH_MS = 30000;
 
 function SectorOutlookPage({ onSectorClick }) {
@@ -28,42 +31,33 @@ function SectorOutlookPage({ onSectorClick }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  const loadData = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) {
-      setIsLoading(true);
-    }
-    setLoadError(null);
-    let cacheSet = false;
-    const cached = sessionStorage.getItem('sectorOutlookData');
-    if (!silent && cached) {
-      const parsed = JSON.parse(cached);
-      setTableData(Array.isArray(parsed) ? parsed : []);
-      setIsLoading(false);
-      cacheSet = true;
-    }
-    try {
-      const fresh = await fetchSectorOutlook();
-      sessionStorage.setItem('sectorOutlookData', JSON.stringify(fresh));
-      setTableData(Array.isArray(fresh) ? fresh : []);
-      if (!silent) {
-        setIsLoading(false);
-      }
-    } catch (err) {
-      if (!silent && !cacheSet) {
-        setLoadError(err?.message || 'Failed to load sector outlook.');
-        setIsLoading(false);
-      }
-    }
+  const loadData = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
+    await runScreenTableFetch({
+      cacheKey: SECTOR_CACHE_KEY,
+      fetcher: fetchSectorOutlook,
+      setRows: setTableData,
+      setLoading: (v) => { if (!silent) setIsLoading(v); },
+      setError: setLoadError,
+      forceNetwork,
+    });
   }, []);
 
   useEffect(() => {
     let isMounted = true;
-    loadData({ silent: false });
-    const timer = setInterval(() => {
-      if (isMounted) {
-        loadData({ silent: true });
+    let timer;
+    (async () => {
+      await loadData({ silent: false });
+      if (!isMounted) return;
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(SECTOR_REFRESH_MS, 0);
+      if (pollMs > 0) {
+        timer = setInterval(() => {
+          if (isMounted) {
+            loadData({ silent: true });
+          }
+        }, pollMs);
       }
-    }, SECTOR_REFRESH_MS);
+    })();
     return () => {
       isMounted = false;
       clearInterval(timer);

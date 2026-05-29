@@ -37,6 +37,10 @@ export const tradeApiRequest = async (endpoint, options = {}) => {
 export const tradeApiGet = (endpoint, options = {}) =>
   tradeApiRequest(endpoint, { ...options, method: 'GET' });
 
+/** Broker positions/holdings/orders — always bypass short-lived GET memo (live portfolio data). */
+export const tradeApiGetLive = (endpoint, options = {}) =>
+  tradeApiRequest(endpoint, { ...options, method: 'GET', skipCache: true });
+
 export const tradeApiPost = (endpoint, body, options = {}) =>
   tradeApiRequest(endpoint, {
     ...options,

@@ -1,3 +1,5 @@
+import { getEffectiveGetCacheTtlMs } from '../utils/marketSession';
+
 const resolveDefaultApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/api`;
@@ -20,13 +22,13 @@ const responseInterceptors = [];
 let authTokenGetter = null;
 let unauthorizedHandler = null;
 
-/** In-memory GET response cache (ms). Set REACT_APP_API_GET_CACHE_MS=0 to disable. */
-const GET_CACHE_TTL_MS = (() => {
-  const raw = process.env.REACT_APP_API_GET_CACHE_MS;
-  if (raw === '0' || raw === '') return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.min(n, 120_000) : 12_000;
-})();
+const getGetCacheTtlMs = () => {
+  try {
+    return getEffectiveGetCacheTtlMs();
+  } catch (_) {
+    return 12_000;
+  }
+};
 const GET_CACHE_MAX_ENTRIES = 120;
 const getResponseCache = new Map();
 
@@ -185,12 +187,13 @@ export const apiRequest = async (endpoint, options = {}) => {
   const method = (options.method || 'GET').toUpperCase();
   const tokenPrefix =
     bearerToken && typeof bearerToken === 'string' ? bearerToken.slice(0, 16) : '';
-  const skipGetCache = options.skipCache === true || GET_CACHE_TTL_MS <= 0;
+  const cacheTtlMs = getGetCacheTtlMs();
+  const skipGetCache = options.skipCache === true || cacheTtlMs <= 0;
 
   if (method === 'GET' && !skipGetCache) {
     const ck = cacheKeyForGet(endpoint, tokenPrefix);
     const hit = getResponseCache.get(ck);
-    if (hit && Date.now() - hit.ts < GET_CACHE_TTL_MS) {
+    if (hit && Date.now() - hit.ts < cacheTtlMs) {
       return cloneForCache(hit.data);
     }
   }

@@ -9,6 +9,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchPriceShockers, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
+import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
 
 function PriceShockersPage() {
   const [page, setPage] = useState(1);
@@ -73,26 +74,12 @@ function PriceShockersPage() {
   };
 
   useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
-    setLoadError(null);
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchQuery = String(debouncedSearch || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
-    const cacheKey = `priceShockersData_v2_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
-    let cacheSet = false;
-    if (!isLiveTodayView) {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setTableData(Array.isArray(parsed) ? parsed : []);
-        setIsLoading(false);
-        cacheSet = true;
-      }
-    }
+    const cacheKey = `priceShockersData_v3_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     const loadRows = async () => {
       if (searchMode) {
         const [gainers, losers] = await Promise.all([
@@ -108,19 +95,17 @@ function PriceShockersPage() {
       }
       return fetchPriceShockers(priceType, 200, period, dateStr);
     };
-    loadRows().then((fresh) => {
-      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
-      if (isMounted) {
-        setTableData(Array.isArray(fresh) ? fresh : []);
-        setIsLoading(false);
-      }
-    }).catch((err) => {
-      if (isMounted && !cacheSet) {
-        setLoadError(err?.message || 'Failed to load price shockers.');
-        setIsLoading(false);
-      }
+    let cleanup;
+    runScreenTableFetchWithLivePoll({
+      cacheKey,
+      fetcher: loadRows,
+      setRows: setTableData,
+      setLoading: setIsLoading,
+      setError: setLoadError,
+      isHistoricalView: Boolean(dateStr),
+      onCleanup: (fn) => { cleanup = fn; },
     });
-    return () => { isMounted = false; };
+    return () => cleanup?.();
   }, [priceType, timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;

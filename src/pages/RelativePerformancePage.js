@@ -9,6 +9,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchRelativePerformance, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
+import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
 
 function RelativePerformancePage() {
   const [page, setPage] = useState(1);
@@ -72,47 +73,23 @@ function RelativePerformancePage() {
   };
 
   useEffect(() => {
-    let isMounted = true;
-    setLoadError(null);
     setPage(1);
-    let cacheSet = false;
     const period = timeFrame === 'Short Term' ? '1w' : '6m';
     const dateStr = formatDateParam(selectedDate);
-    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `relativePerformanceData_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
-    if (!isLiveTodayView) {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          setTableData(Array.isArray(parsed) ? parsed : []);
-        } catch (_) {
-          setTableData([]);
-        }
-        setIsLoading(false);
-        cacheSet = true;
-      } else {
-        setIsLoading(true);
-      }
-    } else {
-      setIsLoading(true);
-    }
-    fetchRelativePerformance(period, fetchLimit, dateStr).then((fresh) => {
-      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
-      if (isMounted) {
-        const arr = Array.isArray(fresh) ? fresh : [];
-        setTableData(arr);
-        setIsLoading(false);
-      }
-    }).catch((err) => {
-      if (isMounted && !cacheSet) {
-        setLoadError(err?.message || 'Failed to load relative performance.');
-        setIsLoading(false);
-      }
+    const cacheKey = `relativePerformanceData_v2_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    let cleanup;
+    runScreenTableFetchWithLivePoll({
+      cacheKey,
+      fetcher: () => fetchRelativePerformance(period, fetchLimit, dateStr),
+      setRows: setTableData,
+      setLoading: setIsLoading,
+      setError: setLoadError,
+      isHistoricalView: Boolean(dateStr),
+      onCleanup: (fn) => { cleanup = fn; },
     });
-    return () => { isMounted = false; };
+    return () => cleanup?.();
   }, [timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;

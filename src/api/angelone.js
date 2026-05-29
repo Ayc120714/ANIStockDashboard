@@ -1,4 +1,4 @@
-import { tradeApiGet, tradeApiPost } from './tradeApiClient';
+import { tradeApiGet, tradeApiGetLive, tradeApiPost } from './tradeApiClient';
 
 const withUser = (userId) => `user_id=${encodeURIComponent(String(userId || ''))}`;
 
@@ -16,18 +16,18 @@ export const ensureAngeloneSession = async ({ user_id } = {}) => {
 
 export const fetchAngelonePositions = async ({ userId } = {}) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/angelone/positions?${withUser(userId)}`);
+  const data = await tradeApiGetLive(`/angelone/positions?${withUser(userId)}`);
   return data?.data ?? data;
 };
 
 export const fetchAngeloneHoldings = async ({ userId } = {}) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/angelone/holdings?${withUser(userId)}`);
+  const data = await tradeApiGetLive(`/angelone/holdings?${withUser(userId)}`);
   return data?.data ?? data;
 };
 
 export const fetchAngeloneOrders = async ({ userId } = {}) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/angelone/orders?${withUser(userId)}`);
+  const data = await tradeApiGetLive(`/angelone/orders?${withUser(userId)}`);
   return data?.data ?? data;
 };

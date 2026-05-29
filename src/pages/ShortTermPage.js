@@ -10,6 +10,10 @@ import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/pri
 import { useAuth } from '../auth/AuthContext';
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+
+const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v1';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
@@ -298,22 +302,54 @@ function ShortTermPage() {
       .catch(() => {});
   }, []);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetchWatchlist('short_term'),
-      fetchWatchlistSignals({ timeframe: 'intraday' }),
-    ]).then(([wl, sigs]) => {
-      setData(wl);
-      setSignals(sigs);
-    }).catch(() => {}).finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const cachedWrap = readPageCache(SHORT_TERM_CACHE_KEY);
+    if (cachedWrap?.data) {
+      setData(Array.isArray(cachedWrap.data.watchlist) ? cachedWrap.data.watchlist : []);
+      setSignals(Array.isArray(cachedWrap.data.signals) ? cachedWrap.data.signals : []);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    if (await shouldUseCachedPageDataOnly(SHORT_TERM_CACHE_KEY)) {
+      return;
+    }
+    try {
+      const [wl, sigs] = await Promise.all([
+        fetchWatchlist('short_term'),
+        fetchWatchlistSignals({ timeframe: 'intraday' }),
+      ]);
+      const payload = {
+        watchlist: Array.isArray(wl) ? wl : [],
+        signals: Array.isArray(sigs) ? sigs : [],
+      };
+      writePageCache(SHORT_TERM_CACHE_KEY, payload);
+      setData(payload.watchlist);
+      setSignals(payload.signals);
+    } catch (_) {
+      /* keep cache */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    load();
-    loadSymbols();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
+    let interval;
+    let cancelled = false;
+    (async () => {
+      await load();
+      await loadSymbols();
+      if (cancelled) return;
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(60000, 0);
+      if (pollMs > 0) {
+        interval = setInterval(load, pollMs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [load, loadSymbols]);
 
   useEffect(() => {

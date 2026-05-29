@@ -19,6 +19,9 @@ import TrendReversalTab from './TrendReversalTab';
 import { addToWatchlist } from '../api/watchlist';
 import TradingViewLink from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { readPageCache, writePageCache } from '../utils/pageDataCache';
+import { shouldSkipScreenFetch } from '../utils/screenPageLoader';
 
 const trendColors = { bullish: '#1b5e20', bearish: '#c62828', sideways: '#f57f17' };
 const fmt = (v) => {
@@ -353,46 +356,60 @@ function SignalsAlertsTab() {
     setCustomSetupPage(1);
   };
 
-  const loadMonthlySetup = useCallback(() => {
+  const loadMonthlySetup = useCallback(async () => {
     const monthlyCacheKey = 'advisor_monthly_setup_v1';
+    const cached = readPageCache(monthlyCacheKey);
+    if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
+      setMonthlySetupData(cached.data);
+      setMonthlyLoading(false);
+      if (await shouldSkipScreenFetch(monthlyCacheKey)) {
+        return;
+      }
+    }
     setMonthlyLoading(true);
-    return fetchMonthlyMacdSetup(300)
-      .then((rows) => {
-        setMonthlySetupData(rows);
-        try { sessionStorage.setItem(monthlyCacheKey, JSON.stringify(rows || [])); } catch (_) {}
-      })
-      .catch(() => {})
-      .finally(() => setMonthlyLoading(false));
+    try {
+      const rows = await fetchMonthlyMacdSetup(300);
+      setMonthlySetupData(Array.isArray(rows) ? rows : []);
+      writePageCache(monthlyCacheKey, Array.isArray(rows) ? rows : []);
+    } catch (_) {
+      /* keep cache */
+    } finally {
+      setMonthlyLoading(false);
+    }
   }, []);
 
-  const loadSignals = useCallback(() => {
-    const cacheKey = 'advisor_signals_payload_v1';
+  const loadSignals = useCallback(async () => {
+    const cacheKey = 'advisor_signals_payload_v2';
     const monthlyCacheKey = 'advisor_monthly_setup_v1';
     let hasCachedSignals = false;
-    try {
-      const cachedPayload = sessionStorage.getItem(cacheKey);
-      if (cachedPayload) {
-        const parsed = JSON.parse(cachedPayload);
-        setSignalPayload(parsed || null);
-        setSignalData(parsed?.data || []);
-        hasCachedSignals = true;
-        setSignalsLoading(false);
-      }
-      const cachedMonthly = sessionStorage.getItem(monthlyCacheKey);
-      if (cachedMonthly) {
-        const parsedMonthly = JSON.parse(cachedMonthly);
-        if (Array.isArray(parsedMonthly)) setMonthlySetupData(parsedMonthly);
-      }
-    } catch (_) {}
+    const cached = readPageCache(cacheKey);
+    if (cached?.data) {
+      const parsed = cached.data;
+      setSignalPayload(parsed || null);
+      setSignalData(Array.isArray(parsed?.data) ? parsed.data : []);
+      hasCachedSignals = (parsed?.data || []).length > 0;
+      setSignalsLoading(false);
+    }
+    const cachedMonthly = readPageCache(monthlyCacheKey);
+    if (cachedMonthly?.data && Array.isArray(cachedMonthly.data)) {
+      setMonthlySetupData(cachedMonthly.data);
+    }
 
     if (!hasCachedSignals) setSignalsLoading(true);
-    fetchLatestSignalsPayload(250).then((payload) => {
-      setSignalPayload(payload || null);
-      setSignalData(payload?.data || []);
-      try { sessionStorage.setItem(cacheKey, JSON.stringify(payload || null)); } catch (_) {}
-    }).catch(() => {}).finally(() => setSignalsLoading(false));
 
-    // Keep monthly strategy refresh non-blocking for first paint.
+    const skip = hasCachedSignals && (await shouldSkipScreenFetch(cacheKey));
+    if (!skip) {
+      try {
+        const payload = await fetchLatestSignalsPayload(250);
+        setSignalPayload(payload || null);
+        setSignalData(Array.isArray(payload?.data) ? payload.data : []);
+        writePageCache(cacheKey, payload || { data: [] });
+      } catch (_) {
+        /* keep cache */
+      }
+    }
+    setSignalsLoading(false);
+
     setTimeout(() => {
       loadMonthlySetup();
     }, 0);
@@ -414,19 +431,38 @@ function SignalsAlertsTab() {
     loadSignals();
   }, [loadSignals]);
 
-  const loadCustomSetup = useCallback((refresh = false) => {
-    setCustomSetupLoading(true);
+  const loadCustomSetup = useCallback(async (refresh = false) => {
+    const cacheKey = `advisor_custom_rs_v2_${customSetupMode}`;
     setCustomSetupError(null);
-    fetchCustomRsMacdSetup({ limit: 500, setup_mode: customSetupMode, refresh })
-      .then((payload) => {
-        setCustomSetupRows(Array.isArray(payload?.data) ? payload.data : []);
-        setCustomSetupError(null);
-      })
-      .catch((err) => {
+    const cached = readPageCache(cacheKey);
+    let hydrated = false;
+    if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
+      setCustomSetupRows(cached.data);
+      hydrated = true;
+      setCustomSetupLoading(false);
+    } else if (!hydrated) {
+      setCustomSetupLoading(true);
+    }
+
+    if (!refresh && hydrated && (await shouldSkipScreenFetch(cacheKey))) {
+      return;
+    }
+
+    if (!hydrated) setCustomSetupLoading(true);
+    try {
+      const payload = await fetchCustomRsMacdSetup({ limit: 500, setup_mode: customSetupMode, refresh });
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      setCustomSetupRows(rows);
+      writePageCache(cacheKey, rows);
+      setCustomSetupError(null);
+    } catch (err) {
+      if (!hydrated) {
         setCustomSetupRows([]);
         setCustomSetupError(err?.message || 'Could not load the custom RS / MACD screen.');
-      })
-      .finally(() => setCustomSetupLoading(false));
+      }
+    } finally {
+      setCustomSetupLoading(false);
+    }
   }, [customSetupMode]);
 
   useEffect(() => {
@@ -603,9 +639,20 @@ function SignalsAlertsTab() {
 
   useEffect(() => {
     if (view !== 'signals' || earlyDetectionViewMode !== 'recent') return undefined;
-    const intervalMs = 5 * 60 * 1000;
-    const id = setInterval(() => loadEarlyDetectionRecent(), intervalMs);
-    return () => clearInterval(id);
+    let id;
+    let cancelled = false;
+    (async () => {
+      await ensureMarketSession();
+      if (cancelled) return;
+      const intervalMs = getMarketPollingIntervalMs(5 * 60 * 1000, 0);
+      if (intervalMs > 0) {
+        id = setInterval(() => loadEarlyDetectionRecent(), intervalMs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [view, earlyDetectionViewMode, loadEarlyDetectionRecent]);
 
   const earlyDetectionTable = useMemo(

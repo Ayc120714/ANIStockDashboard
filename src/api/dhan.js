@@ -1,4 +1,4 @@
-import { tradeApiGet, tradeApiPost } from './tradeApiClient';
+import { tradeApiGet, tradeApiGetLive, tradeApiPost } from './tradeApiClient';
 
 const withUser = (userId) => `user_id=${encodeURIComponent(String(userId || ''))}`;
 const DHAN_DAILY_CONSENT_LIMIT = 25;
@@ -71,14 +71,14 @@ export const renewDhanToken = async ({ user_id, client_id, access_token } = {}) 
 
 export const fetchDhanPositions = async ({ userId } = {}) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/dhan/positions?${withUser(userId)}`);
+  const data = await tradeApiGetLive(`/dhan/positions?${withUser(userId)}`);
   return data?.data ?? data;
 };
 
 export const fetchDhanHoldings = async ({ userId } = {}) => {
   if (!userId) return [];
   try {
-    const data = await tradeApiGet(`/dhan/holdings?${withUser(userId)}`);
+    const data = await tradeApiGetLive(`/dhan/holdings?${withUser(userId)}`);
     return data?.data ?? data;
   } catch (e) {
     const msg = String(e?.message || '');
@@ -91,6 +91,6 @@ export const fetchDhanHoldings = async ({ userId } = {}) => {
 
 export const fetchDhanOrders = async ({ userId } = {}) => {
   if (!userId) return [];
-  const data = await tradeApiGet(`/dhan/orders?${withUser(userId)}`);
+  const data = await tradeApiGetLive(`/dhan/orders?${withUser(userId)}`);
   return data?.data ?? data;
 };

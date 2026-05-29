@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import usePageVisitTracker from '../hooks/usePageVisitTracker';
+import { ensureMarketSession } from '../utils/marketSession';
 import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../pages/DashboardPage';
 import LongTermPage from '../pages/LongTermPage';
@@ -38,6 +39,9 @@ import PremiumModuleRoute from './PremiumModuleRoute';
 
 function PageVisitTracker() {
   usePageVisitTracker();
+  useEffect(() => {
+    ensureMarketSession().catch(() => null);
+  }, []);
   return null;
 }
 

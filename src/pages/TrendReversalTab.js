@@ -17,6 +17,7 @@ import {
 import { MdArrowDownward, MdArrowUpward, MdBolt, MdRefresh } from 'react-icons/md';
 import { TableSection, TableTitle } from './SectorOutlook.styles';
 import { fetchBuyTierCardGrid } from '../api/advisor';
+import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import TradingViewLink from '../components/TradingViewLink';
 
 const TF_BLUE = '#1565c0';
@@ -135,18 +136,21 @@ export default function TrendReversalTab() {
   const [sortKey, setSortKey] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
 
+  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v1';
+
   const load = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await fetchBuyTierCardGrid({ refresh, symbol_limit: 800 });
-      setGrid(payload?.data ?? null);
-    } catch (e) {
-      setError(e?.message || 'Failed to load');
-      setGrid(null);
-    } finally {
-      setLoading(false);
-    }
+    await runScreenPayloadFetch({
+      cacheKey: TREND_REVERSAL_CACHE,
+      fetcher: async () => {
+        const payload = await fetchBuyTierCardGrid({ refresh, symbol_limit: 800 });
+        return payload?.data ?? null;
+      },
+      applyPayload: (data) => setGrid(data ?? null),
+      setLoading,
+      setError,
+      forceNetwork: refresh,
+      hasUsable: (p) => Boolean(p && (p.daily || p.weekly || p.monthly)),
+    });
   }, []);
 
   useEffect(() => {

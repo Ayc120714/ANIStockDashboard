@@ -10,6 +10,7 @@ import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
+import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
 
 function VolumeShockersPage() {
   const { isAuthenticated, bootstrapping, user } = useAuth();
@@ -84,44 +85,23 @@ function VolumeShockersPage() {
       return;
     }
 
-    let isMounted = true;
-    setIsLoading(true);
-    setLoadError(null);
     setPage(1);
     const period = timeFrame === 'Week' ? 'week' : timeFrame === 'Month' ? 'month' : 'day';
     const dateStr = formatDateParam(selectedDate);
-    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `volumeShockersData_v3_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
-    let cacheSet = false;
-    if (!isLiveTodayView) {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setTableData(Array.isArray(parsed) ? parsed : []);
-        setIsLoading(false);
-        cacheSet = true;
-      }
-    }
-    fetchVolumeShockers(fetchLimit, period, dateStr).then((fresh) => {
-      if (Array.isArray(fresh) && fresh.length > 0) {
-        sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
-      } else if (!cacheSet) {
-        // Avoid preserving empty snapshots that can mask auth/startup failures.
-        sessionStorage.removeItem(cacheKey);
-      }
-      if (isMounted) {
-        setTableData(Array.isArray(fresh) ? fresh : []);
-        setIsLoading(false);
-      }
-    }).catch((err) => {
-      if (isMounted) {
-        setLoadError(err?.message || 'Failed to load volume shockers.');
-        setIsLoading(false);
-      }
+    const cacheKey = `volumeShockersData_v4_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    let cleanup;
+    runScreenTableFetchWithLivePoll({
+      cacheKey,
+      fetcher: () => fetchVolumeShockers(fetchLimit, period, dateStr),
+      setRows: setTableData,
+      setLoading: setIsLoading,
+      setError: setLoadError,
+      isHistoricalView: Boolean(dateStr),
+      onCleanup: (fn) => { cleanup = fn; },
     });
-    return () => { isMounted = false; };
+    return () => cleanup?.();
   }, [bootstrapping, isAuthenticated, userKey, timeFrame, selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;

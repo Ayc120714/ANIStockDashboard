@@ -8,7 +8,11 @@ import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 import OrderPanel from '../components/OrderPanel';
+
+const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v1';
 
 const recColors = {
   strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
@@ -217,24 +221,51 @@ function LongTermPage() {
       .catch(() => {});
   }, []);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetchWatchlist('long_term'),
-      fetchWatchlistSignals({ timeframe: 'intraday' }),
-    ])
-      .then(([wl, sigs]) => {
-        setData(Array.isArray(wl) ? wl : []);
-        setSignals(Array.isArray(sigs) ? sigs : []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const cachedWrap = readPageCache(LONG_TERM_CACHE_KEY);
+    if (cachedWrap?.data) {
+      setData(Array.isArray(cachedWrap.data.watchlist) ? cachedWrap.data.watchlist : []);
+      setSignals(Array.isArray(cachedWrap.data.signals) ? cachedWrap.data.signals : []);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    if (await shouldUseCachedPageDataOnly(LONG_TERM_CACHE_KEY)) {
+      return;
+    }
+    try {
+      const [wl, sigs] = await Promise.all([
+        fetchWatchlist('long_term'),
+        fetchWatchlistSignals({ timeframe: 'intraday' }),
+      ]);
+      const payload = { watchlist: Array.isArray(wl) ? wl : [], signals: Array.isArray(sigs) ? sigs : [] };
+      writePageCache(LONG_TERM_CACHE_KEY, payload);
+      setData(payload.watchlist);
+      setSignals(payload.signals);
+    } catch (_) {
+      /* keep cache */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    load(); loadSymbols();
-    const iv = setInterval(load, 60000);
-    return () => clearInterval(iv);
+    let iv;
+    let cancelled = false;
+    (async () => {
+      await load();
+      await loadSymbols();
+      if (cancelled) return;
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(60000, 0);
+      if (pollMs > 0) {
+        iv = setInterval(load, pollMs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
   }, [load, loadSymbols]);
 
   useEffect(() => {

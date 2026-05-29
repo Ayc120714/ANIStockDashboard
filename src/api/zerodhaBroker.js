@@ -1,4 +1,4 @@
-import { tradeApiGet, tradeApiPost } from './tradeApiClient';
+import { tradeApiGet, tradeApiGetLive, tradeApiPost } from './tradeApiClient';
 
 const withUser = (userId) => `user_id=${encodeURIComponent(String(userId || ''))}`;
 
@@ -16,15 +16,15 @@ export const ensureZerodhaBrokerSession = async ({ user_id } = {}) => {
 
 export const fetchZerodhaBrokerPositions = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/zerodha/positions?${withUser(userId)}`);
+  return tradeApiGetLive(`/zerodha/positions?${withUser(userId)}`);
 };
 
 export const fetchZerodhaBrokerHoldings = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/zerodha/holdings?${withUser(userId)}`);
+  return tradeApiGetLive(`/zerodha/holdings?${withUser(userId)}`);
 };
 
 export const fetchZerodhaBrokerOrders = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/zerodha/orders?${withUser(userId)}`);
+  return tradeApiGetLive(`/zerodha/orders?${withUser(userId)}`);
 };

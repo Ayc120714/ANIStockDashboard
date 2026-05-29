@@ -32,7 +32,12 @@ import {
   Table
 } from './MarketOutlook.styles';
 
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+
 const MIN_FII_DII_DAYS = 20;
+const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v1';
+const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v1';
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
@@ -80,10 +85,33 @@ function MarketOutlookContent({ apiReady, timedOut }) {
   useEffect(() => {
     let isMounted = true;
 
+    const applyMarketCache = (payload) => {
+      if (!payload) return;
+      if (payload.indexCards?.length) setIndexCards(payload.indexCards);
+      if (payload.smallcapCards?.length) {
+        const cards = payload.smallcapCards;
+        const pad = () => ({ title: '—', trend: 'SIDEWAYS', value: '—', change: '—', percentile: '—', pe: '—' });
+        const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
+        setSmallcapCards(padded.slice(0, 3));
+      }
+      if (payload.tableData) setTableData(payload.tableData);
+      if (payload.lastRefreshedAt) setLastRefreshedAt(new Date(payload.lastRefreshedAt));
+    };
+
     const load = async ({ silent = false } = {}) => {
       if (!silent) {
         setIsLoading(true);
         setLoadError(null);
+      }
+      const cachedWrap = readPageCache(MARKET_OUTLOOK_CACHE_KEY);
+      if (!silent && cachedWrap?.data) {
+        applyMarketCache(cachedWrap.data);
+        setIsLoading(false);
+      }
+      if (await shouldUseCachedPageDataOnly(MARKET_OUTLOOK_CACHE_KEY)) {
+        if (cachedWrap?.data) applyMarketCache(cachedWrap.data);
+        if (!silent) setIsLoading(false);
+        return;
       }
       try {
         const [normalized, tableRows] = await Promise.all([
@@ -91,15 +119,14 @@ function MarketOutlookContent({ apiReady, timedOut }) {
           fetchMarketIndicesTable({ diagnose1d: miDiag }),
         ]);
         if (!isMounted) return;
-        if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
-        if (normalized.smallcapCards?.length) {
-          const cards = normalized.smallcapCards;
-          const pad = () => ({ title: '—', trend: 'SIDEWAYS', value: '—', change: '—', percentile: '—', pe: '—' });
-          const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
-          setSmallcapCards(padded.slice(0, 3));
-        }
-        setTableData(Array.isArray(tableRows) ? tableRows : []);
-        setLastRefreshedAt(new Date());
+        const payload = {
+          indexCards: normalized.indexCards?.length ? normalized.indexCards : indexCards,
+          smallcapCards: normalized.smallcapCards?.length ? normalized.smallcapCards : smallcapCards,
+          tableData: Array.isArray(tableRows) ? tableRows : [],
+          lastRefreshedAt: Date.now(),
+        };
+        applyMarketCache(payload);
+        writePageCache(MARKET_OUTLOOK_CACHE_KEY, payload);
       } catch (error) {
         if (isMounted && !silent) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
@@ -109,11 +136,24 @@ function MarketOutlookContent({ apiReady, timedOut }) {
 
     const loadFiiDii = async ({ silent = false } = {}) => {
       if (!silent) setFiiDiiLoadState('loading');
+      const fiiCached = readPageCache(FII_DII_CACHE_KEY);
+      if (!silent && fiiCached?.data) {
+        setFiiDiiData(fiiCached.data);
+        setFiiDiiLoadState('done');
+      }
+      if (await shouldUseCachedPageDataOnly(FII_DII_CACHE_KEY)) {
+        if (fiiCached?.data) {
+          setFiiDiiData(fiiCached.data);
+          setFiiDiiLoadState('done');
+        }
+        return;
+      }
       try {
         const data = await fetchFiiDiiActivity(MIN_FII_DII_DAYS);
         if (isMounted && data) {
           setFiiDiiData(data);
           setFiiDiiLoadState('done');
+          writePageCache(FII_DII_CACHE_KEY, data);
         } else if (isMounted && !silent) {
           setFiiDiiLoadState('error');
         }
@@ -123,12 +163,20 @@ function MarketOutlookContent({ apiReady, timedOut }) {
       }
     };
 
-    load();
-    loadFiiDii();
-    const marketTimer = setInterval(() => {
-      load({ silent: true });
-      loadFiiDii({ silent: true });
-    }, MARKET_REFRESH_MS);
+    let marketTimer;
+    (async () => {
+      await load();
+      await loadFiiDii();
+      if (!isMounted) return;
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(MARKET_REFRESH_MS, 0);
+      if (pollMs > 0) {
+        marketTimer = setInterval(() => {
+          load({ silent: true });
+          loadFiiDii({ silent: true });
+        }, pollMs);
+      }
+    })();
 
     return () => {
       isMounted = false;

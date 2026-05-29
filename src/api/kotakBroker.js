@@ -1,4 +1,4 @@
-import { tradeApiGet, tradeApiPost } from './tradeApiClient';
+import { tradeApiGet, tradeApiGetLive, tradeApiPost } from './tradeApiClient';
 
 const withUser = (userId) => `user_id=${encodeURIComponent(String(userId || ''))}`;
 
@@ -16,15 +16,15 @@ export const ensureKotakBrokerSession = async ({ user_id } = {}) => {
 
 export const fetchKotakBrokerPositions = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/kotak/positions?${withUser(userId)}`);
+  return tradeApiGetLive(`/kotak/positions?${withUser(userId)}`);
 };
 
 export const fetchKotakBrokerHoldings = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/kotak/holdings?${withUser(userId)}`);
+  return tradeApiGetLive(`/kotak/holdings?${withUser(userId)}`);
 };
 
 export const fetchKotakBrokerOrders = async ({ userId } = {}) => {
   if (!userId) return { data: [], message: '' };
-  return tradeApiGet(`/kotak/orders?${withUser(userId)}`);
+  return tradeApiGetLive(`/kotak/orders?${withUser(userId)}`);
 };

@@ -35,6 +35,8 @@ import {
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook';
 import { fetchStocksBySubsector } from '../api/stocks';
 import { useAuth } from '../auth/AuthContext';
+import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { MdLock } from 'react-icons/md';
 const SUBSECTOR_REFRESH_MS = 30000;
@@ -151,42 +153,39 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   const [mainListPage, setMainListPage] = useState(0);
   const [mainListRowsPerPage, setMainListRowsPerPage] = useState(25);
 
-  const loadSubsectorData = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) {
-      setIsLoading(true);
-    }
-    setLoadError(null);
-    let cacheSet = false;
-    const cached = sessionStorage.getItem(SUBSECTOR_CACHE_KEY);
-    if (!silent && cached) {
-      const parsed = JSON.parse(cached);
-      setSectorData(parsed?.data ? parsed : { weekLabels: [], data: [] });
-      setIsLoading(false);
-      cacheSet = true;
-    }
-    try {
-      const fresh = await fetchSubsectorOutlook();
-      sessionStorage.setItem(SUBSECTOR_CACHE_KEY, JSON.stringify(fresh));
-      setSectorData(fresh?.data ? fresh : { weekLabels: [], data: [] });
-      if (!silent) {
-        setIsLoading(false);
-      }
-    } catch (err) {
-      if (!silent && !cacheSet) {
-        setLoadError(err?.message || 'Failed to load subsector outlook.');
-        setIsLoading(false);
-      }
-    }
+  const applySubsectorPayload = useCallback((payload) => {
+    setSectorData(payload?.data ? payload : { weekLabels: [], data: [] });
   }, []);
+
+  const loadSubsectorData = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
+    if (!silent) setIsLoading(true);
+    await runScreenPayloadFetch({
+      cacheKey: SUBSECTOR_CACHE_KEY,
+      fetcher: fetchSubsectorOutlook,
+      applyPayload: applySubsectorPayload,
+      setLoading: (v) => { if (!silent) setIsLoading(v); },
+      setError: setLoadError,
+      forceNetwork,
+      hasUsable: (p) => Boolean(p && Array.isArray(p.data) && p.data.length > 0),
+    });
+  }, [applySubsectorPayload]);
 
   useEffect(() => {
     let isMounted = true;
-    loadSubsectorData({ silent: false });
-    const timer = setInterval(() => {
-      if (isMounted) {
-        loadSubsectorData({ silent: true });
+    let timer;
+    (async () => {
+      await loadSubsectorData({ silent: false });
+      if (!isMounted) return;
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(SUBSECTOR_REFRESH_MS, 0);
+      if (pollMs > 0) {
+        timer = setInterval(() => {
+          if (isMounted) {
+            loadSubsectorData({ silent: true });
+          }
+        }, pollMs);
       }
-    }, SUBSECTOR_REFRESH_MS);
+    })();
     return () => {
       isMounted = false;
       clearInterval(timer);

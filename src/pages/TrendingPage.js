@@ -9,6 +9,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fetchTrending, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
+import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
 
 function TrendingPage() {
   const [page, setPage] = useState(1);
@@ -72,38 +73,22 @@ function TrendingPage() {
   };
 
   useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
-    setLoadError(null);
     setPage(1);
     const dateStr = formatDateParam(selectedDate);
-    const isLiveTodayView = !dateStr || dateStr === todayDateParam();
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 1000 : 50;
-    const cacheKey = `trendingStocksData_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
-    let cacheSet = false;
-    if (!isLiveTodayView) {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setTableData(Array.isArray(parsed) ? parsed : []);
-        setIsLoading(false);
-        cacheSet = true;
-      }
-    }
-    fetchTrending(fetchLimit, dateStr).then((fresh) => {
-      sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
-      if (isMounted) {
-        setTableData(Array.isArray(fresh) ? fresh : []);
-        setIsLoading(false);
-      }
-    }).catch((err) => {
-      if (isMounted && !cacheSet) {
-        setLoadError(err?.message || 'Failed to load trending stocks.');
-        setIsLoading(false);
-      }
+    const cacheKey = `trendingStocksData_v2_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    let cleanup;
+    runScreenTableFetchWithLivePoll({
+      cacheKey,
+      fetcher: () => fetchTrending(fetchLimit, dateStr),
+      setRows: setTableData,
+      setLoading: setIsLoading,
+      setError: setLoadError,
+      isHistoricalView: Boolean(dateStr),
+      onCleanup: (fn) => { cleanup = fn; },
     });
-    return () => { isMounted = false; };
+    return () => cleanup?.();
   }, [selectedDate, debouncedSearch]);
 
   const dataToFilter = tableData;
