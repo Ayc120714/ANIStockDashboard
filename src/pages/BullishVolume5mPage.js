@@ -31,7 +31,6 @@ const CRITERIA = [
   '5m close > EMA(200)',
   'Volume / EMA(volume, 21) > 2',
   'CVD resets each IST session; bar delta > 0; session CVD rising vs prior bar',
-  'Session CVD > prior trading day close CVD',
 ];
 
 function BullishVolume5mPage() {
@@ -128,7 +127,7 @@ function BullishVolume5mPage() {
     <Box sx={{ p: { xs: 1, md: 0 } }}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Live scan across the universe on 5-minute bars. CVD is cumulative volume delta with a
-        <strong> fresh reset each trading day</strong>; prior session close is used to judge net buying vs yesterday.
+        <strong> fresh reset each trading day</strong>; prior day CVD is shown for context only (not a filter).
       </Typography>
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, alignItems: 'center' }}>
