@@ -6,6 +6,7 @@ import RelativePerformancePage from './RelativePerformancePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
 import TrendingPage from './TrendingPage';
 import VolumeShockersPage from './VolumeShockersPage';
+import BullishVolume5mPage from './BullishVolume5mPage';
 
 function ScreensPage() {
   const [activeTab, setActiveTab] = useState('AI Picks');
@@ -28,6 +29,9 @@ function ScreensPage() {
         </Tab>
         <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
           Alpha Tracker
+        </Tab>
+        <Tab active={activeTab === 'Bullish Vol 5m'} onClick={() => setActiveTab('Bullish Vol 5m')}>
+          Bullish Vol 5m
         </Tab>
         <Tab active={activeTab === 'IPOs'} onClick={() => setActiveTab('IPOs')} last>
           IPOs
@@ -52,6 +56,10 @@ function ScreensPage() {
 
       <TabContent active={activeTab === 'Alpha Tracker'}>
         {activeTab === 'Alpha Tracker' ? <RelativePerformancePage /> : null}
+      </TabContent>
+
+      <TabContent active={activeTab === 'Bullish Vol 5m'}>
+        {activeTab === 'Bullish Vol 5m' ? <BullishVolume5mPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>
