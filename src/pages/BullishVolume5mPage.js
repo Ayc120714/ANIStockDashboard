@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { fetchBullishVolume5m } from '../api/bullishVolume5m';
 import { addToWatchlist } from '../api/watchlist';
+import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
 
 const fmt = (v, d = 2) => {
@@ -34,6 +35,7 @@ const CRITERIA = [
 ];
 
 function BullishVolume5mPage() {
+  const { isSuperAdmin } = useAuth();
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ scanned: 0, count: 0, cached: false, criteria: {} });
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,7 @@ function BullishVolume5mPage() {
   const [lastRun, setLastRun] = useState(null);
 
   const load = useCallback(async (opts = {}) => {
+    if (!isSuperAdmin) return;
     const silent = Boolean(opts.silent);
     if (!silent) setLoading(true);
     setError('');
@@ -73,9 +76,14 @@ function BullishVolume5mPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [universe, volRatio, requireCvd]);
+  }, [universe, volRatio, requireCvd, isSuperAdmin]);
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setLoading(false);
+      setRows([]);
+      return undefined;
+    }
     let timer;
     let mounted = true;
     (async () => {
@@ -93,7 +101,7 @@ function BullishVolume5mPage() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [load, autoRefresh]);
+  }, [load, autoRefresh, isSuperAdmin]);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => Number(b.volume_ratio || 0) - Number(a.volume_ratio || 0)),
@@ -107,6 +115,14 @@ function BullishVolume5mPage() {
       /* ignore */
     }
   };
+
+  if (!isSuperAdmin) {
+    return (
+      <Alert severity="warning" sx={{ mt: 2 }}>
+        This screener is restricted to administrators.
+      </Alert>
+    );
+  }
 
   return (
     <Box sx={{ p: { xs: 1, md: 0 } }}>
