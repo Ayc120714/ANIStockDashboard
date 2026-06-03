@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -14,6 +15,7 @@ import {
   fetchNextWeekMonitorDashboard,
   saveNextWeekMonitorSymbols,
 } from '../api/advisor';
+import { apiGet } from '../api/apiClient';
 import { Table, TableTitle, TableWrapper } from './SectorOutlook.styles';
 
 const POLL_MS = 20000;
@@ -25,18 +27,15 @@ function stepColor(step, total) {
   return '#757575';
 }
 
-function parseSymbolInput(raw) {
-  return String(raw || '')
-    .split(/[\s,;]+/)
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-}
+const normalizeSymbol = (value) => String(value || '').trim().toUpperCase();
 
 export default function NextWeekSetupPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [monitorSymbols, setMonitorSymbols] = useState([]);
-  const [symbolInput, setSymbolInput] = useState('');
+  const [allSymbols, setAllSymbols] = useState([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(true);
+  const [selectedStocks, setSelectedStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -63,6 +62,24 @@ export default function NextWeekSetupPage() {
     return () => clearInterval(id);
   }, [load]);
 
+  useEffect(() => {
+    setSymbolsLoading(true);
+    apiGet('/watchlist/available-symbols')
+      .then((res) => setAllSymbols(res?.data ?? []))
+      .catch(() => setAllSymbols([]))
+      .finally(() => setSymbolsLoading(false));
+  }, []);
+
+  const existingSymbols = useMemo(
+    () => new Set(monitorSymbols.map(normalizeSymbol)),
+    [monitorSymbols],
+  );
+
+  const availableSymbols = useMemo(
+    () => allSymbols.filter((s) => !existingSymbols.has(normalizeSymbol(s.symbol))),
+    [allSymbols, existingSymbols],
+  );
+
   const sorted = useMemo(
     () =>
       [...rows].sort((a, b) => {
@@ -74,11 +91,13 @@ export default function NextWeekSetupPage() {
 
   const stepTotal = rows[0]?.step_total || 6;
 
-  const addSymbolsFromInput = () => {
-    const incoming = parseSymbolInput(symbolInput);
+  const addSelectedStocks = () => {
+    const incoming = selectedStocks
+      .map((s) => normalizeSymbol(typeof s === 'string' ? s : s?.symbol))
+      .filter(Boolean);
     if (!incoming.length) return;
     setMonitorSymbols((prev) => [...new Set([...prev, ...incoming])].sort());
-    setSymbolInput('');
+    setSelectedStocks([]);
   };
 
   const removeSymbol = (sym) => {
@@ -126,7 +145,7 @@ export default function NextWeekSetupPage() {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
           {monitorSymbols.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              No symbols yet — add tickers below (e.g. RELIANCE TCS INFY).
+              No symbols yet — search and pick stocks from the dropdown below.
             </Typography>
           ) : (
             monitorSymbols.map((sym) => (
@@ -140,23 +159,51 @@ export default function NextWeekSetupPage() {
             ))
           )}
         </Box>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-          <TextField
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-start' }}>
+          <Autocomplete
+            multiple
             size="small"
-            label="Add symbols"
-            placeholder="RELIANCE, TCS, INFY"
-            value={symbolInput}
-            onChange={(e) => setSymbolInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addSymbolsFromInput();
-              }
+            options={availableSymbols}
+            loading={symbolsLoading}
+            getOptionLabel={(opt) =>
+              typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || 'N/A'}`
+            }
+            isOptionEqualToValue={(opt, val) =>
+              (opt.symbol || opt) === (val.symbol || val)
+            }
+            filterOptions={(opts, { inputValue }) => {
+              const q = inputValue.trim().toLowerCase();
+              if (!q) return opts.slice(0, 200);
+              return opts.filter(
+                (o) =>
+                  o.symbol.toLowerCase().includes(q) ||
+                  (o.sector || '').toLowerCase().includes(q) ||
+                  (o.subsector || '').toLowerCase().includes(q),
+              );
             }}
-            sx={{ minWidth: 280, flex: 1 }}
+            value={selectedStocks}
+            onChange={(_, newVal) => setSelectedStocks(newVal)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Add symbols"
+                placeholder="Search all stocks (symbol, sector)…"
+              />
+            )}
+            renderTags={() => null}
+            sx={{ minWidth: 320, flex: 1 }}
+            autoHighlight
+            disableCloseOnSelect
+            ListboxProps={{ style: { maxHeight: 280 } }}
           />
-          <Button size="small" variant="outlined" onClick={addSymbolsFromInput}>
-            Add
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={addSelectedStocks}
+            disabled={selectedStocks.length === 0}
+            sx={{ height: 40 }}
+          >
+            {selectedStocks.length > 0 ? `Add (${selectedStocks.length})` : 'Add'}
           </Button>
           <Button
             size="small"
