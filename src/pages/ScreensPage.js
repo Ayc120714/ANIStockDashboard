@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import AiPicksPage from './AiPicksPage';
 import IPOsPage from './IPOsPage';
 import PriceShockersPage from './PriceShockersPage';
@@ -6,18 +6,9 @@ import RelativePerformancePage from './RelativePerformancePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
 import TrendingPage from './TrendingPage';
 import VolumeShockersPage from './VolumeShockersPage';
-import BullishVolume5mPage from './BullishVolume5mPage';
-import { useAuth } from '../auth/AuthContext';
 
 function ScreensPage() {
-  const { isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('AI Picks');
-
-  useEffect(() => {
-    if (!isSuperAdmin && activeTab === 'Bullish Vol 5m') {
-      setActiveTab('AI Picks');
-    }
-  }, [isSuperAdmin, activeTab]);
 
   return (
     <PageContainer>
@@ -38,11 +29,6 @@ function ScreensPage() {
         <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
           Alpha Tracker
         </Tab>
-        {isSuperAdmin ? (
-          <Tab active={activeTab === 'Bullish Vol 5m'} onClick={() => setActiveTab('Bullish Vol 5m')}>
-            Bullish Vol 5m
-          </Tab>
-        ) : null}
         <Tab active={activeTab === 'IPOs'} onClick={() => setActiveTab('IPOs')} last>
           IPOs
         </Tab>
@@ -66,10 +52,6 @@ function ScreensPage() {
 
       <TabContent active={activeTab === 'Alpha Tracker'}>
         {activeTab === 'Alpha Tracker' ? <RelativePerformancePage /> : null}
-      </TabContent>
-
-      <TabContent active={activeTab === 'Bullish Vol 5m'}>
-        {activeTab === 'Bullish Vol 5m' && isSuperAdmin ? <BullishVolume5mPage /> : null}
       </TabContent>
 
       <TabContent active={activeTab === 'IPOs'}>
