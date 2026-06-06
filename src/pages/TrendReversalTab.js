@@ -5,18 +5,24 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
+  IconButton,
   MenuItem,
+  Popover,
   TextField,
+  Tooltip,
   Typography,
   Select,
   FormControl,
   InputLabel,
   Snackbar,
 } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import { MdArrowDownward, MdArrowUpward, MdBolt, MdRefresh } from 'react-icons/md';
 import { TableSection, TableTitle } from './SectorOutlook.styles';
-import { fetchBuyTierCardGrid } from '../api/advisor';
+import { fetchAnalysisBrief, fetchBatchAnalysisContext, fetchBuyTierCardGrid } from '../api/advisor';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import TradingViewLink from '../components/TradingViewLink';
 
@@ -50,6 +56,8 @@ const BUY_HINT = { B1: 'Early', B2: 'Stronger', B3: 'Strongest' };
 const TABLE_COLUMNS = [
   { key: 'symbol', label: 'SYMBOL' },
   { key: 'company', label: 'COMPANY' },
+  { key: 'reversal_context', label: 'REVERSAL SETUP' },
+  { key: 'hold_months', label: 'HOLD' },
   { key: 'mcap', label: 'MCAP (CR)' },
   { key: 'sector', label: 'SECTOR' },
   { key: 'close', label: 'CLOSE' },
@@ -58,6 +66,102 @@ const TABLE_COLUMNS = [
   { key: 'vol', label: 'VOL' },
   { key: 'date', label: 'DATE' },
 ];
+
+const HOLD_MONTHS_FALLBACK = {
+  daily: { B1: '1–2 months', B2: '2–3 months', B3: '3–4 months' },
+  weekly: { B1: '3–4 months', B2: '4–6 months', B3: '6–8 months' },
+  monthly: { B1: '6–8 months', B2: '8–12 months', B3: '12–18 months' },
+};
+
+function fallbackHoldMonths(row, timeframe) {
+  const tier = String(row?.buy_sell_tier || '').toUpperCase();
+  return HOLD_MONTHS_FALLBACK[timeframe]?.[tier] || '—';
+}
+
+const RATING_COLORS = {
+  strong_buy: '#1b5e20',
+  buy: '#2e7d32',
+  hold: '#f57f17',
+  sell: '#c62828',
+  strong_sell: '#b71c1c',
+};
+
+function AiContextPopover({ symbol, context, anchorEl, onClose }) {
+  const open = Boolean(anchorEl);
+  if (!symbol) return null;
+  const rating = String(context?.rating || '').toLowerCase().replace(/\s+/g, '_');
+  return (
+    <Popover
+      open={open}
+      anchorEl={anchorEl}
+      onClose={onClose}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      slotProps={{ paper: { sx: { maxWidth: 380, p: 1.5 } } }}
+    >
+      <Typography variant="caption" sx={{ color: '#546e7a', display: 'block', mb: 0.5 }}>
+        AI company context — same engine as <strong>Advisor → AI Analysis</strong> (Earnings)
+      </Typography>
+      {context?.loading ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant="body2">Running AI analysis…</Typography>
+        </Box>
+      ) : null}
+      {context?.error ? (
+        <Typography variant="body2" color="error" sx={{ fontSize: 12 }}>
+          {context.error}
+        </Typography>
+      ) : null}
+      {!context?.loading && !context?.error && context?.summary ? (
+        <>
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 0.75 }}>
+            {rating ? (
+              <Chip
+                size="small"
+                label={rating.replace(/_/g, ' ').toUpperCase()}
+                sx={{ bgcolor: RATING_COLORS[rating] || '#546e7a', color: '#fff', fontWeight: 700, fontSize: 10 }}
+              />
+            ) : null}
+            {context.confidence != null ? (
+              <Chip size="small" variant="outlined" label={`${context.confidence}% conf.`} sx={{ fontSize: 10 }} />
+            ) : null}
+            {context.from_cache ? (
+              <Chip size="small" variant="outlined" label="cached" sx={{ fontSize: 10 }} />
+            ) : null}
+          </Box>
+          <Typography variant="body2" sx={{ fontSize: 12, lineHeight: 1.45, color: '#37474f' }}>
+            {context.summary}
+          </Typography>
+        </>
+      ) : null}
+      {!context?.loading && !context?.error && !context?.summary ? (
+        <Typography variant="body2" sx={{ fontSize: 12, color: '#777' }}>
+          No AI context yet. Use &quot;Run AI context&quot; above or open AI Analysis tab to analyse this symbol.
+        </Typography>
+      ) : null}
+    </Popover>
+  );
+}
+
+function fallbackReversalContext(row, timeframe) {
+  const tier = String(row?.buy_sell_tier || '').toUpperCase();
+  const prev = String(row?.prev_buy_sell_tier || '').toUpperCase();
+  const fresh = row?.is_fresh ? 'Fresh ' : '';
+  if (tier === 'B1') {
+    if (prev.startsWith('S') && row?.is_fresh) {
+      return `${fresh}${timeframe} reversal ${prev}→B1: sellers fading, early accumulation (RSI ~45–50, DI+ rising).`;
+    }
+    return `${fresh}${timeframe} B1: early bull reversal — buyers regaining control from weak momentum.`;
+  }
+  if (tier.startsWith('B')) {
+    return `${fresh}${timeframe} ${tier}: bullish reversal setup active on technical tier.`;
+  }
+  if (tier.startsWith('S')) {
+    return `${fresh}${timeframe} ${tier}: bearish reversal / distribution pressure on chart.`;
+  }
+  return '—';
+}
 
 const SIGNAL_SORT_ORDER = { B1: 1, B2: 2, B3: 3, S1: 4, S2: 5, S3: 6 };
 
@@ -75,6 +179,10 @@ function sortComparable(row, sortKey) {
       return String(row.symbol || '').toUpperCase();
     case 'company':
       return String(row.company || '').toLowerCase();
+    case 'reversal_context':
+      return String(row.reversal_context || '').toLowerCase();
+    case 'hold_months':
+      return String(row.hold_months || '').toLowerCase();
     case 'mcap':
       return parseMcapSortValue(row.market_cap);
     case 'sector':
@@ -135,8 +243,11 @@ export default function TrendReversalTab() {
   const [snack, setSnack] = useState({ open: false, message: '' });
   const [sortKey, setSortKey] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
+  const [aiBySymbol, setAiBySymbol] = useState({});
+  const [aiBatchLoading, setAiBatchLoading] = useState(false);
+  const [aiPopover, setAiPopover] = useState({ symbol: null, anchorEl: null });
 
-  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v1';
+  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v2';
 
   const load = useCallback(async (refresh = false) => {
     await runScreenPayloadFetch({
@@ -214,6 +325,99 @@ export default function TrendReversalTab() {
     return rows;
   }, [tableRows, sortKey, sortDir]);
 
+  const buyTierRows = useMemo(
+    () => sortedTableRows.filter((r) => String(r.buy_sell_tier || '').toUpperCase().startsWith('B')),
+    [sortedTableRows],
+  );
+
+  const loadAiContextForSymbol = useCallback((symbol, anchorEl) => {
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (!sym) return;
+    setAiPopover({ symbol: sym, anchorEl });
+    setAiBySymbol((prev) => {
+      const cur = prev[sym];
+      if (cur?.summary || cur?.loading) return prev;
+      (async () => {
+        try {
+          let brief = await fetchAnalysisBrief(sym, 'earnings');
+          if (!brief?.summary) {
+            const batch = await fetchBatchAnalysisContext({
+              symbols: [sym],
+              analysisType: 'earnings',
+              refresh: false,
+              maxSymbols: 1,
+            });
+            brief = batch?.data?.[0] || null;
+          }
+          if (!brief?.summary) {
+            setAiBySymbol((p) => ({
+              ...p,
+              [sym]: { loading: false, error: 'AI analysis unavailable — add LLM keys in Profile.' },
+            }));
+            return;
+          }
+          setAiBySymbol((p) => ({
+            ...p,
+            [sym]: {
+              loading: false,
+              summary: brief.summary,
+              rating: brief.rating,
+              confidence: brief.confidence,
+              from_cache: brief.from_cache,
+            },
+          }));
+        } catch (e) {
+          setAiBySymbol((p) => ({
+            ...p,
+            [sym]: { loading: false, error: e?.message || 'Failed to load AI context' },
+          }));
+        }
+      })();
+      return { ...prev, [sym]: { ...(prev[sym] || {}), loading: true, error: null } };
+    });
+  }, []);
+
+  const runBatchAiContext = useCallback(async () => {
+    const symbols = [...new Set(buyTierRows.map((r) => String(r.symbol || '').toUpperCase()).filter(Boolean))].slice(0, 12);
+    if (!symbols.length) {
+      setSnack({ open: true, message: 'No buy-tier stocks in current filter' });
+      return;
+    }
+    setAiBatchLoading(true);
+    try {
+      const res = await fetchBatchAnalysisContext({
+        symbols,
+        analysisType: 'earnings',
+        refresh: false,
+        maxSymbols: 12,
+      });
+      const next = {};
+      (res?.data || []).forEach((row) => {
+        const sym = String(row.symbol || '').toUpperCase();
+        if (!sym) return;
+        next[sym] = {
+          loading: false,
+          summary: row.summary,
+          rating: row.rating,
+          confidence: row.confidence,
+          from_cache: row.from_cache,
+        };
+      });
+      setAiBySymbol((prev) => ({ ...prev, ...next }));
+      const errN = (res?.errors || []).length;
+      setSnack({
+        open: true,
+        message: errN
+          ? `AI context loaded for ${res?.count || 0} stocks (${errN} failed). Click ⓘ on a row to read.`
+          : `AI context ready for ${res?.count || 0} stocks — click ⓘ on any row for popup.`,
+      });
+    } catch (e) {
+      setSnack({ open: true, message: e?.message || 'Batch AI analysis failed' });
+    } finally {
+      setAiBatchLoading(false);
+    }
+  }, [buyTierRows]);
+
   const handleSortClick = (key) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -277,7 +481,8 @@ export default function TrendReversalTab() {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 820 }}>
             Freedom-style filters: latest <strong>technical_signals</strong> bar per timeframe.{' '}
             <strong>B1–B3</strong> / <strong>S1–S3</strong> from the same engine as your screener. ⚡ Fresh = tier changed vs
-            prior bar.
+            prior bar. <strong>Reversal setup</strong> = one-line technical context; <strong>Hold</strong> = suggested months
+            for the {timeframe} bar horizon (not company news).
           </Typography>
         </Box>
         <Button
@@ -417,6 +622,20 @@ export default function TrendReversalTab() {
             <Button variant="outlined" size="small" onClick={copyCsv} sx={{ textTransform: 'none' }}>
               Copy CSV
             </Button>
+            <Tooltip title="Run earnings AI analysis (Advisor → AI Analysis tab) for buy-tier stocks in this filter. Click ⓘ on a row for popup context.">
+              <span>
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={aiBatchLoading || buyTierRows.length === 0}
+                  onClick={runBatchAiContext}
+                  startIcon={aiBatchLoading ? <CircularProgress size={14} color="inherit" /> : <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ textTransform: 'none', bgcolor: '#4527a0', '&:hover': { bgcolor: '#311b92' } }}
+                >
+                  {aiBatchLoading ? 'Analysing…' : `Run AI context (${Math.min(buyTierRows.length, 12)})`}
+                </Button>
+              </span>
+            </Tooltip>
           </Box>
 
           {/* Card grid — 6 per timeframe */}
@@ -521,7 +740,7 @@ export default function TrendReversalTab() {
               <Box component="tbody">
                 {tableRows.length === 0 ? (
                   <Box component="tr">
-                    <Box component="td" colSpan={9} sx={{ p: 3, textAlign: 'center', color: '#9e9e9e' }}>
+                    <Box component="td" colSpan={11} sx={{ p: 3, textAlign: 'center', color: '#9e9e9e' }}>
                       No rows match filters.
                     </Box>
                   </Box>
@@ -533,13 +752,47 @@ export default function TrendReversalTab() {
                     return (
                       <Box component="tr" key={`${r.symbol}-${r.date}-${sig}`} sx={{ '&:nth-of-type(even)': { bgcolor: '#fafafa' } }}>
                         <Box component="td" sx={{ px: 1.25, py: 0.85, fontWeight: 700 }}>
-                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35 }}>
                             <TradingViewLink symbol={r.symbol} />
                             {r.symbol}
+                            {isBuy ? (
+                              <Tooltip title="AI company context (popup)">
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => loadAiContextForSymbol(r.symbol, e.currentTarget)}
+                                  sx={{
+                                    p: 0.25,
+                                    color: aiBySymbol[r.symbol]?.summary ? '#4527a0' : '#90a4ae',
+                                  }}
+                                >
+                                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            ) : null}
                           </Box>
                         </Box>
                         <Box component="td" sx={{ px: 1.25, py: 0.85, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.company}>
                           {r.company || '—'}
+                        </Box>
+                        <Box
+                          component="td"
+                          sx={{
+                            px: 1.25,
+                            py: 0.85,
+                            maxWidth: 360,
+                            fontSize: 11,
+                            color: '#455a64',
+                            lineHeight: 1.35,
+                          }}
+                          title={r.reversal_context || fallbackReversalContext(r, timeframe)}
+                        >
+                          {r.reversal_context || fallbackReversalContext(r, timeframe)}
+                        </Box>
+                        <Box
+                          component="td"
+                          sx={{ px: 1.25, py: 0.85, fontWeight: 700, whiteSpace: 'nowrap', color: isBuy ? '#1b5e20' : '#b71c1c' }}
+                        >
+                          {r.hold_months || fallbackHoldMonths(r, timeframe)}
                         </Box>
                         <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{formatMcap(r.market_cap)}</Box>
                         <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{r.sector || '—'}</Box>
@@ -585,6 +838,13 @@ export default function TrendReversalTab() {
       )}
 
       {!loading && !error && !grid && <Typography color="text.secondary">No data.</Typography>}
+
+      <AiContextPopover
+        symbol={aiPopover.symbol}
+        context={aiPopover.symbol ? aiBySymbol[aiPopover.symbol] : null}
+        anchorEl={aiPopover.anchorEl}
+        onClose={() => setAiPopover({ symbol: null, anchorEl: null })}
+      />
 
       <Snackbar
         open={snack.open}

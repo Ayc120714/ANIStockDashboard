@@ -100,6 +100,8 @@ export const normalizeBrokerRows = (payload) => {
         ?? row?.m2m,
       );
       const computedUnrealized = avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0;
+      const finalUnrealized = unrealized || computedUnrealized;
+      const pnlPctFromAvg = avgPrice > 0 && ltp > 0 ? ((ltp - avgPrice) / avgPrice) * 100 : 0;
       const isDeliveryHolding = toNumber(
         row?.dpQty ?? row?.dp_qty ?? row?.dpQuantity ?? row?.totalQty ?? row?.total_qty ?? row?.totalQuantity,
       ) > 0
@@ -113,7 +115,8 @@ export const normalizeBrokerRows = (payload) => {
         net_qty: netQty,
         avg_price: avgPrice,
         ltp,
-        unrealized_pnl: unrealized || computedUnrealized,
+        unrealized_pnl: finalUnrealized,
+        pnl_pct: pnlPctFromAvg,
         realized_pnl: toNumber(row?.realizedPnl ?? row?.realized_pnl ?? row?.realizedProfit ?? row?.realized_profit),
         day_pnl: toNumber(row?.day_pnl ?? row?.dayPnl ?? row?.mtm ?? row?.m2m),
         state: 'OPEN',

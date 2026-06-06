@@ -1041,6 +1041,39 @@ function LatestRatings({ ratings }) {
   );
 }
 
+const holdingAvgPrice = (h) => {
+  const n = Number(h?.avg_price ?? h?.avgPrice ?? h?.buyAvg ?? h?.averagePrice ?? h?.avgCostPrice);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const holdingLtp = (h) => {
+  const n = Number(h?.ltp ?? h?.lastPrice ?? h?.lastTradedPrice);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const holdingQty = (h) => {
+  const n = Number(h?.net_qty ?? h?.netQty ?? h?.totalQty ?? h?.quantity);
+  return Number.isFinite(n) ? n : 0;
+};
+const holdingPnlAmount = (h) => {
+  const direct = Number(h?.unrealized_pnl ?? h?.unrealizedPnl ?? h?.pnl);
+  if (Number.isFinite(direct) && direct !== 0) return direct;
+  const avg = holdingAvgPrice(h);
+  const ltp = holdingLtp(h);
+  const qty = holdingQty(h);
+  if (avg != null && ltp != null && qty !== 0) return (ltp - avg) * qty;
+  return Number.isFinite(direct) ? direct : null;
+};
+const holdingPnlPctFromAvg = (h) => {
+  const cached = Number(h?.pnl_pct ?? h?.pnlPct);
+  if (Number.isFinite(cached)) return cached;
+  const avg = holdingAvgPrice(h);
+  const ltp = holdingLtp(h);
+  if (avg != null && ltp != null) return ((ltp - avg) / avg) * 100;
+  const pnl = holdingPnlAmount(h);
+  const qty = holdingQty(h);
+  if (avg != null && qty !== 0 && pnl != null) return (pnl / (avg * Math.abs(qty))) * 100;
+  return null;
+};
+
 // ─── My Holdings (Broker Session) ───────────────────────────────────────────
 function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false }) {
   if (!brokerAuthenticated) {
@@ -1111,9 +1144,10 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
             <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
               <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Symbol</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Qty</th>
-              {!compact ? <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Avg</th> : null}
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Avg</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>LTP</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Unrealized P&L</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>P&L</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>P&L %</th>
               {!compact ? <th style={{ textAlign: 'center', padding: '6px 8px', color: '#555', fontWeight: 600 }}>State</th> : null}
             </tr>
           </thead>
@@ -1124,10 +1158,13 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
                   {h.symbol || h.tradingSymbol || h.symbolName || h.scripName || '—'}
                 </td>
                 <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(h.net_qty ?? h.netQty ?? h.totalQty ?? h.quantity, 0)}</td>
-                {!compact ? <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.avg_price)}</td> : null}
-                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.ltp)}</td>
-                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: pctColor(h.unrealized_pnl) }}>
-                  {fmtCur(h.unrealized_pnl)}
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(holdingAvgPrice(h))}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(holdingLtp(h))}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: pctColor(holdingPnlAmount(h)) }}>
+                  {fmtCur(holdingPnlAmount(h))}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: pctColor(holdingPnlPctFromAvg(h)) }}>
+                  {fmtPct(holdingPnlPctFromAvg(h))}
                 </td>
                 {!compact ? (
                   <td style={{ padding: '6px 8px', textAlign: 'center' }}>

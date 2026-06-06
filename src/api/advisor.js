@@ -333,6 +333,29 @@ export const fetchAnalysis = async (symbol) => {
   return data?.data ?? [];
 };
 
+export const fetchAnalysisBrief = async (symbol, analysisType = 'earnings') => {
+  try {
+    return await apiGet(`/advisor/analysis/${encodeURIComponent(symbol)}/brief?analysis_type=${encodeURIComponent(analysisType)}`);
+  } catch (e) {
+    if (String(e?.message || '').includes('404')) return null;
+    throw e;
+  }
+};
+
+export const fetchBatchAnalysisContext = async ({
+  symbols = [],
+  analysisType = 'earnings',
+  refresh = false,
+  maxSymbols = 12,
+} = {}) => {
+  return apiPost('/advisor/analysis/batch-context', {
+    symbols,
+    analysis_type: analysisType,
+    refresh,
+    max_symbols: maxSymbols,
+  });
+};
+
 export const triggerAnalysis = async (symbol, analysisType = 'earnings') => {
   return apiPost(`/advisor/analyze/${symbol}?analysis_type=${analysisType}`, {});
 };
