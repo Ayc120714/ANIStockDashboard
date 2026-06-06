@@ -18,7 +18,6 @@ import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
-import { readBrokerHoldingsCache } from '../utils/brokerHoldingsCache';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
 
@@ -33,7 +32,16 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v1';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v2';
+
+const isAuthFailureMessage = (message) => {
+  const m = String(message || '').toLowerCase();
+  return m.includes('session expired')
+    || m.includes('unauthorized')
+    || m.includes('missing bearer')
+    || m.includes('invalid credentials')
+    || m.includes('request failed: 401');
+};
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const deriveDirectionFromRow = (row) => {
   const reco = String(row?.recommendation || '').toLowerCase();
@@ -1110,10 +1118,12 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map((h) => (
-              <tr key={`${h.symbol}_${h.product_type}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={{ padding: '6px 8px', fontWeight: 700 }}>{h.symbol}</td>
-                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(h.net_qty, 0)}</td>
+            {visibleRows.map((h, idx) => (
+              <tr key={`${h.symbol || h.tradingSymbol || idx}_${h.product_type || 'row'}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '6px 8px', fontWeight: 700 }}>
+                  {h.symbol || h.tradingSymbol || h.symbolName || h.scripName || '—'}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(h.net_qty ?? h.netQty ?? h.totalQty ?? h.quantity, 0)}</td>
                 {!compact ? <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.avg_price)}</td> : null}
                 <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(h.ltp)}</td>
                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: pctColor(h.unrealized_pnl) }}>
@@ -1147,8 +1157,9 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
 function DashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isAuthenticated, accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [indices, setIndices] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
   const [signals, setSignals] = useState([]);
@@ -1192,6 +1203,11 @@ function DashboardPage() {
 
   const loadAll = useCallback(async ({ forceSpinner = false } = {}) => {
     try {
+      if (!isAuthenticated || !accessToken) {
+        setLoadError('Your session expired. Please sign in again.');
+        setLoading(false);
+        return;
+      }
       if (forceSpinner && !hasHydratedData) {
         setLoading(true);
       }
@@ -1213,19 +1229,13 @@ function DashboardPage() {
         setLastUpdated(cached.updatedAt ? new Date(cached.updatedAt) : new Date());
         setLoading(false);
       }
-      const brokerCached = readBrokerHoldingsCache(userId);
-      if (brokerCached?.rows?.length) {
-        setBrokerAuthenticated(Boolean(brokerCached.broker));
-        setHoldings(brokerCached.rows);
-      }
-
       const skipNetwork =
         !session.isLiveMarket
         && cached
         && cachedWrap
         && Date.now() - (cachedWrap.updatedAt || 0) < 24 * 60 * 60_000;
       if (skipNetwork) {
-        await refreshBrokerHoldings({ forceLive: false });
+        await refreshBrokerHoldings({ forceLive: true });
         return;
       }
 
@@ -1246,6 +1256,18 @@ function DashboardPage() {
         fetchRatings({ limit: 8 }),
         apiGet('/system/status'),
       ]);
+
+      const coreResults = [idx, wl, sigs, wk, ob, sec, g, l, al, rat];
+      const fulfilledCount = coreResults.filter((r) => r.status === 'fulfilled').length;
+      const allAuthRejected = fulfilledCount === 0
+        && coreResults.every(
+          (r) => r.status === 'rejected' && isAuthFailureMessage(r.reason?.message),
+        );
+      if (allAuthRejected) {
+        setLoadError('Your session expired. Please sign in again to load dashboard data.');
+        setLoading(false);
+        return;
+      }
 
       const nextIndices = idx.status === 'fulfilled' ? (idx.value || null) : (cached?.indices || null);
       const nextWatchlist = wl.status === 'fulfilled' ? (Array.isArray(wl.value) ? wl.value : []) : (Array.isArray(cached?.watchlist) ? cached.watchlist : []);
@@ -1270,6 +1292,7 @@ function DashboardPage() {
       setRatings(nextRatings);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       setLastUpdated(new Date());
+      setLoadError('');
       writePageCache(DASHBOARD_CACHE_KEY, {
         indices: nextIndices,
         watchlist: nextWatchlist,
@@ -1286,12 +1309,11 @@ function DashboardPage() {
       });
       setLoading(false);
 
-      const forceBrokerLive = Boolean(session.isMarketHours && session.isTradingDay);
-      await refreshBrokerHoldings({ forceLive: forceBrokerLive });
+      await refreshBrokerHoldings({ forceLive: true });
     } finally {
       setLoading(false);
     }
-  }, [userId, hasHydratedData, marketMode, refreshBrokerHoldings]);
+  }, [userId, hasHydratedData, marketMode, refreshBrokerHoldings, isAuthenticated, accessToken]);
 
   useEffect(() => {
     let timer;
@@ -1320,13 +1342,14 @@ function DashboardPage() {
     let cancelled = false;
     (async () => {
       const session = await ensureMarketSession();
-      if (cancelled || !session.isMarketHours || !session.isTradingDay) return;
+      if (cancelled) return;
       const tick = async () => {
         if (cancelled) return;
         await refreshBrokerHoldings({ forceLive: true });
       };
       await tick();
-      timer = setInterval(tick, 30000);
+      const pollMs = session.isMarketHours && session.isTradingDay ? 30000 : 120000;
+      timer = setInterval(tick, pollMs);
     })();
     return () => {
       cancelled = true;
@@ -1371,6 +1394,20 @@ function DashboardPage() {
 
   return (
     <Box sx={{ width: '100%', px: { xs: 1, sm: 2, md: 3 }, py: { xs: 1, md: 2 }, boxSizing: 'border-box' }}>
+      {loadError ? (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={(
+            <Button color="inherit" size="small" onClick={() => navigate('/login', { state: { from: '/' } })}>
+              Sign in
+            </Button>
+          )}
+        >
+          {loadError}
+        </Alert>
+      ) : null}
+
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ fontWeight: 700, fontSize: 22, color: '#1a3c5e' }}>Dashboard</Box>

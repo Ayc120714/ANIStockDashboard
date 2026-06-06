@@ -1,7 +1,11 @@
-import { ensureMarketSession, getCachedMarketSession } from './marketSession';
+import { ensureMarketSession } from './marketSession';
 import { readPageCache, writePageCache } from './pageDataCache';
+import { ensureNormalizedBrokerRows } from './brokerHoldingsNormalize';
 
-const BROKER_HOLDINGS_KEY_PREFIX = 'broker_holdings_v1';
+const BROKER_HOLDINGS_KEY_PREFIX = 'broker_holdings_v2';
+const LEGACY_BROKER_HOLDINGS_KEY_PREFIX = 'broker_holdings_v1';
+/** Offline fallback only — live broker session should always hit APIs first. */
+export const BROKER_HOLDINGS_CACHE_TTL_MS = 5 * 60_000;
 
 export function brokerHoldingsCacheKey(userId) {
   return `${BROKER_HOLDINGS_KEY_PREFIX}_${String(userId || '')}`;
@@ -12,48 +16,58 @@ export function legacyDhanPositionsKey(userId) {
   return `dhan_live_positions_${String(userId || '')}`;
 }
 
+export function isBrokerHoldingsCacheFresh(updatedAt) {
+  if (!updatedAt) return false;
+  return Date.now() - Number(updatedAt) < BROKER_HOLDINGS_CACHE_TTL_MS;
+}
+
+export function clearStaleBrokerHoldingsCaches(userId) {
+  const uid = String(userId || '');
+  if (!uid) return;
+  try {
+    sessionStorage.removeItem(
+      brokerHoldingsCacheKey(uid).replace(BROKER_HOLDINGS_KEY_PREFIX, LEGACY_BROKER_HOLDINGS_KEY_PREFIX),
+    );
+    localStorage.removeItem(legacyDhanPositionsKey(uid));
+    ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'].forEach((broker) => {
+      localStorage.removeItem(`broker_live_positions_${broker}_${uid}`);
+      localStorage.removeItem(`broker_live_orders_${broker}_${uid}`);
+      localStorage.removeItem(`broker_live_sync_${broker}_${uid}`);
+    });
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 export function readBrokerHoldingsCache(userId) {
   const wrapped = readPageCache(brokerHoldingsCacheKey(userId));
-  if (wrapped?.data?.rows && Array.isArray(wrapped.data.rows)) {
-    return wrapped.data;
-  }
-  try {
-    const raw = localStorage.getItem(legacyDhanPositionsKey(userId));
-    if (!raw) return null;
-    const rows = JSON.parse(raw);
-    if (!Array.isArray(rows) || rows.length === 0) return null;
-    return { broker: 'dhan', rows, updatedAt: 0 };
-  } catch (_) {
+  if (!wrapped?.data?.rows || !Array.isArray(wrapped.data.rows) || !wrapped.data.rows.length) {
     return null;
   }
+  const updatedAt = wrapped.updatedAt || wrapped.data.updatedAt || 0;
+  if (!isBrokerHoldingsCacheFresh(updatedAt)) return null;
+  const rows = ensureNormalizedBrokerRows(wrapped.data.rows);
+  if (!rows.length) return null;
+  return { ...wrapped.data, rows, updatedAt };
 }
 
 export function writeBrokerHoldingsCache(userId, broker, rows) {
   const payload = {
     broker: broker || null,
-    rows: Array.isArray(rows) ? rows : [],
+    rows: ensureNormalizedBrokerRows(Array.isArray(rows) ? rows : []),
     updatedAt: Date.now(),
   };
+  clearStaleBrokerHoldingsCaches(userId);
   writePageCache(brokerHoldingsCacheKey(userId), payload);
-  if (broker === 'dhan' && payload.rows.length > 0) {
-    try {
-      localStorage.setItem(legacyDhanPositionsKey(userId), JSON.stringify(payload.rows));
-    } catch (_) {
-      /* ignore quota */
-    }
-  }
   return payload;
 }
 
-/**
- * During NSE market hours, broker portfolio APIs should be called fresh (not 12s GET memo).
- */
+/** Broker portfolio must always use the active session token, not market-hours gating. */
 export async function shouldRefreshBrokerFromApi() {
-  const session = await ensureMarketSession();
-  return Boolean(session.isMarketHours && session.isTradingDay);
+  await ensureMarketSession();
+  return true;
 }
 
 export function shouldRefreshBrokerFromApiSync() {
-  const session = getCachedMarketSession();
-  return Boolean(session?.isMarketHours && session?.isTradingDay);
+  return true;
 }

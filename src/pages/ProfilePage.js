@@ -46,6 +46,8 @@ import { ensureKotakBrokerSession } from '../api/kotakBroker';
 import { ensureFyersBrokerSession } from '../api/fyersBroker';
 import { ensureZerodhaBrokerSession } from '../api/zerodhaBroker';
 import { resolveDhanClientIdForSubmit } from '../utils/dhanBrokerDraft';
+import { writeBrokerHoldingsCache } from '../utils/brokerHoldingsCache';
+import { normalizeBrokerRows } from '../utils/brokerHoldingsNormalize';
 import { PricingMarketingContent } from './PricingPage';
 
 const pickArray = (payload) => {
@@ -114,6 +116,24 @@ const BROKER_SETUP_DOC_URLS = {
   zerodha: 'https://kite.trade/docs/connect/v3/',
 };
 const PROFILE_BROKER_TABS_ORDER = ['dhan', 'samco', 'angelone', 'upstox', 'kotak', 'fyers', 'zerodha'];
+
+/** External signup links shown to end users on the Account tab. */
+const PARTNER_REGISTER_LINKS = [
+  {
+    id: 'tradingview',
+    label: 'TradingView',
+    description: 'Professional charts, screeners, and market analysis.',
+    url: 'https://www.tradingview.com/pricing/?share_your_love=gvc1990',
+    cta: 'Register on TradingView',
+  },
+  {
+    id: 'dhan',
+    label: 'Dhan',
+    description: 'Open a Dhan trading account, then connect it under Broker Integration.',
+    url: 'https://join.dhan.co/?invite=FPOWB90661',
+    cta: 'Open Dhan account',
+  },
+];
 
 /** Hints for password managers; `new-password` on non-login fields often triggers wrong suggestions. */
 const BROKER_ANTI_AUTOFILL_DATA = {
@@ -409,6 +429,7 @@ function ProfilePage() {
         } catch (_) {
           // ignore localStorage failures
         }
+        writeBrokerHoldingsCache(userId, 'dhan', normalizeBrokerRows(mergedPositions));
         if (!mergedPositions.length && !parsedOrders.length) {
           setMessage('Session active. No open positions/holdings found for this account.');
         } else if (!mergedPositionsRaw.length && mergedPositions.length) {
@@ -436,6 +457,7 @@ function ProfilePage() {
         } catch (_) {
           // ignore
         }
+        writeBrokerHoldingsCache(userId, 'angelone', normalizeBrokerRows(mergedPositions));
         if (!mergedPositions.length && !parsedOrders.length) {
           setMessage('Session active. No open positions/holdings found for this Angel One account.');
         } else if (!mergedPositionsRaw.length && mergedPositions.length) {
@@ -458,6 +480,7 @@ function ProfilePage() {
           const mergedPositions = mergedPositionsRaw.length ? mergedPositionsRaw : deriveOpenPositionsFromOrders(parsedOrders);
           setPositions(mergedPositions);
           setOrders(parsedOrders);
+          writeBrokerHoldingsCache(userId, b, normalizeBrokerRows(mergedPositions));
           const note = String(pv?.message || hv?.message || ov?.message || '').trim();
           if (note) {
             setMessage(note);
@@ -1229,6 +1252,48 @@ function ProfilePage() {
                 Change Password
               </Button>
             </Box>
+          </Paper>
+
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 0.5 }}>Register on partner platforms</Typography>
+            <Typography sx={{ fontSize: 12, color: '#666', mb: 1.5 }}>
+              Use these links to sign up for charting and trading accounts. After opening Dhan, return here and
+              complete setup under <strong>Broker Integration</strong>.
+            </Typography>
+            <Stack spacing={1.5}>
+              {PARTNER_REGISTER_LINKS.map((item) => (
+                <Box
+                  key={item.id}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'stretch', sm: 'center' },
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    p: 1.5,
+                    border: '1px solid #e8e8e8',
+                    borderRadius: 1,
+                    bgcolor: '#fafafa',
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{item.label}</Typography>
+                    <Typography sx={{ fontSize: 12, color: '#666', mt: 0.25 }}>{item.description}</Typography>
+                  </Box>
+                  <Button
+                    component={Link}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="outlined"
+                    size="small"
+                    sx={{ textTransform: 'none', whiteSpace: 'nowrap', alignSelf: { xs: 'flex-start', sm: 'center' } }}
+                  >
+                    {item.cta}
+                  </Button>
+                </Box>
+              ))}
+            </Stack>
           </Paper>
 
           <Paper sx={{ p: 2, mb: 2 }}>

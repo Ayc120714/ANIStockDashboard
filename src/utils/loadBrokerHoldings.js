@@ -7,10 +7,13 @@ import {
 import { fetchDhanHoldings, fetchDhanOrders, fetchDhanPositions } from '../api/dhan';
 import { loadRestBrokerPortfolioSlices } from '../api/restBrokerPortfolio';
 import {
+  isBrokerHoldingsCacheFresh,
   readBrokerHoldingsCache,
-  shouldRefreshBrokerFromApi,
   writeBrokerHoldingsCache,
 } from './brokerHoldingsCache';
+import { ensureNormalizedBrokerRows, normalizeBrokerRows } from './brokerHoldingsNormalize';
+
+export { ensureNormalizedBrokerRows, normalizeBrokerRows } from './brokerHoldingsNormalize';
 
 const DASHBOARD_BROKER_PRIORITY = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
 
@@ -29,101 +32,12 @@ const pickArrayRows = (payload) => {
   return [];
 };
 
-export const normalizeBrokerRows = (payload) => {
-  const rows = pickArrayRows(payload);
-  const normalized = rows
-    .map((row) => {
-      const symbol = String(
-        row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
-      ).trim().toUpperCase();
-      const buyQty = toNumber(row?.buyQty ?? row?.buy_qty ?? row?.buyQuantity);
-      const sellQty = toNumber(row?.sellQty ?? row?.sell_qty ?? row?.sellQuantity);
-      const computedHoldingQty = toNumber(
-        (row?.dpQty ?? row?.dp_qty ?? row?.dpQuantity ?? 0)
-        + (row?.t1Qty ?? row?.t1_qty ?? row?.t1Quantity ?? 0)
-        + (row?.availableQty ?? row?.available_qty ?? row?.availableQuantity ?? 0),
-      );
-      const netQty = toNumber(
-        row?.netQty
-        ?? row?.net_qty
-        ?? row?.netQuantity
-        ?? row?.authorisedquantity
-        ?? row?.authorisedQuantity
-        ?? row?.quantity
-        ?? row?.qty
-        ?? row?.availableQty
-        ?? row?.available_qty
-        ?? row?.availableQuantity
-        ?? row?.holdingQty
-        ?? row?.holding_qty
-        ?? row?.holdingQuantity
-        ?? row?.totalQty
-        ?? row?.total_qty
-        ?? row?.totalQuantity
-        ?? computedHoldingQty
-        ?? (buyQty - sellQty),
-      );
-      if (!symbol || netQty === 0) return null;
-      const avgPrice = toNumber(
-        row?.buyAvg
-        ?? row?.buyavg
-        ?? row?.buyAvgPrice
-        ?? row?.buyavgprice
-        ?? row?.buyaverageprice
-        ?? row?.avgPrice
-        ?? row?.averagePrice
-        ?? row?.averageprice
-        ?? row?.avg_price
-        ?? row?.costPrice
-        ?? row?.avgCostPrice,
-      );
-      const ltp = toNumber(
-        row?.ltp
-        ?? row?.Ltp
-        ?? row?.lastPrice
-        ?? row?.lastTradedPrice
-        ?? row?.close
-        ?? row?.price,
-      );
-      const unrealized = toNumber(
-        row?.pnl
-        ?? row?.unrealizedPnl
-        ?? row?.unrealized_pnl
-        ?? row?.holdingPnl
-        ?? row?.holding_pnl
-        ?? row?.profitandloss
-        ?? row?.profitAndLoss
-        ?? row?.profit_and_loss
-        ?? row?.mtm
-        ?? row?.m2m,
-      );
-      const computedUnrealized = avgPrice > 0 && ltp > 0 ? (ltp - avgPrice) * netQty : 0;
-      return {
-        symbol,
-        product_type: String(row?.productType || row?.product_type || row?.product || 'INTRADAY').toUpperCase(),
-        net_qty: netQty,
-        avg_price: avgPrice,
-        ltp,
-        unrealized_pnl: unrealized || computedUnrealized,
-        realized_pnl: toNumber(row?.realizedPnl ?? row?.realized_pnl),
-        state: 'OPEN',
-      };
-    })
-    .filter(Boolean);
-
-  const unique = new Map();
-  normalized.forEach((row) => {
-    unique.set(`${row.symbol}_${row.product_type}`, row);
-  });
-  return [...unique.values()];
-};
-
 const deriveRowsFromDhanOrders = (payload) => {
   const rows = pickArrayRows(payload);
   const bySymbol = new Map();
   rows.forEach((row) => {
     const status = String(row?.orderStatus || row?.status || '').toUpperCase();
-    if (!['FILLED', 'PARTIAL', 'COMPLETE'].includes(status)) return;
+    if (!['FILLED', 'PARTIAL', 'COMPLETE', 'TRADED'].includes(status)) return;
     const symbol = String(
       row?.tradingSymbol || row?.tradingsymbol || row?.symbol || row?.securityId || '',
     ).trim().toUpperCase();
@@ -165,14 +79,18 @@ const mergePositionsHoldingsOrders = (livePositionsResult, liveHoldingsResult, l
   const fromHoldings = liveHoldingsResult.status === 'fulfilled'
     ? normalizeBrokerRows(liveHoldingsResult.value)
     : [];
+  const portfolioRows = [...fromPositions, ...fromHoldings];
+  if (portfolioRows.length) {
+    const merged = new Map();
+    portfolioRows.forEach((row) => {
+      merged.set(`${row.symbol}_${row.product_type}`, row);
+    });
+    return [...merged.values()];
+  }
   const fromOrders = liveOrdersResult?.status === 'fulfilled'
     ? deriveRowsFromDhanOrders(liveOrdersResult.value)
     : [];
-  const merged = new Map();
-  [...fromPositions, ...fromHoldings, ...fromOrders].forEach((row) => {
-    merged.set(`${row.symbol}_${row.product_type}`, row);
-  });
-  return [...merged.values()];
+  return fromOrders;
 };
 
 const brokerRowDrivesDashboardHoldings = (row) => {
@@ -239,7 +157,8 @@ export async function fetchLiveBrokerHoldingsFromApis(userId) {
 }
 
 /**
- * Resolve holdings for dashboard: fresh broker APIs during market hours; cache otherwise.
+ * Resolve holdings for dashboard: always fetch from active broker session token when connected.
+ * Cache is only a short-lived offline fallback when the live API call fails.
  */
 export async function resolveDashboardBrokerHoldings(userId, { forceLive = false } = {}) {
   if (!userId) {
@@ -247,39 +166,41 @@ export async function resolveDashboardBrokerHoldings(userId, { forceLive = false
   }
 
   const cached = readBrokerHoldingsCache(userId);
-  const liveRefresh = forceLive || (await shouldRefreshBrokerFromApi());
+  const cachedRows = ensureNormalizedBrokerRows(cached?.rows || []);
+  const canUseCache = !forceLive
+    && cachedRows.length
+    && isBrokerHoldingsCacheFresh(cached?.updatedAt);
 
-  if (!liveRefresh && cached?.rows?.length) {
+  if (canUseCache) {
     return {
       authenticated: Boolean(cached.broker),
       activeBroker: cached.broker,
-      rows: cached.rows,
+      rows: cachedRows,
       fromCache: true,
     };
   }
 
   try {
     const fresh = await fetchLiveBrokerHoldingsFromApis(userId);
-    if (fresh.rows.length > 0 || liveRefresh) {
+    if (fresh.authenticated) {
       writeBrokerHoldingsCache(userId, fresh.activeBroker, fresh.rows);
       return { ...fresh, fromCache: false };
     }
-    if (cached?.rows?.length) {
+    if (cachedRows.length) {
       return {
         authenticated: Boolean(cached.broker),
         activeBroker: cached.broker,
-        rows: cached.rows,
+        rows: cachedRows,
         fromCache: true,
       };
     }
-    writeBrokerHoldingsCache(userId, fresh.activeBroker, fresh.rows);
     return { ...fresh, fromCache: false };
   } catch (_) {
-    if (cached?.rows?.length) {
+    if (cachedRows.length) {
       return {
         authenticated: Boolean(cached.broker),
         activeBroker: cached.broker,
-        rows: cached.rows,
+        rows: cachedRows,
         fromCache: true,
       };
     }

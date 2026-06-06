@@ -21,6 +21,7 @@ const requestInterceptors = [];
 const responseInterceptors = [];
 let authTokenGetter = null;
 let unauthorizedHandler = null;
+let refreshInFlight = null;
 
 const getGetCacheTtlMs = () => {
   try {
@@ -62,6 +63,19 @@ export const addResponseInterceptor = (interceptor) => {
 export const configureAuthHandlers = ({ getAccessToken, onUnauthorized } = {}) => {
   authTokenGetter = typeof getAccessToken === 'function' ? getAccessToken : null;
   unauthorizedHandler = typeof onUnauthorized === 'function' ? onUnauthorized : null;
+};
+
+/** Single-flight refresh so parallel 401s do not rotate the refresh token multiple times. */
+const attemptTokenRefresh = async () => {
+  if (!unauthorizedHandler) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = Promise.resolve()
+      .then(() => unauthorizedHandler())
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
 };
 
 const runRequestInterceptors = async (config) => {
@@ -183,6 +197,7 @@ const decodeObfuscatedPayload = async (payload, token) => {
 };
 
 export const apiRequest = async (endpoint, options = {}) => {
+  const authRetried = options._authRetried === true;
   const bearerToken = authTokenGetter ? authTokenGetter() : null;
   const method = (options.method || 'GET').toUpperCase();
   const tokenPrefix =
@@ -221,8 +236,17 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
   const interceptedResponse = await runResponseInterceptors(response);
 
-  if (interceptedResponse.status === 401 && unauthorizedHandler) {
-    unauthorizedHandler(interceptedResponse);
+  if (
+    interceptedResponse.status === 401
+    && unauthorizedHandler
+    && !authRetried
+    && !String(endpoint || '').includes('/auth/refresh')
+  ) {
+    const refreshed = await attemptTokenRefresh();
+    if (refreshed) {
+      const { _authRetried: _omit, ...retryOptions } = options;
+      return apiRequest(endpoint, { ...retryOptions, _authRetried: true });
+    }
   }
 
   if (!interceptedResponse.ok) {

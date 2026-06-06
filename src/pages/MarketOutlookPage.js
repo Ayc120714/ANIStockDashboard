@@ -37,15 +37,41 @@ import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../u
 
 const MIN_FII_DII_DAYS = 20;
 const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v1';
-const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v1';
+const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v2';
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
+const MONTHS = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
 const parseIsoLikeDate = (value) => {
   if (!value) return Number.NEGATIVE_INFINITY;
-  const normalized = String(value).trim().replace(/\//g, '-');
+  const raw = String(value).trim();
+  const dmy = raw.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (dmy) {
+    const mon = MONTHS[dmy[2].toLowerCase()];
+    if (mon != null) {
+      return new Date(Number(dmy[3]), mon, Number(dmy[1])).getTime();
+    }
+  }
+  const normalized = raw.replace(/\//g, '-');
   const parsed = Date.parse(normalized);
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+};
+
+/** FII/DII updates after ~8 PM IST; do not freeze on 24h closed-market page cache. */
+const fiiDiiCacheIsStale = (cached) => {
+  if (!cached?.data) return true;
+  const updatedAt = Number(cached.updatedAt) || 0;
+  const latestIso = cached.data?.latest_available_iso;
+  if (!latestIso) return true;
+  const ageMs = Date.now() - updatedAt;
+  if (ageMs > 6 * 60 * 60 * 1000) return true;
+  const serverDay = cached.data?.server_date_iso;
+  if (serverDay && latestIso < serverDay) return true;
+  return false;
 };
 
 const normalizeRecentDaily = (daily, limit) => {
@@ -141,11 +167,9 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         setFiiDiiData(fiiCached.data);
         setFiiDiiLoadState('done');
       }
-      if (await shouldUseCachedPageDataOnly(FII_DII_CACHE_KEY)) {
-        if (fiiCached?.data) {
-          setFiiDiiData(fiiCached.data);
-          setFiiDiiLoadState('done');
-        }
+      if (fiiCached?.data && !fiiDiiCacheIsStale(fiiCached) && (await shouldUseCachedPageDataOnly(FII_DII_CACHE_KEY))) {
+        setFiiDiiData(fiiCached.data);
+        setFiiDiiLoadState('done');
         return;
       }
       try {
@@ -164,23 +188,26 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     };
 
     let marketTimer;
+    let fiiTimer;
     (async () => {
       await load();
       await loadFiiDii();
       if (!isMounted) return;
       await ensureMarketSession();
       const pollMs = getMarketPollingIntervalMs(MARKET_REFRESH_MS, 0);
+      const fiiPollMs = getMarketPollingIntervalMs(MARKET_REFRESH_MS, 30 * 60 * 1000);
       if (pollMs > 0) {
-        marketTimer = setInterval(() => {
-          load({ silent: true });
-          loadFiiDii({ silent: true });
-        }, pollMs);
+        marketTimer = setInterval(() => load({ silent: true }), pollMs);
+      }
+      if (fiiPollMs > 0) {
+        fiiTimer = setInterval(() => loadFiiDii({ silent: true }), fiiPollMs);
       }
     })();
 
     return () => {
       isMounted = false;
       clearInterval(marketTimer);
+      clearInterval(fiiTimer);
     };
   }, [miDiag]);
 

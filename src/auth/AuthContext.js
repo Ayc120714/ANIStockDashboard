@@ -117,9 +117,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     configureAuthHandlers({
       getAccessToken: () => localStorage.getItem(ACCESS_KEY) || '',
-      onUnauthorized: async () => {
-        await tryRefresh();
-      },
+      onUnauthorized: () => tryRefresh(),
     });
   }, [tryRefresh]);
 
