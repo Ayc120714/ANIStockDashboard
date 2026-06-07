@@ -232,9 +232,10 @@ export default function NextWeekSetupPage() {
           <CircularProgress />
         </Box>
       ) : (
+        <>
+        <TableTitle>Your monitor list ({sorted.length})</TableTitle>
         <TableWrapper>
           <Table>
-            <TableTitle>Your monitor list ({sorted.length})</TableTitle>
             <thead>
               <tr>
                 <th>Symbol</th>
@@ -295,6 +296,7 @@ export default function NextWeekSetupPage() {
             </tbody>
           </Table>
         </TableWrapper>
+        </>
       )}
     </Box>
   );

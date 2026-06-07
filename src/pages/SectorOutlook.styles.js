@@ -13,6 +13,7 @@ export const TableTitle = styled.h3`
 `;
 
 export const TableWrapper = styled.div`
+  width: 100%;
   overflow-x: auto;
   background: white;
   border-radius: 8px;
@@ -21,6 +22,14 @@ export const TableWrapper = styled.div`
     border-radius: 4px;
     box-shadow: none;
   }
+`;
+
+/** Narrow result tables (few columns) — shrink-wrap instead of full-page stretch */
+export const TableWrapperCompact = styled(TableWrapper)`
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  vertical-align: top;
 `;
 
 export const Table = styled.table`
@@ -124,4 +133,9 @@ export const Table = styled.table`
       font-size: 11px;
     }
   }
+`;
+
+export const TableCompact = styled(Table)`
+  width: auto;
+  table-layout: fixed;
 `;

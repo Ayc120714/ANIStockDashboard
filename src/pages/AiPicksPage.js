@@ -292,10 +292,9 @@ function AiPicksPage() {
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#0b3d91' }}>
             Weekly AI Picks — Swing Trade Setup
           </h2>
-          <span style={{ fontSize: 12, color: '#666' }}>
-            {data.pick_date ? `Generated: ${data.pick_date}` : ''}
-            {' · '}Extended targets: 4R / 6R / 10R (risk multiples from entry)
-          </span>
+          {data.pick_date ? (
+            <span style={{ fontSize: 12, color: '#666' }}>Generated: {data.pick_date}</span>
+          ) : null}
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <Button size="small" variant="contained" disabled={checkedSymbols.size === 0} onClick={() => handleAddSelected('short_term')} sx={{ textTransform: 'none' }}>

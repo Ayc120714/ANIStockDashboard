@@ -198,6 +198,7 @@ export const TableTitle = styled.h3`
 `;
 
 export const TableWrapper = styled.div`
+  width: 100%;
   overflow-x: auto;
   background: white;
   border-radius: 8px;

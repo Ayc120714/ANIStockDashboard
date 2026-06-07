@@ -669,12 +669,6 @@ function LongTermPage() {
         <IconButton size="small" onClick={load} title="Refresh now"><MdRefresh /></IconButton>
       </Box>
 
-      {!isAdmin && (
-        <Typography sx={{ mb: 1.2, fontSize: 12, color: '#666' }}>
-          Your long-term list starts empty by design. Add symbols to view and track only your own entries.
-        </Typography>
-      )}
-
       <OrderPanel
         defaultSymbol={defaultOrderSymbol}
         symbolOptions={dedupedData.map((r) => r.symbol)}

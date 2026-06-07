@@ -16,6 +16,7 @@ import {
   recentWindowDates,
 } from '../utils/earlyDetectionTable';
 import TrendReversalTab from './TrendReversalTab';
+import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
 import { addToWatchlist } from '../api/watchlist';
 import TradingViewLink from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
@@ -204,13 +205,15 @@ function FinancialAdvisorPage() {
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tab label="Signals & Alerts" />
         <Tab label="Trend Reversal" />
+        <Tab label="Chart & Fundamental" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
       {tab === 1 && <TrendReversalTab />}
-      {tab === 2 && <AnalysisTab />}
-      {tab === 3 && <PortfolioTab />}
+      {tab === 2 && <ChartFundamentalAgentTab />}
+      {tab === 3 && <AnalysisTab />}
+      {tab === 4 && <PortfolioTab />}
     </TableSection>
   );
 }
@@ -978,9 +981,6 @@ function SignalsAlertsTab() {
           <TableTitle style={{ fontSize: 15, marginBottom: 8, color: '#0b3d91' }}>
             Early detection
           </TableTitle>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12, mb: 1, maxWidth: 720 }}>
-            Momentum setups by timeframe. Filter by squeeze colour below.
-          </Typography>
           <Tabs
             value={earlyDetectionTimeframe}
             onChange={(_, v) => {

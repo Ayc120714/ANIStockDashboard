@@ -21,7 +21,7 @@ import {
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import { MdArrowDownward, MdArrowUpward, MdBolt, MdRefresh } from 'react-icons/md';
-import { TableSection, TableTitle } from './SectorOutlook.styles';
+import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { fetchAnalysisBrief, fetchBatchAnalysisContext, fetchBuyTierCardGrid } from '../api/advisor';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import TradingViewLink from '../components/TradingViewLink';
@@ -29,6 +29,7 @@ import TradingViewLink from '../components/TradingViewLink';
 const TF_BLUE = '#1565c0';
 const BORDER = '1px solid #e0e0e0';
 const CARD_BG = '#fafafa';
+const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 
 const TIMES = [
   { tf: 'daily', label: 'Daily' },
@@ -476,15 +477,7 @@ export default function TrendReversalTab() {
   return (
     <TableSection>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 1 }}>
-        <Box>
-          <TableTitle style={{ margin: 0 }}>Trend reversal</TableTitle>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 820 }}>
-            Freedom-style filters: latest <strong>technical_signals</strong> bar per timeframe.{' '}
-            <strong>B1–B3</strong> / <strong>S1–S3</strong> from the same engine as your screener. ⚡ Fresh = tier changed vs
-            prior bar. <strong>Reversal setup</strong> = one-line technical context; <strong>Hold</strong> = suggested months
-            for the {timeframe} bar horizon (not company news).
-          </Typography>
-        </Box>
+        <TableTitle style={{ margin: 0 }}>Trend reversal</TableTitle>
         <Button
           size="small"
           variant="outlined"
@@ -692,69 +685,47 @@ export default function TrendReversalTab() {
           <Typography variant="body2" sx={{ fontWeight: 700, color: '#37474f', mb: 0.5 }}>
             {sortedTableRows.length} results
           </Typography>
-          {tableRows.length > 0 ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              Sort: click a column header; click again to reverse (↑ / ↓). Works with any timeframe or signal filter.
-            </Typography>
-          ) : null}
-
-          <Box sx={{ overflowX: 'auto', border: BORDER, borderRadius: 1, bgcolor: '#fff' }}>
-            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <Box component="thead" sx={{ bgcolor: '#1a3c5e' }}>
-                <Box component="tr">
+          <TableWrapper>
+            <Table style={{ fontSize: 13 }}>
+              <thead>
+                <tr>
                   {TABLE_COLUMNS.map((col) => {
                     const active = sortKey === col.key;
                     return (
-                      <Box
-                        component="th"
+                      <th
                         key={col.key}
+                        style={{ ...compact, color: '#fff', cursor: 'pointer', userSelect: 'none' }}
                         onClick={() => handleSortClick(col.key)}
-                        sx={{
-                          color: '#fff',
-                          textAlign: 'left',
-                          px: 1.25,
-                          py: 1,
-                          fontWeight: 700,
-                          fontSize: 11,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer',
-                          userSelect: 'none',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
-                        }}
                       >
-                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                           {col.label}
                           {active ? (
-                            sortDir === 'asc' ? (
-                              <MdArrowUpward style={{ fontSize: 14 }} />
-                            ) : (
-                              <MdArrowDownward style={{ fontSize: 14 }} />
-                            )
+                            sortDir === 'asc' ? <MdArrowUpward size={14} /> : <MdArrowDownward size={14} />
                           ) : null}
-                        </Box>
-                      </Box>
+                        </span>
+                      </th>
                     );
                   })}
-                </Box>
-              </Box>
-              <Box component="tbody">
+                </tr>
+              </thead>
+              <tbody>
                 {tableRows.length === 0 ? (
-                  <Box component="tr">
-                    <Box component="td" colSpan={11} sx={{ p: 3, textAlign: 'center', color: '#9e9e9e' }}>
+                  <tr>
+                    <td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#9e9e9e' }}>
                       No rows match filters.
-                    </Box>
-                  </Box>
+                    </td>
+                  </tr>
                 ) : (
                   sortedTableRows.map((r) => {
                     const sig = String(r.buy_sell_tier || '').toUpperCase();
                     const isBuy = sig.startsWith('B');
                     const chg = formatChg(r.chg_pct);
                     return (
-                      <Box component="tr" key={`${r.symbol}-${r.date}-${sig}`} sx={{ '&:nth-of-type(even)': { bgcolor: '#fafafa' } }}>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85, fontWeight: 700 }}>
-                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35 }}>
-                            <TradingViewLink symbol={r.symbol} />
+                      <tr key={`${r.symbol}-${r.date}-${sig}`}>
+                        <td style={{ ...compact, fontWeight: 700 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             {r.symbol}
+                            <TradingViewLink symbol={r.symbol} />
                             {isBuy ? (
                               <Tooltip title="AI company context (popup)">
                                 <IconButton
@@ -769,71 +740,56 @@ export default function TrendReversalTab() {
                                 </IconButton>
                               </Tooltip>
                             ) : null}
-                          </Box>
-                        </Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.company}>
+                          </span>
+                        </td>
+                        <td style={{ ...compact, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.company}>
                           {r.company || '—'}
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            px: 1.25,
-                            py: 0.85,
-                            maxWidth: 360,
-                            fontSize: 11,
-                            color: '#455a64',
-                            lineHeight: 1.35,
-                          }}
+                        </td>
+                        <td
+                          style={{ ...compact, maxWidth: 360, fontSize: 11, color: '#455a64', lineHeight: 1.35, whiteSpace: 'normal' }}
                           title={r.reversal_context || fallbackReversalContext(r, timeframe)}
                         >
                           {r.reversal_context || fallbackReversalContext(r, timeframe)}
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{ px: 1.25, py: 0.85, fontWeight: 700, whiteSpace: 'nowrap', color: isBuy ? '#1b5e20' : '#b71c1c' }}
-                        >
+                        </td>
+                        <td style={{ ...compact, fontWeight: 700, color: isBuy ? '#1b5e20' : '#b71c1c' }}>
                           {r.hold_months || fallbackHoldMonths(r, timeframe)}
-                        </Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{formatMcap(r.market_cap)}</Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{r.sector || '—'}</Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{formatClose(r.close)}</Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85 }}>
-                          <Box
-                            component="span"
-                            sx={{
+                        </td>
+                        <td style={compact}>{formatMcap(r.market_cap)}</td>
+                        <td style={compact}>{r.sector || '—'}</td>
+                        <td style={compact}>{formatClose(r.close)}</td>
+                        <td style={compact}>
+                          <span
+                            style={{
                               display: 'inline-block',
-                              px: 1,
-                              py: 0.25,
-                              borderRadius: 1,
+                              padding: '2px 8px',
+                              borderRadius: 4,
                               fontWeight: 800,
                               fontSize: 11,
-                              bgcolor: isBuy ? '#e8f5e9' : '#ffebee',
+                              background: isBuy ? '#e8f5e9' : '#ffebee',
                               color: isBuy ? '#1b5e20' : '#b71c1c',
                             }}
                           >
                             {sig || '—'}
-                          </Box>
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            px: 1.25,
-                            py: 0.85,
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            ...compact,
                             fontWeight: 600,
                             color: chg.pos === true ? '#2e7d32' : chg.pos === false ? '#c62828' : 'inherit',
                           }}
                         >
                           {chg.text}
-                        </Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85 }}>{formatVol(r.volume)}</Box>
-                        <Box component="td" sx={{ px: 1.25, py: 0.85, color: '#546e7a' }}>{r.date || '—'}</Box>
-                      </Box>
+                        </td>
+                        <td style={compact}>{formatVol(r.volume)}</td>
+                        <td style={{ ...compact, color: '#546e7a' }}>{r.date || '—'}</td>
+                      </tr>
                     );
                   })
                 )}
-              </Box>
-            </Box>
-          </Box>
+              </tbody>
+            </Table>
+          </TableWrapper>
         </>
       )}
 

@@ -197,6 +197,33 @@ export const fetchBuyTierCardGrid = async ({ refresh = false, symbol_limit = 800
   return apiGet(`/advisor/signals/buy-tier-cards?${params.toString()}`);
 };
 
+/** Chart + Fundamental Agent screener (RS, DMI, RVOL, EMA stack, bias/rating/horizon). */
+export const fetchChartFundamentalAgent = async ({
+  refresh = false,
+  limit = 300,
+  symbol_limit = 800,
+  rvol_min = 1.2,
+  scan_profile = 'chartink_rs_daily',
+  min_gates = 4,
+  include_partial = false,
+  include_accumulation_only = false,
+  symbols = '',
+  as_of = '',
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('rvol_min', String(rvol_min));
+  params.set('scan_profile', String(scan_profile));
+  params.set('min_gates', String(min_gates));
+  if (include_partial) params.set('include_partial', 'true');
+  if (include_accumulation_only) params.set('include_accumulation_only', 'true');
+  if (symbols && String(symbols).trim()) params.set('symbols', String(symbols).trim());
+  if (as_of && String(as_of).trim()) params.set('as_of', String(as_of).trim());
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/chart-fundamental-agent?${params.toString()}`);
+};
+
 export const fetchLiveScreenerSignals = async ({
   limit = 150,
   symbols = '',

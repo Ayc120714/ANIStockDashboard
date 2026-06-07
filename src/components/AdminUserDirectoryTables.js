@@ -463,9 +463,6 @@ export default function AdminUserDirectoryTables({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box>
         <TableTitle>Lifetime members ({tierLifetimeUsers.length})</TableTitle>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, maxWidth: 720 }}>
-          Permanent premium until you remove lifetime or move users to complimentary (row action or bulk below).
-        </Typography>
         <BulkBar count={selectedLifetime.length} busy={busy} onClear={() => setSelectedLifetime([])}>
           <Button
             size="small"
@@ -504,11 +501,6 @@ export default function AdminUserDirectoryTables({
 
       <Box>
         <TableTitle>Yearly &amp; other premium ({tierYearlyOtherPremiumUsers.length})</TableTitle>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, maxWidth: 720 }}>
-          Active paid term (IST), complimentary, allowlist, or grandfathered access — everyone here has effective premium
-          but is not on lifetime. Use row actions or multi-select + bulk <strong>Lifetime premium</strong> to move users
-          to the lifetime list. The server applies all updates in a single database commit.
-        </Typography>
         <BulkBar count={selectedYearly.length} busy={busy} onClear={() => setSelectedYearly([])}>
           <Button
             size="small"
@@ -547,10 +539,6 @@ export default function AdminUserDirectoryTables({
 
       <Box>
         <TableTitle>Basic users ({tierBasicUsers.length})</TableTitle>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, maxWidth: 720 }}>
-          No effective premium under current server rules. Select rows to grant <strong>complimentary</strong> (premium
-          without payment) or <strong>lifetime</strong> in bulk; each bulk action is one database commit on the server.
-        </Typography>
         <BulkBar count={selectedBasic.length} busy={busy} onClear={() => setSelectedBasic([])}>
           <Button
             size="small"

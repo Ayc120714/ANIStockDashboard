@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
-import { Box, TextField, ButtonGroup, Button, Checkbox, Typography } from '@mui/material';
+import { Box, TextField, ButtonGroup, Button, Checkbox } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
@@ -217,9 +217,6 @@ function RelativePerformancePage() {
       </Box>
       <TableSection>
         <TableTitle>Alpha Tracker</TableTitle>
-        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mb: 1, maxWidth: 720 }}>
-          RS% = relative strength vs NIFTY for the selected horizon.
-        </Typography>
         <TableWrapper>
           <Table>
             <thead>
