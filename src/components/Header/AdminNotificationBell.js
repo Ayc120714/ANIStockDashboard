@@ -18,20 +18,9 @@ import {
   fetchAdminNotifications,
   markAdminNotificationRead,
 } from '../../api/auth';
+import { formatDateTimeIST } from '../../utils/istTime';
 
 const POLL_MS = 60_000;
-
-function formatWhen(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function AdminNotificationBell() {
   const navigate = useNavigate();
@@ -175,7 +164,7 @@ function AdminNotificationBell() {
                       {n.body}
                     </Typography>
                     <Typography component="span" variant="caption" sx={{ color: 'text.disabled' }}>
-                      {formatWhen(n.created_at)}
+                      {formatDateTimeIST(n.created_at)}
                     </Typography>
                   </>
                 }
