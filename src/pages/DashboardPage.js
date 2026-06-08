@@ -53,6 +53,25 @@ const deriveDirectionFromRow = (row) => {
 };
 const normalizeMobile = (value) => String(value || '').replace(/\D/g, '');
 
+/** One row per symbol — watchlist API can return the same ticker in short + long lists. */
+const dedupeWatchlistBySymbol = (rows = []) => {
+  const bySymbol = new Map();
+  (rows || []).forEach((row) => {
+    const symbol = String(row?.symbol || '').trim().toUpperCase();
+    if (!symbol) return;
+    const existing = bySymbol.get(symbol);
+    if (!existing) {
+      bySymbol.set(symbol, row);
+      return;
+    }
+    const preferNew =
+      (row.list_type === 'short_term' && existing.list_type !== 'short_term')
+      || (isFiniteNumber(row.day1d) && !isFiniteNumber(existing.day1d));
+    if (preferNew) bySymbol.set(symbol, row);
+  });
+  return Array.from(bySymbol.values());
+};
+
 const Card = ({ children, sx, ...props }) => (
   <Box sx={{ bgcolor: '#fff', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', p: 2, ...sx }} {...props}>{children}</Box>
 );
@@ -74,7 +93,14 @@ const StatBox = ({ label, value, sub, color }) => (
 
 // ─── Market Pulse ───────────────────────────────────────────────────────────
 function MarketPulse({ indices }) {
-  const allCards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
+  const rawCards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
+  const seenTitles = new Set();
+  const allCards = rawCards.filter((c) => {
+    const title = String(c?.title || '').trim();
+    if (!title || seenTitles.has(title)) return false;
+    seenTitles.add(title);
+    return true;
+  });
   if (!allCards.length) {
     return (
       <Card>
@@ -102,7 +128,7 @@ function MarketPulse({ indices }) {
 // ─── Portfolio Snapshot ─────────────────────────────────────────────────────
 function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
   const navigate = useNavigate();
-  const all = watchlist;
+  const all = useMemo(() => dedupeWatchlistBySymbol(watchlist), [watchlist]);
   const weekly = weeklyData;
   const sigArr = signals;
   const recoColors = { 'STRONG BUY': '#1b5e20', 'BUY': '#43a047', 'HOLD': '#f57f17', 'SELL': '#c62828', 'STRONG SELL': '#b71c1c', 'NEAR ENTRY': '#1565c0' };
@@ -129,8 +155,8 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
     overboughtSymbols,
     oversoldSymbols,
   } = useMemo(() => {
-    const stCountMemo = all.filter((w) => w.list_type === 'short_term').length;
-    const ltCountMemo = all.filter((w) => w.list_type === 'long_term').length;
+    const stCountMemo = watchlist.filter((w) => w.list_type === 'short_term').length;
+    const ltCountMemo = watchlist.filter((w) => w.list_type === 'long_term').length;
     const rowsWithDay = all.filter((w) => isFiniteNumber(w?.day1d));
     const gainersMemo = rowsWithDay.filter((w) => w.day1d > 0);
     const losersMemo = rowsWithDay.filter((w) => w.day1d < 0);
@@ -230,7 +256,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
       overboughtSymbols: overboughtSymbolsMemo,
       oversoldSymbols: oversoldSymbolsMemo,
     };
-  }, [all, weekly, sigArr]);
+  }, [all, weekly, sigArr, watchlist]);
 
   if (!all.length) return (
     <Card sx={{ textAlign: 'center', py: 4, color: '#888' }}>
@@ -402,7 +428,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
             </tr>
           </thead>
           <tbody>
-            {topMovers.map(w => {
+            {topMovers.map((w, idx) => {
               let status = '—';
               if (w.price && w.target_short_term && Math.abs(w.price - w.target_short_term) / w.target_short_term < 0.05) status = 'Near Target';
               else if (w.price && w.stop_loss && Math.abs(w.price - w.stop_loss) / w.stop_loss < 0.05) status = 'Near SL';
@@ -416,7 +442,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
                         : status === 'SIDEWAYS' || status === 'HOLD' ? '#555'
                           : '#888';
               return (
-                <tr key={w.symbol} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <tr key={`${w.symbol}-${w.id ?? idx}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>{w.symbol}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(w.price)}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', color: pctColor(w.day1d), fontWeight: 600 }}>{fmtPct(w.day1d)}</td>
@@ -1199,6 +1225,7 @@ function DashboardPage() {
   const [loadError, setLoadError] = useState('');
   const [indices, setIndices] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
+  const dedupedWatchlist = useMemo(() => dedupeWatchlistBySymbol(watchlist), [watchlist]);
   const [signals, setSignals] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
   const [obData, setObData] = useState([]);
@@ -1500,7 +1527,7 @@ function DashboardPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) minmax(300px,360px)' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
-              <RelativeRegimeBoard watchlist={watchlist} indices={indices} />
+              <RelativeRegimeBoard watchlist={dedupedWatchlist} indices={indices} />
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <WeeklyEntries weeklyData={weeklyData} />
                 <OrderBlockZones obData={obData} />
