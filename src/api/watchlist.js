@@ -19,7 +19,7 @@ export const fetchWatchlist = async (listType = null, options = {}) => {
   if (includeAll) params.set('include_all', 'true');
   const qs = params.toString();
   if (qs) url += `?${qs}`;
-  const data = await apiGet(url);
+  const data = await apiGet(url, { skipCache: options?.skipCache === true });
   return extractRows(data, ['watchlist', 'rows']);
 };
 

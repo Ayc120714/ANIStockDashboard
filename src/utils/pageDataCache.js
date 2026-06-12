@@ -58,6 +58,14 @@ export function writePageCache(key, data) {
   }
 }
 
+export function clearPageCache(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 /**
  * True when off-market and an existing cache is fresh enough to avoid refetch.
  */

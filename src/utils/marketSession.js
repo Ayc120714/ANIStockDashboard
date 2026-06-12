@@ -37,11 +37,14 @@ const parseStatus = (status) => {
   const isMarketHours = Boolean(orch.is_market_hours);
   const isTradingDay = Boolean(orch.is_trading_day);
   const mode = String(orch.mode || orch.current_mode || '').toLowerCase();
-  /** NSE session: orchestrator + Samco feed update DB; SPA should poll (WS or API polling). */
+  const liveSource = String(orch.live_data_source || '').toLowerCase();
+  /** NSE session: orchestrator + Samco API/WS feed update DB; SPA should poll. */
   const isLiveMarket = isMarketHours && isTradingDay;
-  const isWebSocketStreaming = isLiveMarket && mode === 'websocket';
+  const isApiLive = isLiveMarket && (mode === 'api_polling' || liveSource === 'api');
+  const isWebSocketStreaming = isLiveMarket && mode === 'websocket' && liveSource !== 'api';
   return {
     isLiveMarket,
+    isApiLive,
     isWebSocketStreaming,
     isMarketHours,
     isTradingDay,

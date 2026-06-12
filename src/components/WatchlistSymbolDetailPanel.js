@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box, Paper, Tab, Tabs, Typography, IconButton } from '@mui/material';
-import { MdClose } from 'react-icons/md';
+import { Box, Paper, Tab, Tabs, Typography, IconButton, Button } from '@mui/material';
+import { MdClose, MdDeleteOutline } from 'react-icons/md';
 import FundamentalTabContent, { fmtFundVal } from './FundamentalTabContent';
 import { fetchWatchlistFundamentals, refreshWatchlistFundamentals } from '../api/watchlist';
 
@@ -77,6 +77,8 @@ export default function WatchlistSymbolDetailPanel({
   row,
   listType = 'long_term',
   onClose,
+  onRemove,
+  removing = false,
   onFundamentalsUpdated,
 }) {
   const [mainTab, setMainTab] = useState(0);
@@ -160,9 +162,24 @@ export default function WatchlistSymbolDetailPanel({
         <Typography variant="body2" color="text.secondary" sx={{ ml: 1.5 }}>
           Fundamentals & technicals (in-app)
         </Typography>
-        <IconButton size="small" onClick={onClose} sx={{ ml: 'auto' }} aria-label="Close detail panel">
-          <MdClose />
-        </IconButton>
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {onRemove ? (
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              startIcon={<MdDeleteOutline />}
+              onClick={() => onRemove(symbol)}
+              disabled={removing}
+              sx={{ textTransform: 'none', fontSize: 12, mr: 0.5 }}
+            >
+              {removing ? 'Removing…' : 'Remove from list'}
+            </Button>
+          ) : null}
+          <IconButton size="small" onClick={onClose} aria-label="Close detail panel">
+            <MdClose />
+          </IconButton>
+        </Box>
       </Box>
 
       <Tabs
