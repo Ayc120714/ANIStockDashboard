@@ -24,28 +24,56 @@ const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 const DAILY_COLS = [
-  { key: 'symbol', label: 'Symbol', width: 96 },
-  { key: 'sector', label: 'Sector', width: 120 },
-  { key: 'close', label: 'Close', numeric: true, width: 88 },
-  { key: 'rating', label: 'Rating', width: 72 },
-  { key: 'horizon', label: 'Horizon', width: 82 },
+  { key: 'symbol', label: 'Symbol', width: 88 },
+  { key: 'sector', label: 'Sector', width: 100 },
+  { key: 'close', label: 'Close', numeric: true, width: 80 },
+  { key: 'rs_daily_123', label: 'RS123', numeric: true, pct: true, width: 68 },
+  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
+  { key: 'rating', label: 'Rating', width: 68 },
+  { key: 'horizon', label: 'Horizon', width: 76 },
 ];
 
 const WEEKLY_COLS = [
-  { key: 'symbol', label: 'Symbol', width: 96 },
-  { key: 'sector', label: 'Sector', width: 110 },
-  { key: 'weekly_close', label: 'Wk Close', numeric: true, width: 88 },
-  { key: 'weekly_close_prev', label: 'Prev Wk', numeric: true, width: 88 },
-  { key: 'rating', label: 'Rating', width: 72 },
-  { key: 'horizon', label: 'Horizon', width: 82 },
+  { key: 'symbol', label: 'Symbol', width: 88 },
+  { key: 'sector', label: 'Sector', width: 96 },
+  { key: 'weekly_close', label: 'Wk Close', numeric: true, width: 80 },
+  { key: 'weekly_close_prev', label: 'Prev Wk', numeric: true, width: 80 },
+  { key: 'rs_weekly_52', label: 'RS52', numeric: true, pct: true, width: 68 },
+  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
+  { key: 'rating', label: 'Rating', width: 68 },
+  { key: 'horizon', label: 'Horizon', width: 76 },
+];
+
+const MONTHLY_COLS = [
+  { key: 'symbol', label: 'Symbol', width: 88 },
+  { key: 'sector', label: 'Sector', width: 96 },
+  { key: 'monthly_close', label: 'Mo Close', numeric: true, width: 80 },
+  { key: 'monthly_close_prev', label: 'Prev Mo', numeric: true, width: 80 },
+  { key: 'rs_monthly_11', label: 'RS11', numeric: true, pct: true, width: 68 },
+  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
+  { key: 'rating', label: 'Rating', width: 68 },
+  { key: 'horizon', label: 'Horizon', width: 76 },
 ];
 
 const CHARTINK_DAILY_URL = 'https://chartink.com/screener/rs-daily-scan-2';
 const CHARTINK_WEEKLY_URL = 'https://chartink.com/screener/rs-weekly-scan-3';
+const CHARTINK_MONTHLY_URL = 'https://chartink.com/screener/rs-monthly-11';
 
 const fmt = (v) => {
   if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const fmtPct = (v) => {
+  if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  const pct = Math.abs(n) <= 5 ? n * 100 : n;
+  return `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+};
+
+const fmtNum = (v, digits = 1) => {
+  if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
+  return Number(v).toFixed(digits);
 };
 
 const horizonLabel = (h) => {
@@ -73,7 +101,17 @@ function sortComparable(row, key) {
   if (!row) return null;
   if (key === 'horizon') return horizonLabel(row.horizon);
   if (key === 'rating') return String(row.rating || '').replace(/_/g, ' ');
-  if (key === 'close' || key === 'weekly_close' || key === 'weekly_close_prev') {
+  if (
+    key === 'close'
+    || key === 'weekly_close'
+    || key === 'weekly_close_prev'
+    || key === 'monthly_close'
+    || key === 'monthly_close_prev'
+    || key === 'rs_daily_123'
+    || key === 'rs_weekly_52'
+    || key === 'rs_monthly_11'
+    || key === 'di_plus'
+  ) {
     const n = Number(row[key]);
     return Number.isFinite(n) ? n : null;
   }
@@ -146,8 +184,20 @@ function AgentResultsTable({
     if (col.key === 'sector') {
       return r.sector || '—';
     }
-    if (col.key === 'close' || col.key === 'weekly_close' || col.key === 'weekly_close_prev') {
+    if (
+      col.key === 'close'
+      || col.key === 'weekly_close'
+      || col.key === 'weekly_close_prev'
+      || col.key === 'monthly_close'
+      || col.key === 'monthly_close_prev'
+    ) {
       return fmt(r[col.key]);
+    }
+    if (col.pct) {
+      return fmtPct(r[col.key]);
+    }
+    if (col.key === 'di_plus') {
+      return fmtNum(r[col.key], 1);
     }
     if (col.key === 'rating') {
       const ratingLabel = r.rating ? String(r.rating).replace(/_/g, ' ') : null;
@@ -178,7 +228,7 @@ function AgentResultsTable({
   };
 
   return (
-    <Box sx={{ minWidth: 0, flex: '1 1 420px' }}>
+    <Box sx={{ minWidth: 280, flex: '1 1 0', width: 0 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1a3c5e', mb: 0.25, fontSize: 14 }}>
         {title}
       </Typography>
@@ -334,11 +384,14 @@ export default function ChartFundamentalAgentTab() {
   const [dailySortDir, setDailySortDir] = useState('asc');
   const [weeklySortCol, setWeeklySortCol] = useState('symbol');
   const [weeklySortDir, setWeeklySortDir] = useState('asc');
+  const [monthlySortCol, setMonthlySortCol] = useState('symbol');
+  const [monthlySortDir, setMonthlySortDir] = useState('asc');
   const [dailyPage, setDailyPage] = useState(1);
   const [weeklyPage, setWeeklyPage] = useState(1);
+  const [monthlyPage, setMonthlyPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const CACHE_KEY = 'advisor_chart_fundamental_agent_v3';
+  const CACHE_KEY = 'advisor_chart_fundamental_agent_v5';
 
   const load = useCallback(
     async (refresh = false) => {
@@ -359,7 +412,9 @@ export default function ChartFundamentalAgentTab() {
         setLoading,
         setError,
         forceNetwork: refresh,
-        hasUsable: (p) => Boolean(p && (Array.isArray(p.data) || Array.isArray(p.weekly_data))),
+        hasUsable: (p) => Boolean(
+          p && (Array.isArray(p.data) || Array.isArray(p.weekly_data) || Array.isArray(p.monthly_data)),
+        ),
       });
     },
     [showNearMiss],
@@ -389,9 +444,19 @@ export default function ChartFundamentalAgentTab() {
     [payload, search, sector, weeklySortCol, weeklySortDir],
   );
 
+  const monthlyRows = useMemo(
+    () => filterAndSortRows(payload?.monthly_data || [], {
+      search,
+      sector,
+      sortCol: monthlySortCol,
+      sortDir: monthlySortDir,
+    }),
+    [payload, search, sector, monthlySortCol, monthlySortDir],
+  );
+
   const sectorOptions = useMemo(() => {
     const set = new Set();
-    [...(payload?.data || []), ...(payload?.weekly_data || [])].forEach((r) => {
+    [...(payload?.data || []), ...(payload?.weekly_data || []), ...(payload?.monthly_data || [])].forEach((r) => {
       if (r.sector && String(r.sector).trim()) set.add(String(r.sector).trim());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -399,11 +464,12 @@ export default function ChartFundamentalAgentTab() {
 
   const handleSort = (table, col) => {
     const isDaily = table === 'daily';
-    const sortCol = isDaily ? dailySortCol : weeklySortCol;
-    const sortDir = isDaily ? dailySortDir : weeklySortDir;
-    const setSortCol = isDaily ? setDailySortCol : setWeeklySortCol;
-    const setSortDir = isDaily ? setDailySortDir : setWeeklySortDir;
-    const setPage = isDaily ? setDailyPage : setWeeklyPage;
+    const isWeekly = table === 'weekly';
+    const sortCol = isDaily ? dailySortCol : isWeekly ? weeklySortCol : monthlySortCol;
+    const sortDir = isDaily ? dailySortDir : isWeekly ? weeklySortDir : monthlySortDir;
+    const setSortCol = isDaily ? setDailySortCol : isWeekly ? setWeeklySortCol : setMonthlySortCol;
+    const setSortDir = isDaily ? setDailySortDir : isWeekly ? setWeeklySortDir : setMonthlySortDir;
+    const setPage = isDaily ? setDailyPage : isWeekly ? setWeeklyPage : setMonthlyPage;
 
     if (sortCol === col) {
       if (sortDir === 'desc') setSortDir('asc');
@@ -430,7 +496,7 @@ export default function ChartFundamentalAgentTab() {
           size="small"
           placeholder="Symbol…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setDailyPage(1); setWeeklyPage(1); }}
+          onChange={(e) => { setSearch(e.target.value); setDailyPage(1); setWeeklyPage(1); setMonthlyPage(1); }}
           sx={{ width: 110 }}
         />
         <TextField
@@ -438,7 +504,7 @@ export default function ChartFundamentalAgentTab() {
           size="small"
           label="Sector"
           value={sector}
-          onChange={(e) => { setSector(e.target.value); setDailyPage(1); setWeeklyPage(1); }}
+          onChange={(e) => { setSector(e.target.value); setDailyPage(1); setWeeklyPage(1); setMonthlyPage(1); }}
           sx={{ minWidth: 160, fontSize: 12 }}
         >
           <MenuItem value="__all__">All sectors</MenuItem>
@@ -453,7 +519,7 @@ export default function ChartFundamentalAgentTab() {
             <Switch
               size="small"
               checked={showNearMiss}
-              onChange={(e) => { setShowNearMiss(e.target.checked); setDailyPage(1); setWeeklyPage(1); }}
+              onChange={(e) => { setShowNearMiss(e.target.checked); setDailyPage(1); setWeeklyPage(1); setMonthlyPage(1); }}
             />
           }
           label={<Typography variant="body2" sx={{ fontSize: 12 }}>Show near-misses</Typography>}
@@ -462,7 +528,7 @@ export default function ChartFundamentalAgentTab() {
           select
           size="small"
           value={rowsPerPage}
-          onChange={(e) => { setRowsPerPage(Number(e.target.value)); setDailyPage(1); setWeeklyPage(1); }}
+          onChange={(e) => { setRowsPerPage(Number(e.target.value)); setDailyPage(1); setWeeklyPage(1); setMonthlyPage(1); }}
           sx={{ minWidth: 118, fontSize: 12 }}
         >
           {PAGE_SIZE_OPTIONS.map((n) => (
@@ -495,9 +561,12 @@ export default function ChartFundamentalAgentTab() {
         <Box
           sx={{
             display: 'flex',
-            flexWrap: 'wrap',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
             gap: 2,
             alignItems: 'flex-start',
+            width: '100%',
+            overflowX: 'auto',
           }}
         >
           <AgentResultsTable
@@ -516,7 +585,7 @@ export default function ChartFundamentalAgentTab() {
           />
           <AgentResultsTable
             title="Weekly setup (RS 52W)"
-            subtitle={`${payload?.weekly_count ?? weeklyRows.length} matches · weekly closes${scanMeta}`}
+            subtitle={`${payload?.weekly_count ?? weeklyRows.length} matches · weekly vs Nifty${scanMeta}`}
             chartinkUrl={CHARTINK_WEEKLY_URL}
             cols={WEEKLY_COLS}
             rows={weeklyRows}
@@ -527,6 +596,20 @@ export default function ChartFundamentalAgentTab() {
             page={weeklyPage}
             rowsPerPage={rowsPerPage}
             onPageChange={setWeeklyPage}
+          />
+            <AgentResultsTable
+              title="Monthly setup (RS 11M)"
+              subtitle={`${payload?.monthly_count ?? monthlyRows.length} matches · ChartInk monthly vs Nifty (11)${scanMeta}`}
+              chartinkUrl={CHARTINK_MONTHLY_URL}
+              cols={MONTHLY_COLS}
+            rows={monthlyRows}
+            emptyMessage="No stocks passed all gates on the latest monthly bar."
+            sortCol={monthlySortCol}
+            sortDir={monthlySortDir}
+            onSort={(col) => handleSort('monthly', col)}
+            page={monthlyPage}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setMonthlyPage}
           />
         </Box>
       )}
