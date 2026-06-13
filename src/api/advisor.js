@@ -23,6 +23,20 @@ export const fetchLatestSignalsPayload = async (limit = 50) => {
   return apiGet(`/advisor/signals/latest?limit=${limit}`);
 };
 
+/** Advisor-qualified weekly PSAR + SuperTrend + Fib entries (not user watchlist). */
+export const fetchAdvisorWeeklyEntries = async ({
+  limit = 25,
+  max_entry_gap_pct = 5,
+  signal_limit = 250,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('max_entry_gap_pct', String(max_entry_gap_pct));
+  params.set('signal_limit', String(signal_limit));
+  const data = await apiGet(`/advisor/signals/weekly-entries?${params.toString()}`);
+  return data?.data ?? [];
+};
+
 export const fetchMonthlyMacdSetup = async (limit = 200) => {
   const data = await apiGet(`/advisor/monthly-macd-setup?limit=${limit}`);
   return data?.data ?? [];

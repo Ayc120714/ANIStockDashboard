@@ -140,6 +140,11 @@ function Sidebar() {
             <MdCurrencyExchange />
             <span className="label">Forex</span>
           </SidebarItem>
+
+          <SidebarItem to="/mutual-funds" collapsed={collapsed} pathname={pathname} locked={moduleLocked} title={collapsed ? 'Mutual Funds' : undefined}>
+            <MdAttachMoney />
+            <span className="label">Mutual Funds</span>
+          </SidebarItem>
         </Section>
 
         <Section collapsed={collapsed}>

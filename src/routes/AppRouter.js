@@ -23,6 +23,7 @@ import PublicMarketingLayout from '../layouts/PublicMarketingLayout';
 import FnOPage from '../pages/FnOPage';
 import CommoditiesPage from '../pages/CommoditiesPage';
 import ForexPage from '../pages/ForexPage';
+import MutualFundsPage from '../pages/MutualFundsPage';
 import TelegramAdminPage from '../pages/TelegramAdminPage';
 import AdminUsersPage from '../pages/AdminUsersPage';
 import LoginPage from '../pages/LoginPage';
@@ -85,6 +86,7 @@ function AppRouter() {
           <Route path="/fno" element={<PremiumModuleRoute><FnOPage /></PremiumModuleRoute>} />
           <Route path="/commodities" element={<PremiumModuleRoute><CommoditiesPage /></PremiumModuleRoute>} />
           <Route path="/forex" element={<PremiumModuleRoute><ForexPage /></PremiumModuleRoute>} />
+          <Route path="/mutual-funds" element={<PremiumModuleRoute><MutualFundsPage /></PremiumModuleRoute>} />
           <Route path="/telegram-admin" element={<AdminRoute><TelegramAdminPage /></AdminRoute>} />
           <Route path="/admin-users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
         </Route>

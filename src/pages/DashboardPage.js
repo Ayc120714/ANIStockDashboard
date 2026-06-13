@@ -5,21 +5,20 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'r
 import { useLocation, useNavigate } from 'react-router';
 import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
-import { fetchPriceShockers } from '../api/stocks';
-import { fetchAlerts, fetchRatings } from '../api/advisor';
+import { fetchPriceShockers, fetchTrending } from '../api/stocks';
+import { fetchAlerts, fetchRatings, fetchAdvisorWeeklyEntries, fetchLatestSignalsPayload } from '../api/advisor';
 import { apiGet, clearApiGetCache } from '../api/apiClient';
 import {
   fetchWatchlist,
   fetchWatchlistSignals,
-  fetchWeeklyIndicators,
   fetchOrderBlocks,
 } from '../api/watchlist';
 import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
-import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import { ensureMarketSession, getMarketPollingIntervalMs, isPageCacheStale, shouldPollLiveMarket } from '../utils/marketSession';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
-import { readPageCache, writePageCache } from '../utils/pageDataCache';
+import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -32,7 +31,45 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v2';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v4';
+
+function isDashboardCacheIncomplete(cached) {
+  if (!cached) return true;
+  const hasIndices = Boolean(cached.indices);
+  const gainers = cached.gainers;
+  const losers = cached.losers;
+  const ratings = cached.ratings;
+  if (
+    hasIndices
+    && Array.isArray(losers) && losers.length > 0
+    && (!Array.isArray(gainers) || gainers.length === 0)
+  ) {
+    return true;
+  }
+  if (hasIndices && (!Array.isArray(ratings) || ratings.length === 0)) {
+    return true;
+  }
+  return false;
+}
+
+function applyDashboardCache(setters, cached, marketModeFallback) {
+  if (!cached) return;
+  setters.setIndices(cached.indices || null);
+  setters.setWatchlist(Array.isArray(cached.watchlist) ? cached.watchlist : []);
+  setters.setSignals(Array.isArray(cached.signals) ? cached.signals : []);
+  setters.setWeeklyData(Array.isArray(cached.weeklyData) ? cached.weeklyData : []);
+  setters.setAdvisorRegimeStocks(Array.isArray(cached.advisorRegimeStocks) ? cached.advisorRegimeStocks : []);
+  setters.setObData(Array.isArray(cached.obData) ? cached.obData : []);
+  setters.setSectors(Array.isArray(cached.sectors) ? cached.sectors : []);
+  setters.setGainers(Array.isArray(cached.gainers) ? cached.gainers : []);
+  setters.setLosers(Array.isArray(cached.losers) ? cached.losers : []);
+  setters.setAlerts(Array.isArray(cached.alerts) ? cached.alerts : []);
+  setters.setRatings(Array.isArray(cached.ratings) ? cached.ratings : []);
+  setters.setTrendingStocks(Array.isArray(cached.trendingStocks) ? cached.trendingStocks : []);
+  if (cached.marketMode) setters.setMarketMode(cached.marketMode);
+  else if (marketModeFallback) setters.setMarketMode(marketModeFallback);
+  setters.setLastUpdated(cached.updatedAt ? new Date(cached.updatedAt) : new Date());
+}
 
 const isAuthFailureMessage = (message) => {
   const m = String(message || '').toLowerCase();
@@ -462,7 +499,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
 }
 
 // ─── Relative To Index (Regime Buckets) ─────────────────────────────────────
-function RelativeRegimeBoard({ watchlist = [], indices = null }) {
+function RelativeRegimeBoard({ stocks = [], indices = null }) {
   const [statusMsg, setStatusMsg] = useState('');
   const benchmark = useMemo(() => {
     const cards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
@@ -483,7 +520,7 @@ function RelativeRegimeBoard({ watchlist = [], indices = null }) {
       decelerating: new Set(),
       underperforming: new Set(),
     };
-    const rows = Array.isArray(watchlist) ? watchlist : [];
+    const rows = Array.isArray(stocks) ? stocks : [];
     rows.forEach((row) => {
       const symbol = String(row?.symbol || '').trim().toUpperCase();
       if (!symbol) return;
@@ -520,7 +557,7 @@ function RelativeRegimeBoard({ watchlist = [], indices = null }) {
         };
       })
       .filter((r) => r.count > 0);
-  }, [watchlist, benchmark]);
+  }, [stocks, benchmark]);
 
   const handleCopyCsv = async (csvText, label) => {
     if (!csvText) return;
@@ -537,7 +574,7 @@ function RelativeRegimeBoard({ watchlist = [], indices = null }) {
     <Card>
       <SectionTitle>Stocks vs Indices Regime Board</SectionTitle>
       <Box sx={{ fontSize: 11, color: '#666', mb: 1 }}>
-        Benchmark uses NIFTY 50 / SENSEX day change when available (fallback: average index change). Current benchmark: <b>{fmtPct(benchmark)}</b>
+        Advisor-qualified setups vs index benchmark (NIFTY 50 / SENSEX day change). Current benchmark: <b>{fmtPct(benchmark)}</b>
       </Box>
       {statusMsg ? <Alert severity="info" sx={{ mb: 1 }}>{statusMsg}</Alert> : null}
       <Box sx={{ overflowX: 'auto' }}>
@@ -566,7 +603,7 @@ function RelativeRegimeBoard({ watchlist = [], indices = null }) {
             {!groupedRows.length ? (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', padding: 16, color: '#888' }}>
-                  Not enough watchlist/index data to classify right now.
+                  Not enough advisor-qualified stocks with day change to classify right now.
                 </td>
               </tr>
             ) : null}
@@ -652,7 +689,7 @@ function WeeklyEntries({ weeklyData = [] }) {
       <Card>
         <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
         <Box sx={{ fontSize: 12, color: '#777' }}>
-          Weekly setup data is currently unavailable.
+          No advisor-qualified weekly entry setups within 5% of the PSAR/SuperTrend zone right now.
         </Box>
       </Card>
     );
@@ -662,7 +699,7 @@ function WeeklyEntries({ weeklyData = [] }) {
       <Card>
         <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
         <Box sx={{ fontSize: 12, color: '#777' }}>
-          No near-entry weekly setups found right now.
+          No near-entry advisor weekly setups found right now.
         </Box>
       </Card>
     );
@@ -675,7 +712,7 @@ function WeeklyEntries({ weeklyData = [] }) {
     <Card>
       <SectionTitle>Weekly Entries — MyIndicator (PSAR + SuperTrend + Fib)</SectionTitle>
       <Box sx={{ fontSize: 11, color: '#888', mb: 1 }}>
-        Stocks within {MAX_ENTRY_GAP_PCT}% of weekly PSAR/SuperTrend entry zone. Targets are normalized for realistic trend direction.
+        Advisor-qualified stocks within {MAX_ENTRY_GAP_PCT}% of weekly PSAR/SuperTrend entry zone.
       </Box>
       <Box sx={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -977,20 +1014,29 @@ function RecentAlerts({ alerts }) {
   );
 }
 
-function TrendingStocksPanel({ alerts }) {
-  const rows = (Array.isArray(alerts) ? alerts : [])
+function TrendingStocksPanel({ alerts, trendingStocks = [] }) {
+  const earlyRows = (Array.isArray(alerts) ? alerts : [])
     .filter((a) => String(a?.alert_type || '').toLowerCase().startsWith('entry_early_'))
     .sort((a, b) => new Date(b?.timestamp || 0).getTime() - new Date(a?.timestamp || 0).getTime());
 
   const symbolRows = useMemo(() => {
     const bySymbol = new Map();
-    rows.forEach((r) => {
+    earlyRows.forEach((r) => {
       const symbol = String(r?.symbol || '').trim().toUpperCase();
       if (!symbol) return;
-      if (!bySymbol.has(symbol)) bySymbol.set(symbol, r);
+      if (!bySymbol.has(symbol)) bySymbol.set(symbol, { kind: 'alert', ...r });
+    });
+    if (bySymbol.size) return [...bySymbol.values()].slice(0, 20);
+
+    (Array.isArray(trendingStocks) ? trendingStocks : []).forEach((s) => {
+      const symbol = String(s?.symbol || '').trim().toUpperCase();
+      if (!symbol || bySymbol.has(symbol)) return;
+      bySymbol.set(symbol, { kind: 'trend', symbol, chg: s.chg, cmp: s.cmp });
     });
     return [...bySymbol.values()].slice(0, 20);
-  }, [rows]);
+  }, [earlyRows, trendingStocks]);
+
+  const usingTrendFallback = !earlyRows.length && symbolRows.length > 0;
 
   if (!symbolRows.length) {
     return (
@@ -1007,10 +1053,30 @@ function TrendingStocksPanel({ alerts }) {
     <Card>
       <SectionTitle>Trending Stocks (Early Entry)</SectionTitle>
       <Box sx={{ fontSize: 11, color: '#666', mb: 1 }}>
-        Live list from `ENTRY_EARLY` conditions (accepted breakout with volume confirmation).
+        {usingTrendFallback
+          ? 'Top momentum names by 1-day change (ENTRY_EARLY alerts will replace when live conditions fire).'
+          : 'Live list from ENTRY_EARLY conditions (accepted breakout with volume confirmation).'}
       </Box>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         {symbolRows.map((a, i) => {
+          if (a.kind === 'trend') {
+            const chgNum = parsePctNumber(a.chg);
+            const isUp = chgNum == null || chgNum >= 0;
+            return (
+              <Chip
+                key={`${a.symbol}_${i}`}
+                label={`${a.symbol} ${a.chg || ''}`}
+                size="small"
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: isUp ? '#e8f5e9' : '#ffebee',
+                  color: isUp ? '#1b5e20' : '#b71c1c',
+                  border: `1px solid ${isUp ? '#81c784' : '#ef9a9a'}`,
+                }}
+                title={a.cmp ? `CMP ${a.cmp}` : ''}
+              />
+            );
+          }
           const t = String(a?.alert_type || '').toLowerCase();
           const isUp = t.includes('_up_');
           return (
@@ -1057,7 +1123,7 @@ function LatestRatings({ ratings }) {
       {ratings.slice(0, 5).map((r, i) => (
         <Box key={r.symbol || i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.7, borderBottom: '1px solid #f5f5f5', fontSize: 12 }}>
           <Box sx={{ fontWeight: 700, width: 90 }}>{r.symbol}</Box>
-          <Chip label={r.recommendation} size="small" sx={{ fontSize: 9, height: 18, fontWeight: 700, bgcolor: recoColors[r.recommendation] || '#888', color: '#fff', minWidth: 60 }} />
+          <Chip label={String(r.recommendation || '').toUpperCase()} size="small" sx={{ fontSize: 9, height: 18, fontWeight: 700, bgcolor: recoColors[String(r.recommendation || '').toUpperCase()] || '#888', color: '#fff', minWidth: 60 }} />
           <Box sx={{ flex: 1, color: '#555' }}>Score: <b>{fmt(r.composite_score, 0)}</b></Box>
           {r.entry_price && <Box sx={{ color: '#555' }}>Entry: {fmtCur(r.entry_price)}</Box>}
           {r.target_short_term && <Box sx={{ color: '#2e7d32' }}>T: {fmtCur(r.target_short_term)}</Box>}
@@ -1225,15 +1291,16 @@ function DashboardPage() {
   const [loadError, setLoadError] = useState('');
   const [indices, setIndices] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
-  const dedupedWatchlist = useMemo(() => dedupeWatchlistBySymbol(watchlist), [watchlist]);
   const [signals, setSignals] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
+  const [advisorRegimeStocks, setAdvisorRegimeStocks] = useState([]);
   const [obData, setObData] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [gainers, setGainers] = useState([]);
   const [losers, setLosers] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [ratings, setRatings] = useState([]);
+  const [trendingStocks, setTrendingStocks] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketMode, setMarketMode] = useState('unknown');
   const [holdings, setHoldings] = useState([]);
@@ -1245,12 +1312,14 @@ function DashboardPage() {
     (watchlist && watchlist.length)
     || (signals && signals.length)
     || (weeklyData && weeklyData.length)
+    || (advisorRegimeStocks && advisorRegimeStocks.length)
     || (obData && obData.length)
     || (sectors && sectors.length)
     || (gainers && gainers.length)
     || (losers && losers.length)
     || (alerts && alerts.length)
     || (ratings && ratings.length)
+    || (trendingStocks && trendingStocks.length)
     || indices
   );
 
@@ -1265,7 +1334,7 @@ function DashboardPage() {
     setHoldings(broker.rows);
   }, [userId]);
 
-  const loadAll = useCallback(async ({ forceSpinner = false } = {}) => {
+  const loadAll = useCallback(async ({ forceSpinner = false, forceRefresh = false } = {}) => {
     try {
       if (!isAuthenticated || !accessToken) {
         setLoadError('Your session expired. Please sign in again.');
@@ -1276,52 +1345,65 @@ function DashboardPage() {
         setLoading(true);
       }
       const session = await ensureMarketSession();
+      const liveSession = shouldPollLiveMarket(session);
       const cachedWrap = readPageCache(DASHBOARD_CACHE_KEY);
       const cached = cachedWrap?.data || null;
-      if (cached) {
-        setIndices(cached.indices || null);
-        setWatchlist(Array.isArray(cached.watchlist) ? cached.watchlist : []);
-        setSignals(Array.isArray(cached.signals) ? cached.signals : []);
-        setWeeklyData(Array.isArray(cached.weeklyData) ? cached.weeklyData : []);
-        setObData(Array.isArray(cached.obData) ? cached.obData : []);
-        setSectors(Array.isArray(cached.sectors) ? cached.sectors : []);
-        setGainers(Array.isArray(cached.gainers) ? cached.gainers : []);
-        setLosers(Array.isArray(cached.losers) ? cached.losers : []);
-        setAlerts(Array.isArray(cached.alerts) ? cached.alerts : []);
-        setRatings(Array.isArray(cached.ratings) ? cached.ratings : []);
-        if (cached.marketMode) setMarketMode(cached.marketMode);
-        setLastUpdated(cached.updatedAt ? new Date(cached.updatedAt) : new Date());
+      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session);
+      const cacheIncomplete = isDashboardCacheIncomplete(cached);
+
+      if (cached && !forceRefresh) {
+        applyDashboardCache({
+          setIndices,
+          setWatchlist,
+          setSignals,
+          setWeeklyData,
+          setAdvisorRegimeStocks,
+          setObData,
+          setSectors,
+          setGainers,
+          setLosers,
+          setAlerts,
+          setRatings,
+          setTrendingStocks,
+          setMarketMode,
+          setLastUpdated,
+        }, { ...cached, updatedAt: cachedWrap?.updatedAt }, marketMode);
         setLoading(false);
       }
-      const skipNetwork =
-        !session.isLiveMarket
+
+      if (liveSession || cacheStale || cacheIncomplete) {
+        clearApiGetCache();
+        if (cacheStale || cacheIncomplete) clearPageCache(DASHBOARD_CACHE_KEY);
+      }
+
+      const skipNetwork = !forceRefresh
+        && !liveSession
+        && !cacheStale
+        && !cacheIncomplete
         && cached
-        && cachedWrap
-        && Date.now() - (cachedWrap.updatedAt || 0) < 24 * 60 * 60_000;
+        && (await shouldUseCachedPageDataOnly(DASHBOARD_CACHE_KEY));
       if (skipNetwork) {
         await refreshBrokerHoldings({ forceLive: true });
         return;
       }
 
-      if (session.isLiveMarket) {
-        clearApiGetCache();
-      }
-
-      const [idx, wl, sigs, wk, ob, sec, g, l, al, rat, sys] = await Promise.allSettled([
+      const [idx, wl, sigs, wk, adv, ob, sec, g, l, al, rat, trend, sys] = await Promise.allSettled([
         fetchMarketIndices(),
         fetchWatchlist(null),
         fetchWatchlistSignals({ timeframe: 'intraday' }),
-        fetchWeeklyIndicators(),
+        fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }),
+        fetchLatestSignalsPayload(200),
         fetchOrderBlocks(),
         fetchSectorOutlook(),
         fetchPriceShockers('gainers', 8, 'day'),
         fetchPriceShockers('losers', 8, 'day'),
         fetchAlerts({ limit: 25 }),
         fetchRatings({ limit: 8 }),
+        fetchTrending(20),
         apiGet('/system/status'),
       ]);
 
-      const coreResults = [idx, wl, sigs, wk, ob, sec, g, l, al, rat];
+      const coreResults = [idx, wl, sigs, wk, adv, ob, sec, g, l, al, rat, trend];
       const fulfilledCount = coreResults.filter((r) => r.status === 'fulfilled').length;
       const allAuthRejected = fulfilledCount === 0
         && coreResults.every(
@@ -1337,23 +1419,33 @@ function DashboardPage() {
       const nextWatchlist = wl.status === 'fulfilled' ? (Array.isArray(wl.value) ? wl.value : []) : (Array.isArray(cached?.watchlist) ? cached.watchlist : []);
       const nextSignals = sigs.status === 'fulfilled' ? (Array.isArray(sigs.value) ? sigs.value : []) : (Array.isArray(cached?.signals) ? cached.signals : []);
       const nextWeekly = wk.status === 'fulfilled' ? (Array.isArray(wk.value) ? wk.value : []) : (Array.isArray(cached?.weeklyData) ? cached.weeklyData : []);
+      const nextAdvisorRegime = adv.status === 'fulfilled'
+        ? (Array.isArray(adv.value?.data) ? adv.value.data : []).map((s) => ({
+          symbol: s.symbol,
+          day1d: s.day1d,
+          day1w: s.week1w,
+        }))
+        : (Array.isArray(cached?.advisorRegimeStocks) ? cached.advisorRegimeStocks : []);
       const nextOrderBlocks = ob.status === 'fulfilled' ? (Array.isArray(ob.value) ? ob.value : []) : (Array.isArray(cached?.obData) ? cached.obData : []);
       const nextSectors = sec.status === 'fulfilled' ? (Array.isArray(sec.value) ? sec.value : []) : (Array.isArray(cached?.sectors) ? cached.sectors : []);
       const nextGainers = g.status === 'fulfilled' ? (Array.isArray(g.value) ? g.value : []) : (Array.isArray(cached?.gainers) ? cached.gainers : []);
       const nextLosers = l.status === 'fulfilled' ? (Array.isArray(l.value) ? l.value : []) : (Array.isArray(cached?.losers) ? cached.losers : []);
       const nextAlerts = al.status === 'fulfilled' ? (Array.isArray(al.value) ? al.value : []) : (Array.isArray(cached?.alerts) ? cached.alerts : []);
       const nextRatings = rat.status === 'fulfilled' ? (Array.isArray(rat.value) ? rat.value : []) : (Array.isArray(cached?.ratings) ? cached.ratings : []);
+      const nextTrending = trend.status === 'fulfilled' ? (Array.isArray(trend.value) ? trend.value : []) : (Array.isArray(cached?.trendingStocks) ? cached.trendingStocks : []);
 
       setIndices(nextIndices);
       setWatchlist(nextWatchlist);
       setSignals(nextSignals);
       setWeeklyData(nextWeekly);
+      setAdvisorRegimeStocks(nextAdvisorRegime);
       setObData(nextOrderBlocks);
       setSectors(nextSectors);
       setGainers(nextGainers);
       setLosers(nextLosers);
       setAlerts(nextAlerts);
       setRatings(nextRatings);
+      setTrendingStocks(nextTrending);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       setLastUpdated(new Date());
       setLoadError('');
@@ -1362,12 +1454,14 @@ function DashboardPage() {
         watchlist: nextWatchlist,
         signals: nextSignals,
         weeklyData: nextWeekly,
+        advisorRegimeStocks: nextAdvisorRegime,
         obData: nextOrderBlocks,
         sectors: nextSectors,
         gainers: nextGainers,
         losers: nextLosers,
         alerts: nextAlerts,
         ratings: nextRatings,
+        trendingStocks: nextTrending,
         marketMode: sys.status === 'fulfilled' ? (sys.value?.orchestrator?.mode || 'unknown') : marketMode,
         updatedAt: Date.now(),
       });
@@ -1377,7 +1471,7 @@ function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, hasHydratedData, marketMode, refreshBrokerHoldings, isAuthenticated, accessToken]);
+  }, [hasHydratedData, marketMode, refreshBrokerHoldings, isAuthenticated, accessToken]);
 
   useEffect(() => {
     let timer;
@@ -1477,7 +1571,7 @@ function DashboardPage() {
         <Box sx={{ fontWeight: 700, fontSize: 22, color: '#1a3c5e' }}>Dashboard</Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastUpdated && <Box sx={{ fontSize: 11, color: '#999' }}>Updated {lastUpdated.toLocaleTimeString()}</Box>}
-          <IconButton size="small" onClick={() => loadAll({ forceSpinner: !hasHydratedData })} disabled={loading && !hasHydratedData}>
+          <IconButton size="small" onClick={() => loadAll({ forceSpinner: !hasHydratedData, forceRefresh: true })} disabled={loading && !hasHydratedData}>
             <MdRefresh size={18} />
           </IconButton>
         </Box>
@@ -1527,7 +1621,7 @@ function DashboardPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) minmax(300px,360px)' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
-              <RelativeRegimeBoard watchlist={dedupedWatchlist} indices={indices} />
+              <RelativeRegimeBoard stocks={advisorRegimeStocks} indices={indices} />
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <WeeklyEntries weeklyData={weeklyData} />
                 <OrderBlockZones obData={obData} />
@@ -1536,7 +1630,7 @@ function DashboardPage() {
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, '@media (max-width: 800px)': { gridTemplateColumns: '1fr' } }}>
                 <MarketMovers gainers={gainers} losers={losers} />
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <TrendingStocksPanel alerts={alerts} />
+                  <TrendingStocksPanel alerts={alerts} trendingStocks={trendingStocks} />
                   <LatestRatings ratings={ratings} />
                   <RecentAlerts alerts={alerts} />
                 </Box>
