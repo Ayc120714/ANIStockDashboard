@@ -96,26 +96,38 @@ const normalizeMarketIndicesResponse = (payload) => {
   let smallcapCards = [];
 
   if (source.length) {
-    const indexPatterns = ['nifty 50', 'nifty next 50', 'nifty midcap 50', 'nifty bank'];
-    const smallcapPatterns = ['nifty 100', 'nifty 200', 'nifty 500', 'india vix', 'nifty smallcap', 'nifty smlcap', 'nifty microcap', 'sensex'];
+    const pickByPriority = (priorities) => {
+      const picked = [];
+      const used = new Set();
+      for (const pattern of priorities) {
+        const hit = source.find((item) => {
+          const n = (item?.name || '').toLowerCase();
+          if (!n || used.has(n)) return false;
+          return n.includes(pattern);
+        });
+        if (hit) {
+          picked.push(hit);
+          used.add((hit.name || '').toLowerCase());
+        }
+      }
+      return picked;
+    };
 
-    indexCards = source.filter((item) => {
-      const n = (item?.name || '').toLowerCase();
-      return indexPatterns.some((p) => n === p || n.includes(p));
-    });
-    const priority = ['nifty 50', 'nifty next 50', 'nifty midcap 50', 'nifty bank'];
-    indexCards.sort((a, b) => {
-      const ia = priority.findIndex((p) => (a?.name || '').toLowerCase().includes(p));
-      const ib = priority.findIndex((p) => (b?.name || '').toLowerCase().includes(p));
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
-    indexCards = indexCards.slice(0, 3);
+    indexCards = pickByPriority([
+      'nifty 50',
+      'nifty next 50',
+      'nifty midcap 100',
+      'nifty midcap 50',
+      'nifty bank',
+    ]).slice(0, 3);
 
-    smallcapCards = source.filter((item) => {
-      const n = (item?.name || '').toLowerCase();
-      return smallcapPatterns.some((p) => n.includes(p));
-    });
-    smallcapCards = smallcapCards.slice(0, 6);
+    smallcapCards = pickByPriority([
+      'nifty smlcap 100',
+      'nifty smallcap 100',
+      'nifty smallcap 50',
+      'nifty microcap 250',
+      'india vix',
+    ]).slice(0, 3);
   }
 
   return {

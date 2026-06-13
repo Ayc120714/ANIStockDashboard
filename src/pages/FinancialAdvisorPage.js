@@ -2726,15 +2726,19 @@ function PortfolioTab() {
           getOptionLabel={opt => typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || ''}`}
           isOptionEqualToValue={(opt, val) => (opt.symbol || opt) === (val.symbol || val)}
           filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.toLowerCase();
-            return opts.filter(o =>
-              o.symbol.toLowerCase().includes(q) ||
-              (o.sector || '').toLowerCase().includes(q)
-            ).slice(0, 40);
+            const q = inputValue.trim().toLowerCase();
+            if (!q) return opts;
+            return opts.filter(
+              (o) =>
+                o.symbol.toLowerCase().includes(q) ||
+                (o.sector || '').toLowerCase().includes(q) ||
+                (o.subsector || '').toLowerCase().includes(q)
+            );
           }}
           value={selectedSymbols}
           onChange={(_, val) => setSelectedSymbols(val)}
           renderInput={(params) => <TextField {...params} placeholder="Select portfolio stocks…" />}
+          ListboxProps={{ style: { maxHeight: 320 } }}
           sx={{ width: 400 }}
           autoHighlight
           disableCloseOnSelect

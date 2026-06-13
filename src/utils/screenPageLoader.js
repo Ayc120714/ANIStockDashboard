@@ -3,6 +3,8 @@ import {
   ensureMarketSession,
   getCachedMarketSession,
   getMarketPollingIntervalMs,
+  isPageCacheStale,
+  shouldPollLiveMarket,
   shouldSkipNetworkForClosedMarket,
 } from './marketSession';
 import { cacheHasUsableData, readPageCache, writePageCache } from './pageDataCache';
@@ -19,9 +21,10 @@ export function extractRowArray(data) {
 export async function shouldSkipScreenFetch(cacheKey) {
   await ensureMarketSession();
   const session = getCachedMarketSession();
-  if (session?.isLiveMarket) return false;
+  if (shouldPollLiveMarket(session)) return false;
   const cached = readPageCache(cacheKey);
   if (!cached || !cacheHasUsableData(cached.data)) return false;
+  if (isPageCacheStale(cached.updatedAt, session)) return false;
   return shouldSkipNetworkForClosedMarket(cached.updatedAt, true);
 }
 
@@ -62,7 +65,7 @@ export async function runScreenTableFetch({
 
   try {
     const session = getCachedMarketSession();
-    if (forceNetwork && session?.isLiveMarket) {
+    if (forceNetwork && shouldPollLiveMarket(session)) {
       clearApiGetCache();
     }
     const fresh = await fetcher();
@@ -141,13 +144,17 @@ export async function runScreenTableFetchWithLivePoll({
   liveIntervalMs = SCREEN_LIVE_POLL_MS,
   onCleanup,
 }) {
+  await ensureMarketSession();
+  const session = getCachedMarketSession();
+
   await runScreenTableFetch({
     cacheKey,
     fetcher,
     setRows,
     setLoading,
     setError,
-    forceNetwork: false,
+    // During live session, skip yesterday's sessionStorage cache on first load.
+    forceNetwork: shouldPollLiveMarket(session),
   });
 
   if (isHistoricalView) {

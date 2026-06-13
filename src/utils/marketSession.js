@@ -22,6 +22,126 @@ export const CLOSED_GET_CACHE_MS = 24 * 60 * 60_000;
 /** Page sessionStorage cache considered fresh for this long when market is closed. */
 export const CLOSED_PAGE_CACHE_MS = 24 * 60 * 60_000;
 
+/** During NSE session, page cache older than this is treated as stale (Overview / screens). */
+export const LIVE_PAGE_CACHE_MAX_AGE_MS = 90_000;
+
+const IST_TZ = 'Asia/Kolkata';
+
+/** Client-side NSE cash session window (09:15–15:30 IST, Mon–Fri). Holidays not detected here. */
+export function isNseRegularSessionIstNow(date = new Date()) {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: IST_TZ,
+      weekday: 'short',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    });
+    const parts = Object.fromEntries(
+      fmt.formatToParts(date).map((p) => [p.type, p.value])
+    );
+    const wd = parts.weekday;
+    if (wd === 'Sat' || wd === 'Sun') return false;
+    const mins = Number(parts.hour) * 60 + Number(parts.minute);
+    return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** True when SPA should poll and avoid long-lived page cache (orchestrator or IST fallback). */
+export function shouldPollLiveMarket(session) {
+  if (session?.isLiveMarket) return true;
+  if (session?.isTradingDay === false) return false;
+  return isNseRegularSessionIstNow();
+}
+
+/** Format a Date for market status lines (always IST). */
+export function formatIstTime(value, { withSeconds = true } = {}) {
+  if (!value) return '—';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${d.toLocaleTimeString('en-IN', {
+    timeZone: IST_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: withSeconds ? '2-digit' : undefined,
+    hour12: true,
+  })} IST`;
+}
+
+function istClockParts(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TZ,
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+  return {
+    weekday: parts.weekday,
+    y: Number(parts.year),
+    m: Number(parts.month),
+    d: Number(parts.day),
+    mins: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+function istCloseEpochMs(y, m, d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return Date.parse(`${y}-${pad(m)}-${pad(d)}T15:30:00+05:30`);
+}
+
+/** True after 15:30 IST on a weekday (holidays not detected). */
+export function isAfterNseCloseIstNow(date = new Date()) {
+  const p = istClockParts(date);
+  if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
+  return p.mins > 15 * 60 + 30;
+}
+
+/**
+ * After 15:30 on a trading day, page cache must be from after today's close.
+ * Pre-open: cache from a prior IST calendar day is stale.
+ */
+export function isPostMarketPageCacheStale(updatedAt, session) {
+  const ts = Number(updatedAt);
+  if (!ts) return true;
+  if (session?.isTradingDay === false) return false;
+
+  const nowP = istClockParts();
+  if (nowP.weekday === 'Sat' || nowP.weekday === 'Sun') return false;
+
+  const cacheP = istClockParts(new Date(ts));
+  const sameIstDay =
+    cacheP.y === nowP.y && cacheP.m === nowP.m && cacheP.d === nowP.d;
+
+  const closeMins = 15 * 60 + 30;
+  if (nowP.mins <= closeMins) {
+    return !sameIstDay;
+  }
+
+  if (!sameIstDay) return true;
+  return ts < istCloseEpochMs(nowP.y, nowP.m, nowP.d);
+}
+
+/** Unified stale check for Overview / screen page caches. */
+export function isPageCacheStale(updatedAt, session) {
+  if (!updatedAt) return true;
+  if (shouldPollLiveMarket(session)) {
+    return Date.now() - Number(updatedAt) > LIVE_PAGE_CACHE_MAX_AGE_MS;
+  }
+  return isPostMarketPageCacheStale(updatedAt, session);
+}
+
+/** @deprecated Use isPageCacheStale */
+export function isLivePageCacheStale(updatedAt, session) {
+  return isPageCacheStale(updatedAt, session);
+}
+
 let memory = null;
 let inflight = null;
 
@@ -121,15 +241,22 @@ export async function ensureMarketSession({ force = false } = {}) {
       persistSession(session);
       return session;
     } catch (_) {
-      const fallback = memory || loadStoredSession() || {
-        isLiveMarket: false,
+      const istSession = isNseRegularSessionIstNow();
+      const prior = memory || loadStoredSession();
+      const fallback = prior || {
+        isLiveMarket: istSession,
         isWebSocketStreaming: false,
-        isMarketHours: false,
-        isTradingDay: false,
-        marketPhase: 'off_hours',
+        isMarketHours: istSession,
+        isTradingDay: istSession,
+        marketPhase: istSession ? 'market_hours' : 'off_hours',
         mode: 'unknown',
         fetchedAt: now,
       };
+      if (prior && istSession && !prior.isLiveMarket) {
+        fallback.isLiveMarket = true;
+        fallback.isMarketHours = true;
+        fallback.fetchedAt = now;
+      }
       memory = fallback;
       return fallback;
     } finally {
@@ -155,7 +282,7 @@ export function getEffectiveGetCacheTtlMs() {
 /** Polling interval: liveMs during market, closedMs when closed (0 = no polling). */
 export function getMarketPollingIntervalMs(liveMs, closedMs = 0) {
   const session = getCachedMarketSession();
-  if (session?.isLiveMarket) {
+  if (shouldPollLiveMarket(session)) {
     return liveMs;
   }
   return closedMs;
@@ -168,7 +295,10 @@ export function getMarketPollingIntervalMs(liveMs, closedMs = 0) {
  */
 export function shouldSkipNetworkForClosedMarket(updatedAt, hasCache = false) {
   const session = getCachedMarketSession();
-  if (session?.isLiveMarket) {
+  if (shouldPollLiveMarket(session)) {
+    return false;
+  }
+  if (isPageCacheStale(updatedAt, session)) {
     return false;
   }
   if (!hasCache) {

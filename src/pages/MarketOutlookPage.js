@@ -32,11 +32,25 @@ import {
   Table
 } from './MarketOutlook.styles';
 
-import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
-import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { clearApiGetCache } from '../api/apiClient';
+import {
+  ensureMarketSession,
+  formatIstTime,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  isAfterNseCloseIstNow,
+  isPageCacheStale,
+  shouldPollLiveMarket,
+} from '../utils/marketSession';
+import {
+  clearPageCache,
+  readPageCache,
+  shouldUseCachedPageDataOnly,
+  writePageCache,
+} from '../utils/pageDataCache';
 
 const MIN_FII_DII_DAYS = 20;
-const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v1';
+const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v3';
 const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v2';
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
@@ -107,6 +121,8 @@ function MarketOutlookContent({ apiReady, timedOut }) {
   const [fiiHoverIdx, setFiiHoverIdx] = useState(null);
   const [diiHoverIdx, setDiiHoverIdx] = useState(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+  const [isLiveRefresh, setIsLiveRefresh] = useState(false);
+  const [dataLooksStale, setDataLooksStale] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -129,12 +145,24 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         setIsLoading(true);
         setLoadError(null);
       }
+      await ensureMarketSession();
+      const session = getCachedMarketSession();
+      const liveSession = shouldPollLiveMarket(session);
       const cachedWrap = readPageCache(MARKET_OUTLOOK_CACHE_KEY);
-      if (!silent && cachedWrap?.data) {
+      const cacheStale = isPageCacheStale(cachedWrap?.updatedAt, session);
+      if (isMounted) {
+        setIsLiveRefresh(liveSession);
+        setDataLooksStale(cacheStale);
+      }
+      if (liveSession || cacheStale) {
+        clearApiGetCache();
+        if (cacheStale) clearPageCache(MARKET_OUTLOOK_CACHE_KEY);
+      }
+      if (!silent && cachedWrap?.data && !liveSession && !cacheStale) {
         applyMarketCache(cachedWrap.data);
         setIsLoading(false);
       }
-      if (await shouldUseCachedPageDataOnly(MARKET_OUTLOOK_CACHE_KEY)) {
+      if (!liveSession && !cacheStale && (await shouldUseCachedPageDataOnly(MARKET_OUTLOOK_CACHE_KEY))) {
         if (cachedWrap?.data) applyMarketCache(cachedWrap.data);
         if (!silent) setIsLoading(false);
         return;
@@ -153,6 +181,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         };
         applyMarketCache(payload);
         writePageCache(MARKET_OUTLOOK_CACHE_KEY, payload);
+        setDataLooksStale(false);
       } catch (error) {
         if (isMounted && !silent) setLoadError(error?.message || 'Failed to load market data.');
       } finally {
@@ -423,6 +452,8 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
+  const marketSession = getCachedMarketSession();
+
   return (
     <>
       {timedOut && !apiReady && (
@@ -441,8 +472,20 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         </div>
       )}
       {lastRefreshedAt && (
-        <div style={{ marginBottom: '12px', color: '#666', fontSize: 12 }}>
-          Live refresh every 30s. Last update: {lastRefreshedAt.toLocaleTimeString()}
+        <div
+          style={{
+            marginBottom: '12px',
+            color: dataLooksStale ? '#b45309' : '#666',
+            fontSize: 12,
+            fontWeight: dataLooksStale ? 600 : 400,
+          }}
+        >
+          {isLiveRefresh
+            ? `Live refresh every 30s. Last update: ${formatIstTime(lastRefreshedAt)}`
+            : marketSession?.isTradingDay && isAfterNseCloseIstNow()
+              ? `Market closed — today's session close. Updated: ${formatIstTime(lastRefreshedAt)}`
+              : `Market closed — showing last available data. Updated: ${formatIstTime(lastRefreshedAt)}`}
+          {dataLooksStale ? ' — fetching latest data…' : ''}
         </div>
       )}
       <UpgradeToPremiumBanner />

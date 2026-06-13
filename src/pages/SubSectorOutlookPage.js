@@ -35,7 +35,12 @@ import {
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook';
 import { fetchStocksBySubsector } from '../api/stocks';
 import { useAuth } from '../auth/AuthContext';
-import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import {
+  ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  shouldPollLiveMarket,
+} from '../utils/marketSession';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { MdLock } from 'react-icons/md';
@@ -174,9 +179,10 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
     let isMounted = true;
     let timer;
     (async () => {
-      await loadSubsectorData({ silent: false });
-      if (!isMounted) return;
       await ensureMarketSession();
+      const liveSession = shouldPollLiveMarket(getCachedMarketSession());
+      await loadSubsectorData({ silent: false, forceNetwork: liveSession });
+      if (!isMounted) return;
       const pollMs = getMarketPollingIntervalMs(SUBSECTOR_REFRESH_MS, 0);
       if (pollMs > 0) {
         timer = setInterval(() => {

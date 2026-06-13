@@ -15,7 +15,12 @@ import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import TradingViewLink from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
-import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
+import {
+  ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  shouldPollLiveMarket,
+} from '../utils/marketSession';
 import { runScreenTableFetch } from '../utils/screenPageLoader';
 
 const SECTOR_CACHE_KEY = 'sectorOutlookData';
@@ -46,9 +51,10 @@ function SectorOutlookPage({ onSectorClick }) {
     let isMounted = true;
     let timer;
     (async () => {
-      await loadData({ silent: false });
-      if (!isMounted) return;
       await ensureMarketSession();
+      const liveSession = shouldPollLiveMarket(getCachedMarketSession());
+      await loadData({ silent: false, forceNetwork: liveSession });
+      if (!isMounted) return;
       const pollMs = getMarketPollingIntervalMs(SECTOR_REFRESH_MS, 0);
       if (pollMs > 0) {
         timer = setInterval(() => {
