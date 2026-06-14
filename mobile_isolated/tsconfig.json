@@ -1,12 +1,11 @@
 {
-  "extends": "@react-native/typescript-config",
+  "extends": "./node_modules/@react-native/typescript-config/tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "allowJs": true,
     "checkJs": false,
     "declaration": false,
     "emitDeclarationOnly": false,
-    "types": ["react", "react-native", "jest"],
     "baseUrl": ".",
     "paths": {
       "@core/*": ["src/core/*"],
