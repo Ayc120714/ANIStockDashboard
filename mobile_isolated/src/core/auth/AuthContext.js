@@ -2,8 +2,12 @@ import React, {createContext, useCallback, useContext, useEffect, useMemo, useSt
 import {configureAuthHandlers} from '@core/api/apiClient';
 import {authService} from '@core/api/services/authService';
 import {dashboardService} from '@core/api/services/dashboardService';
+import {env} from '@core/config/env';
 import {sessionStorage} from '@core/storage/sessionStorage';
 import {tokenStorage} from '@core/storage/tokenStorage';
+
+const isLocalDevToken = token =>
+  typeof token === 'string' && /^local-(access|refresh)-/.test(token);
 
 const AuthContext = createContext(null);
 
@@ -60,9 +64,10 @@ export const AuthProvider = ({children}) => {
       getAccessToken: async () => tokenStorage.getAccessToken(),
       onUnauthorized: async () => {
         try {
-          await refreshAccessToken();
+          return await refreshAccessToken();
         } catch (_) {
           await logout();
+          return null;
         }
       },
     });
@@ -82,12 +87,26 @@ export const AuthProvider = ({children}) => {
           setUser(storedUser);
         }
         if (accessToken || refreshToken) {
+          if ((isLocalDevToken(accessToken) || isLocalDevToken(refreshToken)) && !env.localAuthMode) {
+            await logout();
+            return;
+          }
           setTokens({accessToken, refreshToken});
-          const me = await authService.fetchMe();
-          if (!mounted) return;
-          setUser(me);
           setIsAuthenticated(true);
-          await sessionStorage.saveUser(me);
+          if (mounted) {
+            setIsBootstrapping(false);
+          }
+          try {
+            const me = await authService.fetchMe({timeoutMs: 8000});
+            if (!mounted) return;
+            setUser(me);
+            await sessionStorage.saveUser(me);
+          } catch (_) {
+            if (mounted && !storedUser) {
+              await logout();
+            }
+          }
+          return;
         }
       } catch (_) {
         if (mounted) {

@@ -14,6 +14,17 @@ From that folder run `docker compose build && docker compose up -d`, then open *
 
 Step-by-step (Postgres, env vars, `uvicorn`, `npm start`, and using Cursor’s terminal for API calls): **[docs/deployment/local-fullstack-cursor-setup.md](docs/deployment/local-fullstack-cursor-setup.md)**. Quick start: `npm run dev:fullstack` (requires Postgres + backend `.env`). The API must live in **`../backend_stockdashboard`** (sibling of this folder), not inside `stockdashboard/`.
 
+## React Native app (`mobile_isolated/`)
+
+The standalone React Native client lives in **`mobile_isolated/`** at the root of this repo (sibling to **`src/`**), e.g. `ANIStockProject/stockdashboard/mobile_isolated`.
+
+- **Install (first time):** from this folder run `npm run mobile:isolated:install`
+- **Metro bundler:** `npm run mobile:isolated:start`
+- **Android build/run:** `npm run mobile:isolated:android` (device/emulator + Android SDK required)
+- **Android (device, faster incremental):** `npm run mobile:isolated:device`
+- **Sync from dev workspace:** `npm run mobile:isolated:sync` (copies `c:\ani-mobile` → `mobile_isolated/`; set `MOBILE_DEV_ROOT` if your dev copy lives elsewhere)
+- **Env:** copy `mobile_isolated/.env.example` to `mobile_isolated/.env`. Production APK builds use `mobile_isolated/.env.production` (`https://www.aycindustries.com/api`).
+
 ## Linux VPS (production-style stack)
 
 Enable the same components on an Ubuntu VPS (systemd, Nginx, Let’s Encrypt): **[docs/deployment/vps-linux-fullstack-setup.md](docs/deployment/vps-linux-fullstack-setup.md)**.

@@ -1,9 +1,13 @@
 import styled from 'styled-components';
 
 const mobileBreakpoint = '768px';
+/** Matches MUI `md` (900px): permanent mobile shell uses drawer below this width. */
+export const mobileNavBreakpoint = '899.95px';
 
-export const SidebarContainer = styled.div`
-  width: ${(p) => (p.collapsed ? '72px' : '260px')};
+export const SidebarContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'collapsed' && prop !== '$inDrawer',
+})`
+  width: ${(p) => (p.$inDrawer ? '280px' : p.collapsed ? '72px' : '260px')};
   background:
     radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.35), rgba(59, 130, 246, 0) 36%),
     radial-gradient(circle at 80% 12%, rgba(125, 211, 252, 0.18), rgba(125, 211, 252, 0) 28%),
@@ -15,11 +19,20 @@ export const SidebarContainer = styled.div`
   overflow-x: hidden;
   box-sizing: border-box;
   transition: width 200ms ease, padding 200ms ease;
-  position: sticky;
+  position: ${(p) => (p.$inDrawer ? 'relative' : 'sticky')};
   top: 0;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
+
+  ${(p) =>
+    p.$inDrawer
+      ? `
+    height: 100%;
+    min-height: 100%;
+    flex-shrink: 0;
+  `
+      : ''}
 
   &::after {
     content: '';
@@ -32,15 +45,16 @@ export const SidebarContainer = styled.div`
     pointer-events: none;
   }
 
-  /* Mobile: always collapsed */
-  @media (max-width: ${mobileBreakpoint}) {
-    width: 72px;
-    padding: 16px 8px;
+  /* Small tablets only (desktop rail still visible). Must not override phone widths below. */
+  @media (min-width: 769px) and (max-width: 1366px) {
+    width: ${(p) => (p.$inDrawer ? '280px' : p.collapsed ? '72px' : '236px')};
+    padding: ${(p) => (p.$inDrawer ? '20px 16px' : p.collapsed ? '14px 10px' : '18px 14px')};
   }
 
-  @media (max-width: 1366px) {
-    width: ${(p) => (p.collapsed ? '72px' : '236px')};
-    padding: ${(p) => (p.collapsed ? '14px 10px' : '18px 14px')};
+  /* Legacy narrow rail when JS falls back only — primary mobile UX uses off-canvas drawer instead */
+  @media (max-width: ${mobileBreakpoint}) {
+    width: ${(p) => (p.$inDrawer ? '280px' : '72px')};
+    padding: ${(p) => (p.$inDrawer ? '20px 14px' : '16px 8px')};
   }
 
   .brand-wrap {
@@ -76,7 +90,7 @@ export const SidebarContainer = styled.div`
 
   @media (max-width: ${mobileBreakpoint}) {
     .brand-logo {
-      display: none;
+      display: ${(p) => (p.$inDrawer ? 'block' : 'none')};
     }
   }
 `;
@@ -108,7 +122,9 @@ export const Section = styled.div`
   }
 `;
 
-export const SectionTitle = styled.h3`
+export const SectionTitle = styled.h3.withConfig({
+  shouldForwardProp: (prop) => prop !== 'collapsed' && prop !== '$inDrawer',
+})`
   margin: 18px 0 14px 0;
   font-size: 13px;
   font-weight: 800;
@@ -120,6 +136,6 @@ export const SectionTitle = styled.h3`
   overflow: hidden;
   text-overflow: ellipsis;
   @media (max-width: ${mobileBreakpoint}) {
-    display: none;
+    display: ${(p) => (p.$inDrawer ? (p.collapsed ? 'none' : 'block') : 'none')};
   }
 `;

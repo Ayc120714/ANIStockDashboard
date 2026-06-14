@@ -1,8 +1,13 @@
-import React from 'react';
-import { Outlet } from 'react-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import Drawer from '@mui/material/Drawer';
+import Box from '@mui/material/Box';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
 import { BootstrapReadyProvider } from '../context/BootstrapReadyContext';
+import { MobileNavDrawerProvider } from '../context/MobileNavDrawerContext';
+import { mobileNavBreakpoint } from '../components/Sidebar/Sidebar.styles';
 import styled from 'styled-components';
 
 const LayoutContainer = styled.div`
@@ -28,6 +33,10 @@ const ContentArea = styled.div`
     radial-gradient(circle at 10% 8%, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0) 34%),
     radial-gradient(circle at 92% 20%, rgba(125, 211, 252, 0.1), rgba(125, 211, 252, 0) 32%),
     linear-gradient(180deg, #f8faff 0%, #f2f7ff 45%, #f9fbff 100%);
+
+  @media (max-width: ${mobileNavBreakpoint}) {
+    padding: 12px;
+  }
 
   /* Global "rich highlight" look for cards/panels across pages */
   .MuiPaper-root,
@@ -81,14 +90,25 @@ const ContentArea = styled.div`
   }
 
   @keyframes cardSparkle {
-    0% { left: -45%; opacity: 0; }
-    10% { opacity: 0.8; }
-    50% { left: 120%; opacity: 0.35; }
-    100% { left: 120%; opacity: 0; }
+    0% {
+      left: -45%;
+      opacity: 0;
+    }
+    10% {
+      opacity: 0.8;
+    }
+    50% {
+      left: 120%;
+      opacity: 0.35;
+    }
+    100% {
+      left: 120%;
+      opacity: 0;
+    }
   }
 `;
 
-const GlobalViewNote = styled.div`
+const DesktopOnlyNote = styled.div`
   margin: 0 0 12px 0;
   padding: 8px 12px;
   border-radius: 8px;
@@ -97,23 +117,64 @@ const GlobalViewNote = styled.div`
   color: #1e3a8a;
   font-size: 12.5px;
   font-weight: 600;
+
+  @media (max-width: ${mobileNavBreakpoint}) {
+    display: none;
+  }
 `;
 
 function MainLayout() {
+  const location = useLocation();
+  const isMobileNav = useMediaQuery(`(max-width:${mobileNavBreakpoint})`, { noSsr: true });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search]);
+
   return (
     <BootstrapReadyProvider pollMs={3000} maxWaitForApiMs={60000}>
-      <LayoutContainer>
-        <Sidebar />
-        <MainContent>
-          <Header />
-          <ContentArea>
-            <GlobalViewNote>
-              Note: This application is best viewed on a laptop or monitor; mobile view may feel condensed.
-            </GlobalViewNote>
-            <Outlet />
-          </ContentArea>
-        </MainContent>
-      </LayoutContainer>
+      <MobileNavDrawerProvider onRequestClose={closeMobileNav}>
+        <LayoutContainer>
+          {!isMobileNav ? <Sidebar variant="rail" /> : null}
+
+          <Drawer
+            anchor="left"
+            open={isMobileNav && mobileNavOpen}
+            onClose={closeMobileNav}
+            ModalProps={{ keepMounted: true }}
+            PaperProps={{
+              sx: {
+                width: 280,
+                maxWidth: '88vw',
+                boxSizing: 'border-box',
+                background: 'transparent',
+                overflow: 'hidden',
+              },
+            }}
+          >
+            <Box role="presentation" sx={{ height: '100%', overflow: 'auto' }}>
+              <Sidebar variant="drawer" />
+            </Box>
+          </Drawer>
+
+          <MainContent>
+            <Header
+              showMenuButton={isMobileNav}
+              onMenuOpen={() => setMobileNavOpen(true)}
+            />
+            <ContentArea>
+              <DesktopOnlyNote>
+                Note: Some analytics tables are easiest to read on a larger monitor; the app is fully usable on
+                phones and tablets.
+              </DesktopOnlyNote>
+              <Outlet />
+            </ContentArea>
+          </MainContent>
+        </LayoutContainer>
+      </MobileNavDrawerProvider>
     </BootstrapReadyProvider>
   );
 }

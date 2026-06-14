@@ -16,6 +16,9 @@
 /mobile_isolated/android/app/build
 /mobile_isolated/android/app/.cxx
 /mobile_isolated/ios/build
+/mobile_isolated/.idea
+/mobile_isolated/android/local.properties
+/mobile_isolated/.env
 
 # tool caches
 .eslintcache

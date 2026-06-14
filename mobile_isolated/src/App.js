@@ -5,8 +5,8 @@ import {AuthProvider} from '@core/auth/AuthContext';
 import {AppNavigator} from '@nav/AppNavigator';
 import {AppErrorBoundary} from '@components/AppErrorBoundary';
 
-// Some devices are more stable with screens optimization disabled in release.
-enableScreens(false);
+// Native stack navigators require native screens; disabling them causes a blank screen on Android.
+enableScreens(true);
 
 const App = () => (
   <AppErrorBoundary>

@@ -239,6 +239,31 @@ If the request URL is still `localhost:8000`, **rebuild the frontend** with `.en
 
 ---
 
+## 8. React Native mobile app (`mobile_isolated/`)
+
+The Android client lives in **`stockdashboard/mobile_isolated/`** and talks to the same FastAPI backend as the web app.
+
+| Check | Action |
+|--------|--------|
+| **API base URL** | Release builds read `mobile_isolated/.env.production`: `MOBILE_API_URL=https://www.aycindustries.com/api` (canonical Nginx on **443**, not `:8443`). |
+| **Nginx** | `/api/` block must forward **`X-Device-Id`** — see `docs/deployment/nginx-aycindustries.com.conf`. Required for trusted-device login (skip email OTP for 7 days). |
+| **Backend auth** | `TRUSTED_DEVICE_DAYS=7`, working SMTP (`SMTP_*`) for email OTP, `TOKEN_HASH_SECRET` stable across restarts. |
+| **Broker deep links** | App scheme `anistock://broker/callback` — no server change; broker OAuth redirect must match user profile. |
+| **Readiness** | Mobile dashboard uses same APIs; confirm `curl -sS https://www.aycindustries.com/api/system/readiness` returns JSON with `bootstrap_complete: true` after backend bootstrap. |
+| **CI APK** | Push to `main` → GitHub Actions **Android APK** (`.github/workflows/android-apk.yml`) builds from `mobile_isolated/**`. |
+| **Dev sync** | From dev machine: `npm run mobile:isolated:sync` (or in `c:\ani-mobile`: `npm run sync:stockdashboard`) before committing mobile changes. |
+
+Quick smoke test from a phone/emulator:
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}" https://www.aycindustries.com/api/system/status
+curl -sS -H "X-Device-Id: smoke-test-device" https://www.aycindustries.com/api/system/readiness
+```
+
+Both should return **200** JSON (not HTML).
+
+---
+
 ## Summary: “nothing works” order of operations
 
 1. **`git pull`** frontend **and** backend repos.

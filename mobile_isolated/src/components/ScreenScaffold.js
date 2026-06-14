@@ -1,17 +1,21 @@
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {AYC} from '@core/theme/aycMobileTheme';
+import {mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 
 export const ScreenScaffold = ({title, subtitle, children}) => (
-  <ScrollView contentContainerStyle={styles.container}>
-    <Text style={styles.title}>{title}</Text>
-    {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+  <ScrollView style={styles.root} contentContainerStyle={[mobilePad, styles.container]}>
+    <View style={styles.header}>
+      <Text style={mobileStyles.pageTitle}>{title}</Text>
+      {subtitle ? <Text style={mobileStyles.subtitle}>{subtitle}</Text> : null}
+    </View>
     <View style={styles.content}>{children}</View>
   </ScrollView>
 );
 
 const styles = StyleSheet.create({
-  container: {padding: 16, gap: 12},
-  title: {fontSize: 24, fontWeight: '700'},
-  subtitle: {fontSize: 14, color: '#666'},
+  root: {flex: 1, backgroundColor: AYC.pageBg},
+  container: {gap: 10},
+  header: {gap: 4, marginBottom: 2},
   content: {gap: 10},
 });

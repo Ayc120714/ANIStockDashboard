@@ -9,7 +9,8 @@
       "@core/*": ["src/core/*"],
       "@features/*": ["src/features/*"],
       "@nav/*": ["src/navigation/*"],
-      "@components/*": ["src/components/*"]
+      "@components/*": ["src/components/*"],
+      "@hooks/*": ["src/hooks/*"]
     }
   },
   "include": ["src", "index.js"]

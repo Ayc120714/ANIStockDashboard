@@ -1,0 +1,101 @@
+/**
+ * Pro-Ledger Financial design tokens from `design/stitch/DESIGN.md` (Google Stitch export).
+ * HTML mockups: design/stitch/mockups/
+ */
+export const STITCH_COLORS = {
+  surface: '#f7f9fe',
+  surfaceDim: '#d8dadf',
+  surfaceBright: '#f7f9fe',
+  surfaceContainerLowest: '#ffffff',
+  surfaceContainerLow: '#f1f4f9',
+  surfaceContainer: '#eceef3',
+  surfaceContainerHigh: '#e6e8ed',
+  surfaceContainerHighest: '#e0e2e7',
+  onSurface: '#181c20',
+  onSurfaceVariant: '#45464f',
+  inverseSurface: '#2d3135',
+  inverseOnSurface: '#eff1f6',
+  outline: '#767680',
+  outlineVariant: '#c6c5d0',
+  surfaceTint: '#505c8f',
+  primary: '#000421',
+  onPrimary: '#ffffff',
+  primaryContainer: '#0d1b4b',
+  onPrimaryContainer: '#7884ba',
+  inversePrimary: '#b8c4fe',
+  secondary: '#005db7',
+  onSecondary: '#ffffff',
+  secondaryContainer: '#64a1ff',
+  onSecondaryContainer: '#003670',
+  tertiary: '#00070f',
+  onTertiary: '#ffffff',
+  tertiaryContainer: '#002135',
+  onTertiaryContainer: '#518cb8',
+  error: '#ba1a1a',
+  onError: '#ffffff',
+  errorContainer: '#ffdad6',
+  onErrorContainer: '#93000a',
+  primaryFixed: '#dde1ff',
+  primaryFixedDim: '#b8c4fe',
+  onPrimaryFixed: '#081747',
+  onPrimaryFixedVariant: '#384475',
+  secondaryFixed: '#d6e3ff',
+  secondaryFixedDim: '#a9c7ff',
+  onSecondaryFixed: '#001b3d',
+  onSecondaryFixedVariant: '#00468c',
+  tertiaryFixed: '#cbe6ff',
+  tertiaryFixedDim: '#93cdfc',
+  onTertiaryFixed: '#001e30',
+  onTertiaryFixedVariant: '#004b71',
+  background: '#f7f9fe',
+  onBackground: '#181c20',
+  surfaceVariant: '#e0e2e7',
+  success: '#43a047',
+  danger: '#e53935',
+  warning: '#fb8c00',
+  surfaceCard: '#ffffff',
+  borderRegular: '#e0e0e0',
+  hardwareBezel: '#1a1a2e',
+  highlightSurface: '#e3f2fd',
+  mutedSurface: '#f0f2f8',
+};
+
+export const STITCH_SPACING = {
+  pageMargin: 12,
+  sectionGap: 10,
+  componentPadding: 8,
+  cardMargin: 6,
+  microGap: 4,
+  gridUnit: 2,
+};
+
+export const STITCH_RADIUS = {
+  sm: 2,
+  default: 4,
+  md: 6,
+  lg: 8,
+  xl: 12,
+  full: 9999,
+};
+
+/** Stitch HTML mockup scale — mobile screens use slightly larger readable sizes via AYC.type. */
+export const STITCH_TYPE = {
+  displayMetric: {fontSize: 13, fontWeight: '800', lineHeight: 16, letterSpacing: -0.01},
+  headlineMd: {fontSize: 12, fontWeight: '800', lineHeight: 14},
+  bodyBase: {fontSize: 10, fontWeight: '600', lineHeight: 12},
+  bodyBold: {fontSize: 10, fontWeight: '800', lineHeight: 12},
+  labelSm: {fontSize: 8, fontWeight: '700', lineHeight: 10},
+  labelCaps: {fontSize: 8, fontWeight: '800', lineHeight: 10, letterSpacing: 0.05},
+  uiText: {fontSize: 7, fontWeight: '600', lineHeight: 9},
+  tableData: {fontSize: 6, fontWeight: '500', lineHeight: 8},
+  caption: {fontSize: 5, fontWeight: '800', lineHeight: 7, letterSpacing: 0.1},
+  micro: {fontSize: 4, fontWeight: '400', lineHeight: 6},
+};
+
+export const STITCH = {
+  name: 'Pro-Ledger Financial',
+  colors: STITCH_COLORS,
+  spacing: STITCH_SPACING,
+  radius: STITCH_RADIUS,
+  type: STITCH_TYPE,
+};

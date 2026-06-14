@@ -24,8 +24,8 @@ Use this sequence to build and verify the APK from Android Studio with fewer run
 
 Set production API values in `mobile_isolated/.env.production`:
 
-- `MOBILE_API_URL=https://www.aycindustries.com:8443/api`
-- `MOBILE_TRADE_API_URL=https://www.aycindustries.com:8443/api`
+- `MOBILE_API_URL=https://www.aycindustries.com/api`
+- `MOBILE_TRADE_API_URL=https://www.aycindustries.com/api`
 
 ## 4) Debug Build + Run (for Android Studio verification)
 

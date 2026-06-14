@@ -1,6 +1,12 @@
 import {useEffect} from 'react';
 import {Alert, Linking} from 'react-native';
 
+let brokerCallbackHandler = null;
+
+export const setBrokerCallbackHandler = handler => {
+  brokerCallbackHandler = typeof handler === 'function' ? handler : null;
+};
+
 const parseLink = url => {
   try {
     const u = new URL(url);
@@ -9,6 +15,7 @@ const parseLink = url => {
       status: u.searchParams.get('status') || '',
       authCode: u.searchParams.get('auth_code') || '',
       requestToken: u.searchParams.get('request_token') || '',
+      tokenId: u.searchParams.get('tokenId') || u.searchParams.get('token_id') || '',
       error: u.searchParams.get('error') || '',
     };
   } catch (_) {
@@ -18,11 +25,15 @@ const parseLink = url => {
 
 export const useBrokerDeepLinking = () => {
   useEffect(() => {
-    const processUrl = ({url}) => {
+    const processUrl = async ({url}) => {
       const parsed = parseLink(url);
       if (!parsed) return;
       if (parsed.error) {
         Alert.alert('Broker callback', `Callback error: ${parsed.error}`);
+        return;
+      }
+      if (brokerCallbackHandler) {
+        await brokerCallbackHandler(parsed);
         return;
       }
       Alert.alert(

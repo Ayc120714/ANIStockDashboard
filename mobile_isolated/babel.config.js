@@ -10,6 +10,7 @@ module.exports = {
           '@features': './src/features',
           '@nav': './src/navigation',
           '@components': './src/components',
+          '@hooks': './src/hooks',
         },
       },
     ],

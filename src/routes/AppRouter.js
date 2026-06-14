@@ -26,6 +26,7 @@ import ForexPage from '../pages/ForexPage';
 import MutualFundsPage from '../pages/MutualFundsPage';
 import TelegramAdminPage from '../pages/TelegramAdminPage';
 import AdminUsersPage from '../pages/AdminUsersPage';
+import AlgoPerformancePage from '../pages/AlgoPerformancePage';
 import LoginPage from '../pages/LoginPage';
 import SignupPage from '../pages/SignupPage';
 import OtpVerifyPage from '../pages/OtpVerifyPage';
@@ -77,6 +78,7 @@ function AppRouter() {
           <Route path="/video-screener" element={<Navigate to="/screens" replace />} />
           <Route path="/portfolio-manager" element={<PremiumModuleRoute><PortfolioManagerPage /></PremiumModuleRoute>} />
           <Route path="/alerts" element={<PremiumModuleRoute><StockAlertsPage /></PremiumModuleRoute>} />
+          <Route path="/algo-performance" element={<AlgoPerformancePage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/upgrade-premium" element={<UpgradePremiumPage />} />
           <Route path="/callback" element={<DhanCallbackPage />} />

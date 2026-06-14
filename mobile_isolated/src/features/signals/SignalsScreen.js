@@ -1,0 +1,323 @@
+import React, {useCallback, useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
+import {MobileChrome} from '@components/mobileChrome/MobileChrome';
+import {TradeProductPicker} from '@components/TradeProductPicker';
+import {useAuth} from '@core/auth/AuthContext';
+import {extractApiRows} from '@core/utils/apiPayload';
+import {signalsService} from '@core/api/services/signalsService';
+import {readAdvisorSignalsCache, writeAdvisorSignalsCache} from '@core/storage/advisorSignalsCache';
+import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
+import {inferAlertSide} from '@core/utils/tradePreflight';
+import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
+
+const FILTERS = [
+  {id: 'all', label: 'All'},
+  {id: 'entry_ready', label: 'Entry ready'},
+  {id: 'high', label: 'High conviction'},
+];
+
+function formatINR(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—';
+  const v = Number(n);
+  try {
+    return `₹${v.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  } catch {
+    return `₹${v.toFixed(2)}`;
+  }
+}
+
+function SignalCard({item, onTrade}) {
+  const trend = String(item.trend || '').toLowerCase();
+  const bull = trend === 'bullish';
+  const status = String(item.status || '');
+  const pct = item.pct_from_entry;
+  const pctColor = pct > 0 ? '#15803d' : pct < 0 ? '#b91c1c' : '#374151';
+  const statusStyle =
+    status === 'entry_ready'
+      ? styles.badgeEntry
+      : status === 'in_trade'
+        ? styles.badgeTrade
+        : status === 'done'
+          ? styles.badgeDone
+          : styles.badgeWatch;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <View style={styles.tags}>
+          {item.high_conviction ? <Text style={styles.tagHi}>High conviction</Text> : null}
+          <Text style={styles.tagEq}>{bull ? 'Equity · Bull' : 'Equity · Bear'}</Text>
+        </View>
+        <Text style={[styles.badgeStatus, statusStyle]}>{status.replace(/_/g, ' ')}</Text>
+      </View>
+      <Text style={styles.sym}>{item.symbol}</Text>
+      <Text style={styles.cmpRow}>
+        <Text style={styles.cmp}>Live {formatINR(item.cmp)}</Text>
+        {pct != null ? (
+          <Text style={[styles.pct, {color: pctColor}]}>
+            {' '}
+            ({pct > 0 ? '+' : ''}
+            {pct}% vs entry)
+          </Text>
+        ) : null}
+      </Text>
+      <View style={styles.railWrap}>
+        <View style={styles.rail}>
+          <View style={[styles.railSeg, {flex: 1, backgroundColor: '#fecaca'}]} />
+          <View style={[styles.railSeg, {flex: 1.2, backgroundColor: '#bbf7d0'}]} />
+          <View style={[styles.railSeg, {flex: 1, backgroundColor: '#bbf7d0'}]} />
+        </View>
+        <View style={styles.railLabels}>
+          <Text style={styles.railLab}>SL {formatINR(item.stop_loss)}</Text>
+          <Text style={styles.railLab}>Entry {formatINR(item.entry_price)}</Text>
+          <Text style={styles.railLab}>T1 {formatINR(item.target_1)}</Text>
+        </View>
+      </View>
+      <View style={styles.metaRow}>
+        <Text style={styles.meta}>Score {item.conviction_score ?? item.signal_score ?? '—'}</Text>
+        {item.target_2 ? <Text style={styles.meta}>T2 {formatINR(item.target_2)}</Text> : null}
+      </View>
+      {onTrade ? (
+        <Pressable style={styles.tradeBtn} onPress={() => onTrade(item)}>
+          <Text style={styles.tradeBtnText}>Trade this signal</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function SignalsScreen({navigation}) {
+  const {user} = useAuth();
+  const userId = String(user?.id || user?.user_id || '');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [rows, setRows] = useState([]);
+  const [tradePickerSignal, setTradePickerSignal] = useState(null);
+
+  const load = useCallback(async ({silent = false} = {}) => {
+    setError('');
+    if (!silent) setLoading(true);
+
+    const cached = await readAdvisorSignalsCache();
+    if (cached.length) {
+      setRows(cached);
+      if (!silent) setLoading(false);
+    }
+
+    try {
+      const res = await signalsService.fetchLatestSignals({limit: 150, timeoutMs: 30_000});
+      const next = extractApiRows(res);
+      setRows(next);
+      await writeAdvisorSignalsCache(next);
+    } catch (e) {
+      if (!cached.length) {
+        setError(String(e?.message || e));
+        setRows([]);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load({silent: rows.length > 0});
+    }, [load, rows.length]),
+  );
+
+  const [filter, setFilter] = useState('all');
+
+  const filtered = useMemo(() => {
+    if (filter === 'entry_ready') {
+      return rows.filter(r => String(r.status) === 'entry_ready');
+    }
+    if (filter === 'high') {
+      return rows.filter(r => r.high_conviction);
+    }
+    return rows;
+  }, [rows, filter]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    load({silent: true});
+  }, [load]);
+
+  const header = (
+    <View style={styles.headBlock}>
+      <View style={styles.headerCard}>
+        <Image source={require('../../assets/ayc-logo.png')} style={styles.logo} />
+        <Text style={styles.title}>Advisor signals</Text>
+      </View>
+      <View style={styles.chips}>
+        {FILTERS.map(c => (
+          <Pressable
+            key={c.id}
+            onPress={() => setFilter(c.id)}
+            style={[styles.chip, filter === c.id ? styles.chipOn : styles.chipOff]}
+          >
+            <Text style={[styles.chipTxt, filter === c.id ? styles.chipTxtOn : styles.chipTxtOff]}>{c.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {error ? (
+        <View style={styles.errWrap}>
+          <Text style={styles.err}>{error}</Text>
+          <Pressable style={styles.retryBtn} onPress={() => load()}>
+            <Text style={styles.retryTxt}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const body =
+    loading && !refreshing && rows.length === 0 ? (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={AYC.accent} />
+        <Text style={styles.muted}>Loading signals…</Text>
+      </View>
+    ) : (
+      <FlatList
+        data={filtered}
+        keyExtractor={(item, i) => `${item.symbol}-${i}`}
+        style={styles.flex}
+        contentContainerStyle={styles.listPad}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={<Text style={styles.muted}>No setups match this filter right now.</Text>}
+        renderItem={({item}) => (
+          <SignalCard item={item} onTrade={navigation ? signal => setTradePickerSignal(signal) : null} />
+        )}
+      />
+    );
+
+  const shell = (
+    <>
+      {body}
+      <TradeProductPicker
+        visible={Boolean(tradePickerSignal)}
+        symbol={tradePickerSignal?.symbol}
+        onClose={() => setTradePickerSignal(null)}
+        onSelect={productType =>
+          startTradeFromAlert(
+            navigation,
+            {
+              ...tradePickerSignal,
+              id: tradePickerSignal?.id || tradePickerSignal?.symbol,
+              source: 'advisor_signal',
+            },
+            {
+              productType,
+              side: inferAlertSide(tradePickerSignal),
+              userId,
+            },
+          )
+        }
+      />
+    </>
+  );
+
+  if (navigation) {
+    return <MobileChrome navigation={navigation}>{shell}</MobileChrome>;
+  }
+
+  return <View style={styles.root}>{shell}</View>;
+}
+
+const styles = StyleSheet.create({
+  root: {flex: 1, backgroundColor: AYC.pageBg},
+  flex: {flex: 1},
+  center: {flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10, padding: 24},
+  muted: mobileStyles.caption,
+  errWrap: {marginTop: 8, gap: 8},
+  err: mobileStyles.err,
+  retryBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: AYC.appBar,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryTxt: {color: '#fff', fontWeight: '800', fontSize: AYC.type.caption},
+  headBlock: {marginBottom: 8, paddingHorizontal: 4},
+  headerCard: {
+    backgroundColor: AYC.appBar,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: AYC.cardBorder,
+    padding: 12,
+    gap: 6,
+    marginBottom: 10,
+  },
+  logo: {width: 180, height: 48, resizeMode: 'contain'},
+  title: {fontSize: AYC.type.pageTitle, fontWeight: '800', color: AYC.appBarText},
+  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  chip: {paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1},
+  chipOn: {backgroundColor: AYC.appBar, borderColor: AYC.appBar},
+  chipOff: {backgroundColor: AYC.card, borderColor: AYC.cardBorder},
+  chipTxt: {fontSize: AYC.type.body, fontWeight: '700'},
+  chipTxtOn: {color: '#fff'},
+  chipTxtOff: {color: AYC.text},
+  listPad: {...mobilePad, paddingHorizontal: 16, paddingBottom: 24},
+  card: {...mobileStyles.card, borderRadius: 14, padding: 14, marginBottom: 4},
+  cardTop: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6},
+  tags: {flexDirection: 'row', flexWrap: 'wrap', gap: 6, flex: 1},
+  tagHi: {
+    fontSize: AYC.type.caption,
+    fontWeight: '800',
+    color: '#166534',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  tagEq: {
+    fontSize: AYC.type.caption,
+    fontWeight: '700',
+    color: '#1e40af',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  badgeStatus: {
+    fontSize: AYC.type.caption,
+    fontWeight: '800',
+    textTransform: 'capitalize',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  badgeEntry: {color: '#14532d', backgroundColor: '#bbf7d0'},
+  badgeTrade: {color: '#1e3a8a', backgroundColor: '#bfdbfe'},
+  badgeWatch: {color: '#92400e', backgroundColor: '#fef3c7'},
+  badgeDone: {color: '#4b5563', backgroundColor: '#e5e7eb'},
+  sym: mobileStyles.metricLg,
+  cmpRow: {marginTop: 4},
+  cmp: mobileStyles.metricMd,
+  pct: mobileStyles.body,
+  railWrap: {marginTop: 12},
+  rail: {flexDirection: 'row', height: 6, borderRadius: 4, overflow: 'hidden'},
+  railSeg: {height: 6},
+  railLabels: {flexDirection: 'row', justifyContent: 'space-between', marginTop: 6},
+  railLab: mobileStyles.caption,
+  metaRow: {flexDirection: 'row', justifyContent: 'space-between', marginTop: 10},
+  meta: mobileStyles.caption,
+  tradeBtn: {marginTop: 10, backgroundColor: '#10b981', borderRadius: 10, paddingVertical: 10, alignItems: 'center'},
+  tradeBtnText: {color: '#fff', fontWeight: '800', fontSize: AYC.type.body},
+});

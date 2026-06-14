@@ -1,0 +1,590 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>AYC INDUSTRIES - Mutual Funds</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#004b71",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eff1f6",
+                        "danger": "#e53935",
+                        "surface-dim": "#d8dadf",
+                        "surface-container-low": "#f1f4f9",
+                        "secondary-fixed-dim": "#a9c7ff",
+                        "on-secondary": "#ffffff",
+                        "success": "#43a047",
+                        "on-secondary-container": "#003670",
+                        "surface-container-high": "#e6e8ed",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "background": "#f7f9fe",
+                        "error": "#ba1a1a",
+                        "on-background": "#181c20",
+                        "surface-container-highest": "#e0e2e7",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#518cb8",
+                        "on-secondary-fixed-variant": "#00468c",
+                        "surface": "#f7f9fe",
+                        "surface-bright": "#f7f9fe",
+                        "secondary": "#005db7",
+                        "surface-tint": "#505c8f",
+                        "on-error": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-surface-variant": "#45464f",
+                        "on-surface": "#181c20",
+                        "secondary-fixed": "#d6e3ff",
+                        "inverse-surface": "#2d3135",
+                        "outline-variant": "#c6c5d0",
+                        "primary-container": "#0d1b4b",
+                        "surface-container": "#eceef3",
+                        "tertiary-fixed-dim": "#93cdfc",
+                        "primary-fixed-dim": "#b8c4fe",
+                        "tertiary-fixed": "#cbe6ff",
+                        "primary-fixed": "#dde1ff",
+                        "hardware-bezel": "#1a1a2e",
+                        "outline": "#767680",
+                        "on-tertiary-fixed": "#001e30",
+                        "on-primary-container": "#7884ba",
+                        "on-primary-fixed-variant": "#384475",
+                        "on-secondary-fixed": "#001b3d",
+                        "tertiary": "#00070f",
+                        "surface-variant": "#e0e2e7",
+                        "inverse-primary": "#b8c4fe",
+                        "surface-card": "#ffffff",
+                        "secondary-container": "#64a1ff",
+                        "primary": "#000421",
+                        "tertiary-container": "#002135",
+                        "on-primary-fixed": "#081747",
+                        "warning": "#fb8c00",
+                        "border-regular": "#e0e0e0"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "card-margin": "6px",
+                        "page-margin": "12px",
+                        "micro-gap": "4px",
+                        "grid-unit": "2px",
+                        "section-gap": "10px",
+                        "component-padding": "8px"
+                    },
+                    "fontFamily": {
+                        "body-bold": ["Inter"],
+                        "micro": ["Inter"],
+                        "body-base": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "table-data": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "caption": ["Inter"],
+                        "ui-text": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "display-metric": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-bold": ["10px", { "lineHeight": "12px", "fontWeight": "800" }],
+                        "micro": ["4px", { "lineHeight": "6px", "fontWeight": "400" }],
+                        "body-base": ["10px", { "lineHeight": "12px", "fontWeight": "600" }],
+                        "label-caps": ["8px", { "lineHeight": "10px", "letterSpacing": "0.05em", "fontWeight": "800" }],
+                        "table-data": ["6px", { "lineHeight": "8px", "fontWeight": "500" }],
+                        "headline-md": ["12px", { "lineHeight": "14px", "fontWeight": "800" }],
+                        "caption": ["5px", { "lineHeight": "7px", "letterSpacing": "0.1em", "fontWeight": "800" }],
+                        "ui-text": ["7px", { "lineHeight": "9px", "fontWeight": "600" }],
+                        "label-sm": ["8px", { "lineHeight": "10px", "fontWeight": "700" }],
+                        "display-metric": ["13px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "800" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #f4f6fb; /* Fallback from visual tokens */
+        }
+        .table-container::-webkit-scrollbar {
+            height: 4px;
+            width: 4px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f4f9;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #c6c5d0;
+            border-radius: 4px;
+        }
+        .data-row:hover {
+            background-color: #e3f2fd; /* Highlight Surface from tokens */
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-base antialiased flex flex-col h-screen overflow-hidden">
+<!-- TopAppBar (From JSON) -->
+<header class="bg-surface-container-lowest dark:bg-surface-container-lowest text-primary dark:text-primary-fixed-dim font-headline-md text-headline-md fixed top-0 w-full z-50 border-b border-border-regular dark:border-outline-variant flat no shadows flex justify-between items-center h-12 px-page-margin">
+<div class="flex items-center gap-2 cursor-pointer active:opacity-80 hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors p-1 rounded">
+<span class="material-symbols-outlined text-[16px]">menu</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="font-headline-md text-headline-md font-extrabold text-primary dark:text-primary-fixed-dim">AYC INDUSTRIES</div>
+<div class="font-caption text-caption text-on-surface-variant tracking-widest">ANALYZE • YIELD • CONQUER</div>
+</div>
+<div class="flex items-center cursor-pointer active:opacity-80 hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors p-1 rounded">
+<!-- Simulated Avatar Placeholder -->
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-body-bold text-[8px]">
+                U
+            </div>
+</div>
+</header>
+<!-- Main App Layout -->
+<div class="flex flex-1 pt-12 overflow-hidden w-full max-w-[1600px] mx-auto">
+<!-- NavigationDrawer (From JSON, hidden on mobile) -->
+<aside class="hidden md:flex flex-col p-page-margin gap-section-gap bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary-fixed-dim font-body-base text-body-base h-full w-72 border-r border-border-regular dark:border-outline-variant shadow-md">
+<!-- Header Profile -->
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-headline-md">AC</div>
+<div class="flex flex-col">
+<span class="font-body-bold text-on-surface">Alex Carter</span>
+<span class="font-ui-text text-on-surface-variant">Pro License Tier</span>
+<span class="font-caption text-success mt-1">Active</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[14px]">dashboard</span>
+<span class="">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+<span class="">Portfolio</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[14px]">show_chart</span>
+<span class="">Markets</span>
+</a>
+<!-- Active Nav Item (Derived from context "Advisor" -> related to Settings/Tools usually, but let's assume it's under an implied 'Advisor' section.  Actually, none perfectly match "Mutual Funds". We'll highlight Markets as closest intent for browsing funds) -->
+<a class="flex items-center gap-3 px-3 py-2 rounded bg-secondary-container text-on-secondary-container font-body-bold hover:bg-surface-container-high transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span class="">Advisor</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[14px]">settings</span>
+<span class="">Settings</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Notice Strip -->
+
+<!-- Screen Header & Context -->
+<div class="px-page-margin py-section-gap flex flex-col gap-2 shrink-0">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">account_balance</span>
+<h1 class="font-headline-md text-headline-md text-on-surface">Mutual Funds</h1>
+</div>
+<button class="flex items-center gap-1 border border-border-regular rounded px-2 py-1 bg-surface-card hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[12px] text-on-surface-variant">refresh</span>
+<span class="font-ui-text text-on-surface">Refresh</span>
+</button>
+</div>
+<div class="font-ui-text text-on-surface-variant">
+                    Direct MFs · Updated 2026-06-13 · 98 schemes
+                </div>
+<!-- Tabs -->
+<div class="flex border-b border-border-regular mt-2 gap-4">
+<button class="font-body-bold text-primary border-b-2 border-primary pb-1 px-1">Fund List</button>
+<button class="font-body-base text-on-surface-variant hover:text-on-surface pb-1 px-1 transition-colors">Enter / Exit (B1–S3)</button>
+<button class="font-body-base text-on-surface-variant hover:text-on-surface pb-1 px-1 transition-colors">RS D/W/M Setups</button>
+</div>
+</div>
+<!-- Data Table Container -->
+<div class="flex-1 px-page-margin pb-20 md:pb-page-margin overflow-hidden flex flex-col">
+<div class="bg-surface-card border border-border-regular rounded w-full flex-1 flex flex-col overflow-hidden shadow-sm">
+<!-- Table Header -->
+<div class="bg-primary-container text-on-primary-container flex font-label-caps text-label-caps px-2 py-2 sticky top-0 z-10 shrink-0">
+<div class="w-48 shrink-0 border-r border-[#ffffff20] px-1 truncate">Scheme</div>
+<div class="w-24 shrink-0 text-right border-r border-[#ffffff20] px-1 truncate">Category</div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1">NAV</div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1">Exp Ratio</div>
+<div class="w-12 shrink-0 text-right border-r border-[#ffffff20] px-1">P/E</div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1">1Y Ann%</div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1 flex items-center justify-end gap-1">3Y Ann% <span class="material-symbols-outlined text-[8px]">arrow_drop_down</span></div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1">5Y Ann%</div>
+<div class="w-16 shrink-0 text-right border-r border-[#ffffff20] px-1">10Y Ann%</div>
+<div class="w-20 shrink-0 text-right border-r border-[#ffffff20] px-1">AUM (Cr)</div>
+<div class="w-12 shrink-0 text-right px-1">Rating</div>
+</div>
+<!-- Table Body (Scrollable) -->
+<div class="flex-1 overflow-auto table-container bg-surface-card">
+<!-- Row 1 -->
+<div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default">
+<div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">SBI PSU Dir Gr</div>
+<div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Other</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface">38.46</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.85%</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+8.98%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+29.82%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+23.75%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+15.98%</div>
+<div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+</div>
+<!-- Row 2 -->
+<div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default">
+<div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">LIC MF Infrastructure Dir Gr</div>
+<div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface">61.34</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.83%</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+8.21%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+28.32%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+24.51%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+18.29%</div>
+<div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+<div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+</div>
+<!-- Row 3 -->
+<div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+<div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">ICICI Pru Pharma Healthcare Diag Dir Gr</div>
+<div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Sector - Healthcare</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface">45.09</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.86%</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+6.27%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+27.82%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+16.19%</div>
+<div class="w-16 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+</div>
+<!-- Row 4 -->
+<div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default">
+<div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">HSBC Midcap Dir Gr</div>
+<div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Mid-Cap</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface">505.49</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.56%</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+17.99%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+27.33%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+19.66%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+18.66%</div>
+<div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+<div class="w-12 shrink-0 text-right px-1 text-on-surface">4</div>
+</div>
+<!-- Row 5 -->
+<div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+<div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">SBI Healthcare Opportunities Dir Gr</div>
+<div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Sector - Healthcare</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface">545.63</div>
+<div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.92%</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+11.79%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+26.52%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+16.61%</div>
+<div class="w-16 shrink-0 text-right px-1 text-success">+14.64%</div>
+<div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+<div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+</div>
+<!-- Generating more rows procedurally to fill space -->
+<script>
+                            const tbody = document.querySelector('.table-container');
+                            const funds = [
+                                { name: "DSP India T.I.G.E.R. Dir Gr", cat: "Equity - Infrastructure", nav: "385.36", exp: "0.71%", pe: "—", y1: "+14.70%", y3: "+26.00%", y5: "+24.08%", y10: "+18.89%", aum: "—", rat: "5" },
+                                { name: "Invesco India PSU Equity Dir Gr", cat: "Equity - Other", nav: "77.49", exp: "0.77%", pe: "—", y1: "+2.32%", y3: "+25.78%", y5: "+22.75%", y10: "+18.58%", aum: "—", rat: "—" },
+                                { name: "Invesco India Mid Cap Dir Gr", cat: "Mid-Cap", nav: "223.70", exp: "0.50%", pe: "—", y1: "+6.95%", y3: "+25.38%", y5: "+21.05%", y10: "+20.00%", aum: "—", rat: "5" },
+                                { name: "Bank of India Manufactrg &Infra Dir Gr", cat: "Equity - Infrastructure", nav: "75.01", exp: "0.68%", pe: "—", y1: "+14.55%", y3: "+25.26%", y5: "+22.04%", y10: "+19.81%", aum: "—", rat: "5" },
+                                { name: "ICICI Pru MidCap Dir Gr", cat: "Mid-Cap", nav: "374.95", exp: "0.87%", pe: "—", y1: "+13.24%", y3: "+25.11%", y5: "+18.92%", y10: "+18.33%", aum: "—", rat: "4" },
+                                { name: "Quant Multi Asset Allocation Dir Gr", cat: "Multi Asset Allocation", nav: "180.04", exp: "0.61%", pe: "—", y1: "+19.66%", y3: "+24.92%", y5: "+21.10%", y10: "+19.14%", aum: "—", rat: "—" },
+                                { name: "Nippon India Power & Infra Dir Gr", cat: "Equity - Other", nav: "409.15", exp: "0.82%", pe: "—", y1: "+10.07%", y3: "+24.49%", y5: "+23.33%", y10: "+18.57%", aum: "—", rat: "—" },
+                                { name: "HDFC Infrastructure Dir Gr", cat: "Equity - Infrastructure", nav: "51.75", exp: "1.10%", pe: "—", y1: "-1.19%", y3: "+21.55%", y5: "+21.39%", y10: "+12.86%", aum: "—", rat: "3" }
+                            ];
+
+                            funds.forEach((fund, index) => {
+                                const y1Color = fund.y1.startsWith('-') ? 'text-danger' : 'text-success';
+                                const bgClass = index % 2 === 0 ? '' : 'bg-surface-container-low';
+                                
+                                const rowHTML = `
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ${bgClass}">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">${fund.name}</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">${fund.cat}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">${fund.nav}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">${fund.exp}</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">${fund.pe}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 ${y1Color} font-body-bold">${fund.y1}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">${fund.y3}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">${fund.y5}</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">${fund.y10}</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">${fund.aum}</div>
+                                    <div class="w-12 shrink-0 text-right px-1 ${fund.rat === '—' ? 'text-outline' : 'text-on-surface'}">${fund.rat}</div>
+                                </div>
+                                `;
+                                tbody.insertAdjacentHTML('beforeend', rowHTML);
+                            });
+                        </script>
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">DSP India T.I.G.E.R. Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">385.36</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.71%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+14.70%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+26.00%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+24.08%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.89%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Invesco India PSU Equity Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Other</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">77.49</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.77%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+2.32%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.78%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+22.75%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.58%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Invesco India Mid Cap Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Mid-Cap</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">223.70</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.50%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+6.95%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.38%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.05%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+20.00%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Bank of India Manufactrg &amp;Infra Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">75.01</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.68%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+14.55%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.26%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+22.04%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+19.81%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">ICICI Pru MidCap Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Mid-Cap</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">374.95</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.87%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+13.24%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.11%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.92%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.33%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">4</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Quant Multi Asset Allocation Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Multi Asset Allocation</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">180.04</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.61%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+19.66%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+24.92%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.10%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+19.14%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Nippon India Power &amp; Infra Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Other</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">409.15</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.82%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+10.07%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+24.49%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+23.33%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.57%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">HDFC Infrastructure Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">51.75</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">1.10%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-danger font-body-bold">-1.19%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+21.55%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.39%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+12.86%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">3</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">DSP India T.I.G.E.R. Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">385.36</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.71%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+14.70%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+26.00%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+24.08%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.89%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Invesco India PSU Equity Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Other</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">77.49</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.77%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+2.32%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.78%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+22.75%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.58%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Invesco India Mid Cap Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Mid-Cap</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">223.70</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.50%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+6.95%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.38%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.05%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+20.00%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Bank of India Manufactrg &amp;Infra Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">75.01</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.68%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+14.55%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.26%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+22.04%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+19.81%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">5</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">ICICI Pru MidCap Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Mid-Cap</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">374.95</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.87%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+13.24%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+25.11%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.92%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.33%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">4</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Quant Multi Asset Allocation Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Multi Asset Allocation</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">180.04</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.61%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+19.66%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+24.92%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.10%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+19.14%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default ">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">Nippon India Power &amp; Infra Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Other</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">409.15</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">0.82%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+10.07%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+24.49%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+23.33%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+18.57%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                </div>
+                                
+                                <div class="flex font-table-data text-table-data px-2 py-[4px] border-b border-border-regular data-row cursor-default bg-surface-container-low">
+                                    <div class="w-48 shrink-0 px-1 font-body-bold text-on-surface truncate">HDFC Infrastructure Dir Gr</div>
+                                    <div class="w-24 shrink-0 text-right px-1 text-on-surface-variant truncate">Equity - Infrastructure</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface">51.75</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-on-surface-variant">1.10%</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-outline">—</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-danger font-body-bold">-1.19%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success font-body-bold">+21.55%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+21.39%</div>
+                                    <div class="w-16 shrink-0 text-right px-1 text-success">+12.86%</div>
+                                    <div class="w-20 shrink-0 text-right px-1 text-on-surface-variant">—</div>
+                                    <div class="w-12 shrink-0 text-right px-1 text-on-surface">3</div>
+                                </div>
+                                
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- BottomNavBar (From JSON, hidden on desktop) -->
+<nav class="md:hidden bg-surface-container-lowest dark:bg-surface-container-lowest text-secondary dark:text-secondary-fixed-dim font-label-sm text-label-sm fixed bottom-0 w-full z-50 border-t border-border-regular dark:border-outline-variant flat no shadows flex justify-around items-center h-14 px-2">
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-1 hover:bg-surface-bright dark:hover:bg-surface-dim active:scale-95 transition-transform cursor-pointer w-16 rounded">
+<span class="material-symbols-outlined text-[20px] mb-[2px]">grid_view</span>
+<span class="">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-1 hover:bg-surface-bright dark:hover:bg-surface-dim active:scale-95 transition-transform cursor-pointer w-16 rounded">
+<span class="material-symbols-outlined text-[20px] mb-[2px]">trending_up</span>
+<span class="">Stocks</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-1 hover:bg-surface-bright dark:hover:bg-surface-dim active:scale-95 transition-transform cursor-pointer w-16 rounded">
+<span class="material-symbols-outlined text-[20px] mb-[2px]">filter_alt</span>
+<span class="">Screens</span>
+</div>
+<!-- Active Nav -->
+<div class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed border-t-2 border-secondary pt-1 hover:bg-surface-bright dark:hover:bg-surface-dim active:scale-95 transition-transform cursor-pointer w-16 rounded font-body-bold">
+<span class="material-symbols-outlined text-[20px] mb-[2px]" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<span class="">Advisor</span>
+</div>
+</nav>
+
+
+
+
+</body></html>

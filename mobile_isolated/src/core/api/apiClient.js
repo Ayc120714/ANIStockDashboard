@@ -7,6 +7,7 @@ import {decodeObfuscatedPayload} from '@core/utils/obfuscation';
 const defaultHeaders = {'Content-Type': 'application/json'};
 const DEVICE_ID_HEADER = 'X-Device-Id';
 const OBF_RESPONSE_HEADER = 'X-Obf-Response';
+const REQUEST_TIMEOUT_MS = 15000;
 
 const requestInterceptors = [];
 const responseInterceptors = [];
@@ -90,19 +91,34 @@ export const apiRequest = async (endpoint, options = {}) => {
     },
   });
 
-  const makeRequest = async token =>
+  const makeRequest = async (token, signal) =>
     fetch(buildUrl(env.apiUrl, endpoint), {
       ...baseConfig,
+      signal,
       headers: {
         ...baseConfig.headers,
         ...(token ? {Authorization: `Bearer ${token}`} : {}),
       },
     });
 
+  const requestWithTimeout = async token => {
+    const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await makeRequest(token, controller.signal);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   let response;
   try {
-    response = await makeRequest(bearerToken);
-  } catch (_) {
+    response = await requestWithTimeout(bearerToken);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timed out. Please check backend and network.');
+    }
     throw new Error('Unable to reach server. Please check backend and network.');
   }
   let intercepted = await runResponseInterceptors(response);
@@ -111,7 +127,7 @@ export const apiRequest = async (endpoint, options = {}) => {
     const nextToken = await unauthorizedHandler(intercepted);
     if (nextToken) {
       bearerToken = nextToken;
-      intercepted = await runResponseInterceptors(await makeRequest(nextToken));
+      intercepted = await runResponseInterceptors(await requestWithTimeout(nextToken));
     }
   }
   if (!intercepted.ok) {

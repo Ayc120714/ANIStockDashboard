@@ -31,6 +31,11 @@
     "dev:fullstack": "powershell -ExecutionPolicy Bypass -File ./scripts/start-fullstack.ps1",
     "stop:fullstack": "powershell -ExecutionPolicy Bypass -File ./scripts/stop-fullstack.ps1",
     "clean": "node scripts/clean-cache.js",
+    "mobile:isolated:install": "npm --prefix mobile_isolated install",
+    "mobile:isolated:start": "npm --prefix mobile_isolated start",
+    "mobile:isolated:android": "npm --prefix mobile_isolated run android",
+    "mobile:isolated:device": "npm --prefix mobile_isolated run android:device",
+    "mobile:isolated:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-mobile-from-dev.ps1",
     "build": "craco build",
     "test": "craco test",
     "eject": "react-scripts eject"
