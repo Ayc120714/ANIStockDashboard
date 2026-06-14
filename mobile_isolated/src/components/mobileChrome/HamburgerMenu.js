@@ -120,7 +120,7 @@ export function HamburgerMenu({visible, onClose, navigation, user}) {
       duration: 260,
       useNativeDriver: true,
     }).start();
-  }, [visible, drawerW, slide]);
+  }, [activeTab, drawerW, slide, visible]);
 
   const onBackdropPress = useCallback(() => {
     closeAnimated();

@@ -188,7 +188,7 @@ export const OrdersScreen = ({route, navigation}) => {
   const requirePreflight = Boolean(routeParams.requirePreflight || fromAlert);
   const mergedSymbolOptions = useMemo(() => mergeSymbolOptions(symbolOptions), [symbolOptions]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [resp, setup] = await Promise.all([ordersService.fetchOrders(), brokersService.fetchBrokerSetup()]);
@@ -212,7 +212,7 @@ export const OrdersScreen = ({route, navigation}) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [routeParams.broker]);
 
   const selectedBrokerRow = useMemo(
     () => brokerRows.find(row => String(row?.broker || '').toLowerCase() === String(broker || '').toLowerCase()),
@@ -370,7 +370,7 @@ export const OrdersScreen = ({route, navigation}) => {
     dashboardService.fetchAvailableSymbols()
       .then(res => setSymbolOptions(extractApiRows(res)))
       .catch(() => setSymbolOptions([]));
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (routeParams.symbol) {

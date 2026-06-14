@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text} from 'react-native';
 import {ScreenScaffold} from '@components/ScreenScaffold';
 import {useAuth} from '@core/auth/AuthContext';
 import {SITE_SECTIONS, SITE_SECTIONS_ADMIN} from '@nav/siteSections';

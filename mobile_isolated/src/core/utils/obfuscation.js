@@ -2,7 +2,7 @@ const OBF_SALT = 'ani-obf-key';
 
 const decodeBase64Manually = value => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-  let str = String(value || '').replace(/=+$/, '');
+  let str = String(value || '').replace(new RegExp('=+$'), '');
   let output = '';
   if (str.length % 4 === 1) {
     throw new Error('Invalid base64 payload');

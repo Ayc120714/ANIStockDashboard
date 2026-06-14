@@ -261,9 +261,9 @@ export function AdvisorHubScreen({navigation}) {
         advisorService.fetchCustomRsMacdSetup({limit: 800, setup_mode: 'or_signal'}).catch(() => null),
         signalsService.fetchLatestSignals({limit: 200, timeoutMs: 20_000}).catch(() => null),
       ]);
-      const customRows = extractApiRows(customRes);
+      const customSetupRows = extractApiRows(customRes);
       const signals = extractApiRows(latestRes);
-      setChartBlocks(buildChartFundamentalBlocks(customRows, signals));
+      setChartBlocks(buildChartFundamentalBlocks(customSetupRows, signals));
     } catch (e) {
       setErr(String(e?.message || e));
     } finally {
