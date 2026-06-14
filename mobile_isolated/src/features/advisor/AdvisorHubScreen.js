@@ -23,6 +23,7 @@ import {readPageCache} from '@core/storage/pageCache';
 import {
   extractChartBlocks,
   extractTrendGrid,
+  countTrendGridRows,
   fetchAdvisorChartPayload,
   fetchAdvisorSignalsPayload,
   fetchAdvisorTrendPayload,
@@ -282,9 +283,8 @@ export function AdvisorHubScreen({navigation}) {
       if (hasUsableAdvisorSignalsPayload(signals)) {
         applySignalsPayload(signals);
       }
-      const hydratedTrend = extractTrendGrid(trendCache?.data);
-      if (hydratedTrend) {
-        setTrendGrid(hydratedTrend);
+      if (hasUsableAdvisorTrendPayload(trendCache?.data)) {
+        setTrendGrid(extractTrendGrid(trendCache.data));
       }
       const hydratedChart = extractChartBlocks(chartCache?.data);
       if (hasUsableAdvisorChartPayload(chartCache?.data)) {
@@ -369,7 +369,7 @@ export function AdvisorHubScreen({navigation}) {
     [trendGrouped],
   );
 
-  const trendHasData = Boolean(extractTrendGrid(trendGrid));
+  const trendHasData = countTrendGridRows(trendGrid) > 0;
   const chartDisplayBlocks = useMemo(() => mergeChartDisplayBlocks(chartBlocks), [chartBlocks]);
   const chartHasData = chartDisplayBlocks.some(b => (b?.rows?.length || 0) > 0);
 
@@ -410,7 +410,8 @@ export function AdvisorHubScreen({navigation}) {
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
       fetcher: () => fetchAdvisorTrendPayload({forceRefresh}),
       applyPayload: payload => {
-        setTrendGrid(extractTrendGrid(payload));
+        const grid = extractTrendGrid(payload);
+        if (grid) setTrendGrid(grid);
       },
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setErr(msg || ''),
@@ -451,8 +452,11 @@ export function AdvisorHubScreen({navigation}) {
           }
         } else if (tab === 'trend') {
           const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-          if (stale || !trendHasData) {
-            await loadTrend({silent: trendHasData});
+          if (stale || !trendHasData || trendVisibleRows === 0) {
+            await loadTrend({
+              silent: trendHasData && trendVisibleRows > 0,
+              forceRefresh: !trendHasData || trendVisibleRows === 0,
+            });
           }
         } else if (tab === 'chart') {
           const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubChart);
@@ -461,7 +465,7 @@ export function AdvisorHubScreen({navigation}) {
           }
         }
       })();
-    }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData]),
+    }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData, trendVisibleRows]),
   );
 
   const loadAi = useCallback(async () => {

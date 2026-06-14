@@ -39,17 +39,39 @@ export function hasUsableAdvisorSignalsPayload(data) {
 /** Accept wrapped `{ trendGrid }`, API `{ data }`, or raw `{ daily, weekly, monthly }` caches. */
 export function extractTrendGrid(data) {
   if (!data || typeof data !== 'object') return null;
+
   const candidates = [data.trendGrid, data.data, data];
   for (const candidate of candidates) {
-    if (candidate && typeof candidate === 'object' && (candidate.daily || candidate.weekly || candidate.monthly)) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    if (candidate.daily || candidate.weekly || candidate.monthly) {
       return candidate;
+    }
+    // API envelope stored inside cache: `{ screen, data: grid }`
+    const nested = candidate.data;
+    if (nested && typeof nested === 'object' && (nested.daily || nested.weekly || nested.monthly)) {
+      return nested;
     }
   }
   return null;
 }
 
+export function countTrendGridRows(grid) {
+  const root = extractTrendGrid(grid);
+  if (!root) return 0;
+  let n = 0;
+  for (const tf of ['daily', 'weekly', 'monthly']) {
+    const block = root[tf];
+    if (!block || typeof block !== 'object') continue;
+    for (const tier of ['B1', 'B2', 'B3', 'S1', 'S2', 'S3']) {
+      const items = block[tier]?.items;
+      if (Array.isArray(items)) n += items.length;
+    }
+  }
+  return n;
+}
+
 export function hasUsableAdvisorTrendPayload(data) {
-  return Boolean(extractTrendGrid(data));
+  return countTrendGridRows(data) > 0;
 }
 
 /** Ensure daily / weekly / monthly chart sections always exist for rendering. */
