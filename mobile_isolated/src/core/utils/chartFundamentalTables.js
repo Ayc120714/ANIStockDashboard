@@ -89,7 +89,7 @@ export const CHART_FUNDAMENTAL_BLOCKS = [
     id: 'monthly',
     title: 'Monthly setup (RS 11M)',
     subtitle: 'Chartink monthly vs Nifty',
-    rsField: 'rs_monthly_12',
+    rsField: 'rs_monthly_11',
     closeFields: ['monthly_close', 'mo_close', 'close'],
     prevCloseFields: ['prev_month_close', 'prev_month_high'],
     rsHeader: 'RS11',

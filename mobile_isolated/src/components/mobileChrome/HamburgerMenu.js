@@ -193,26 +193,28 @@ export function HamburgerMenu({visible, onClose, navigation, user}) {
                 <SubRow label="Markets" onPress={() => go('Markets')} />
                 <SubRow label="Sector insights" onPress={() => go('Stocks', {outlookTab: 'sector'})} />
                 <SubRow label="SubSector" onPress={() => go('Stocks', {outlookTab: 'sub'})} />
-                <SubRow label="Long-term watchlist" onPress={() => go('Watchlist', {listType: 'long_term', title: 'Long term'})} />
-                <SubRow label="Short-term watchlist" onPress={() => go('Watchlist', {listType: 'short_term', title: 'Short term'})} />
+                <SubRow label="Long-term watchlist" onPress={() => go('Stocks', {outlookTab: 'long_term'})} />
+                <SubRow label="Short-term watchlist" onPress={() => go('Stocks', {outlookTab: 'short_term'})} />
                 <SubRow label="Mutual funds" onPress={() => go('MutualFunds')} />
                 <SubRow label="Signals" onPress={() => go('Signals')} />
-                <SubRow label="Orders" onPress={() => go('Orders')} />
-                <SubRow label="Brokers" onPress={() => go('Brokers')} />
+                <SubRow label="Orders" onPress={() => go('Stocks', {outlookTab: 'orders'})} />
+                <SubRow label="Brokers" onPress={() => go('Stocks', {outlookTab: 'brokers'})} />
+                <SubRow label="Alerts" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
               </View>
             ) : null}
 
             <NavRow icon="▤" label="Screens" active={activeTab === 'Screens'} onPress={() => go('Screens')} />
             <NavRow icon="✦" label="Advisor" active={activeTab === 'Advisor'} onPress={() => go('Advisor')} />
             <NavRow icon="👛" label="Portfolio Manager" onPress={() => go('Portfolio')} />
-            <NavRow icon="🔔" label="Alerts" onPress={() => go('Alerts')} />
+            <NavRow icon="🔔" label="Alerts" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
 
             <View style={styles.divider} />
 
-            <NavRow icon="❓" label="Help & Support" onPress={() => go('Alerts')} />
+            <NavRow icon="❓" label="Help & Support" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
             <Pressable
               onPress={() => {
-                closeAnimated(() => logout());
+                logout();
+                onClose();
               }}
               style={styles.logoutRow}
               accessibilityRole="button"

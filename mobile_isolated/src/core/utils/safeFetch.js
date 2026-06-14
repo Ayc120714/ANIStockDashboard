@@ -14,10 +14,20 @@ export function withTimeout(promise, ms, label = 'Request') {
   });
 }
 
-export async function safeFetch(fetcher, {timeoutMs = 8000, label = 'Request', fallback = null} = {}) {
-  try {
-    return await withTimeout(fetcher(), timeoutMs, label);
-  } catch {
-    return fallback;
+export async function safeFetch(
+  fetcher,
+  {timeoutMs = 30_000, label = 'Request', fallback = null, retries = 1} = {},
+) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await withTimeout(fetcher(), timeoutMs, label);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries) break;
+    }
   }
+  if (fallback !== undefined && fallback !== null) return fallback;
+  if (lastError) throw lastError;
+  return fallback;
 }

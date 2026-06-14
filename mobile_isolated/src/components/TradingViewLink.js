@@ -1,19 +1,23 @@
 import React from 'react';
-import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Linking, Pressable, StyleSheet, View} from 'react-native';
 
-export function tradingViewChartUrl(symbol) {
-  const s = String(symbol || '').trim();
-  if (!s) return '';
-  return `https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s)}`;
+export function tradingViewChartUrl(symbol, chartSymbol) {
+  const full =
+    String(chartSymbol || '').trim() ||
+    (String(symbol || '').trim() ? `NSE:${String(symbol).trim()}` : '');
+  if (!full) return '';
+  return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(full)}`;
 }
 
-/** Same NSE chart link as web `TradingViewLink` (Financial Advisor tables). */
-export function TradingViewLink({symbol, size = 18}) {
-  const s = String(symbol || '').trim();
-  if (!s) return null;
+/** Same NSE chart link as web `TradingViewLink` (equity + index chartSymbol). */
+export function TradingViewLink({symbol, chartSymbol, size = 18}) {
+  const full =
+    String(chartSymbol || '').trim() ||
+    (String(symbol || '').trim() ? `NSE:${String(symbol).trim()}` : '');
+  if (!full) return null;
 
   const openChart = () => {
-    const url = tradingViewChartUrl(s);
+    const url = tradingViewChartUrl(symbol, chartSymbol);
     if (url) Linking.openURL(url).catch(() => {});
   };
 
@@ -21,7 +25,7 @@ export function TradingViewLink({symbol, size = 18}) {
     <Pressable
       onPress={openChart}
       accessibilityRole="link"
-      accessibilityLabel={`View ${s} on TradingView`}
+      accessibilityLabel={`View ${full} on TradingView`}
       hitSlop={6}
       style={[styles.wrap, {width: size, height: size, borderRadius: size / 2}]}>
       <View style={styles.bars}>

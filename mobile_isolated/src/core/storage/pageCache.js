@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {ALWAYS_FETCH_FROM_DB} from '@core/config/dataRefreshPolicy';
+import {ensureMarketSession, shouldSkipNetworkForClosedMarket} from '@core/utils/marketSession';
 
 export function cacheHasUsableData(data) {
   if (data == null) return false;
@@ -14,7 +16,10 @@ export function cacheHasUsableData(data) {
     return data.data.length > 0;
   }
 
-  if (data.indices || data.indexCards || data.smallcapCards || data.tableData) return true;
+  if (Array.isArray(data.indices) && data.indices.length > 0) return true;
+  if (Array.isArray(data.gainers) && data.gainers.length > 0) return true;
+  if (Array.isArray(data.losers) && data.losers.length > 0) return true;
+  if (data.indexCards || data.smallcapCards || data.tableData) return true;
   if (data.watchlist && Array.isArray(data.watchlist)) return data.watchlist.length > 0;
   if (data.daily || data.weekly || data.monthly) return true;
   if (data.rows && Array.isArray(data.rows)) return data.rows.length > 0;
@@ -63,4 +68,15 @@ export async function clearPageCache(key) {
   } catch {
     /* ignore */
   }
+}
+
+/** True when off-market and an existing cache is fresh enough to avoid refetch. */
+export async function shouldUseCachedPageDataOnly(cacheKey) {
+  if (ALWAYS_FETCH_FROM_DB) return false;
+  await ensureMarketSession();
+  const cached = await readPageCache(cacheKey);
+  if (!cached || cached.data == null || !cacheHasUsableData(cached.data)) {
+    return false;
+  }
+  return shouldSkipNetworkForClosedMarket(cached.updatedAt, true);
 }

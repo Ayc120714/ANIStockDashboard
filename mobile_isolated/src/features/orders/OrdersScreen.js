@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {SymbolAutocomplete} from '@components/SymbolAutocomplete';
 import {ScreenScaffold} from '@components/ScreenScaffold';
 import {useAuth} from '@core/auth/AuthContext';
@@ -9,6 +9,7 @@ import {dashboardService} from '@core/api/services/dashboardService';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {mergeSymbolOptions} from '@core/utils/symbolOptions';
 import {brokerSessionSummary} from '@core/utils/startTradeFromAlert';
+import {navigateToStocksBrokers} from '@nav/navigationHelpers';
 import {
   brokerRowHasLiveTradingSession,
   estimateRequiredMargin,
@@ -137,7 +138,7 @@ const uiProductType = apiProduct =>
 
 const apiProductType = uiProduct => (uiProduct === 'MTF' ? 'MARGIN' : normalizeProductType(uiProduct));
 
-export const OrdersScreen = ({route, navigation}) => {
+export const OrdersScreen = ({route, navigation, embedded = false}) => {
   const {user} = useAuth();
   const userId = String(user?.id || user?.user_id || '');
   const routeParams = route?.params || {};
@@ -280,12 +281,17 @@ export const OrdersScreen = ({route, navigation}) => {
   }, [broker, userId]);
 
   const goValidateBroker = () => {
-    navigation?.navigate?.('Brokers', {
-      returnTo: 'Orders',
+    const brokersParams = {
+      returnTo: 'orders',
       returnParams: routeParams,
       openBrokerSetup: true,
       selectedBroker: broker,
-    });
+    };
+    if (embedded) {
+      navigateToStocksBrokers(navigation, brokersParams);
+      return;
+    }
+    navigation?.navigate?.('Brokers', brokersParams);
   };
 
   const placeOrderFromAlert = async () => {
@@ -385,7 +391,7 @@ export const OrdersScreen = ({route, navigation}) => {
         liveIntervalMs: SCREEN_LIVE_POLL_MS,
       });
     })();
-    registerMobileClientIp({appVersion: '1.0.0'}).then(res => {
+    registerMobileClientIp().then(res => {
       setMobileIp(res.ip || '');
       if (res.enablements?.length) {
         setIpEnableStatus(summarizeBrokerEnablements(res.enablements));
@@ -458,6 +464,13 @@ export const OrdersScreen = ({route, navigation}) => {
   }, [fromAlert]);
 
   if (loading) {
+    if (embedded) {
+      return (
+        <View style={styles.embeddedLoading}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      );
+    }
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color="#2563eb" />
@@ -465,8 +478,8 @@ export const OrdersScreen = ({route, navigation}) => {
     );
   }
 
-  return (
-    <ScreenScaffold title="Orders" subtitle="Live trade from alerts with entry/exit/SL and broker controls">
+  const content = (
+    <>
       {fromAlert ? (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>From alert #{fromAlert?.id || '-'}</Text>
@@ -578,12 +591,29 @@ export const OrdersScreen = ({route, navigation}) => {
           </View>
         )}
       </View>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <ScrollView style={styles.embeddedWrap} contentContainerStyle={styles.embeddedContent} keyboardShouldPersistTaps="handled">
+        {content}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScreenScaffold title="Orders" subtitle="Live trade from alerts with entry/exit/SL and broker controls">
+      {content}
     </ScreenScaffold>
   );
 };
 
 const styles = StyleSheet.create({
   loading: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: AYC.pageBg},
+  embeddedLoading: {alignItems: 'center', justifyContent: 'center', paddingVertical: 24},
+  embeddedWrap: {flex: 1},
+  embeddedContent: {gap: 10, paddingBottom: 16},
   banner: {backgroundColor: '#ecfeff', borderColor: '#67e8f9', borderWidth: 1, borderRadius: 10, padding: 10, gap: 2},
   bannerTitle: {fontSize: AYC.type.body, fontWeight: '800', color: '#155e75'},
   bannerText: {fontSize: AYC.type.caption, color: '#164e63'},

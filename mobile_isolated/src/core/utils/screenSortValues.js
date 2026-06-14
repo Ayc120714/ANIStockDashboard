@@ -16,6 +16,8 @@ export function getScreenSortValue(row, key, {main, perM, perV} = {}) {
     case 'price':
     case 'cmp':
       return parseSortNumber(row?.price ?? row?.cmp ?? row?.ltp);
+    case 'ema21':
+      return parseSortNumber(row?.ema21);
     case 'volume':
       return parseSortNumber(row?.volume);
     case 'volume_jump': {
@@ -100,17 +102,23 @@ export function getWatchlistSortValue(row, key, listType) {
 }
 
 export function getSubsectorSortValue(row, key) {
+  const sub = row?.sub || row;
   switch (key) {
     case 'name':
-      return String(row?.name || row?.subsector || '');
+      return String(sub?.name || row?.name || sub?.subsector || '');
     case 'performance':
     case 'all':
-      return row?.allNum ?? parseSortNumber(row?.performance);
+      return typeof sub?.all === 'number' && Number.isFinite(sub.all)
+        ? sub.all
+        : row?.allNum ?? parseSortNumber(sub?.all);
     case 'week0':
-      return row?.week0Num ?? parseSortNumber(row?.week0);
+      return row?.week0Num ?? parseSortNumber(sub?.week0);
     case 'week1':
-      return row?.week1Num ?? parseSortNumber(row?.week1);
+      return row?.week1Num ?? parseSortNumber(sub?.week1);
     default:
+      if (sub && Object.prototype.hasOwnProperty.call(sub, key)) {
+        return parseSortNumber(sub[key]);
+      }
       return row?.[key] ?? '';
   }
 }
@@ -156,6 +164,10 @@ export function getAdvisorSortValue(row, key) {
     case 'buy_sell_tier':
     case 'tier':
       return String(row?.buy_sell_tier || '');
+    case 'close':
+      return parseSortNumber(row?.close ?? row?.cmp ?? row?.price);
+    case 'chg':
+      return parseSortNumber(row?.chg ?? row?.day1d ?? row?.change_pct);
     case 'entry_price':
       return parseSortNumber(row?.entry_price);
     case 'stop_loss':

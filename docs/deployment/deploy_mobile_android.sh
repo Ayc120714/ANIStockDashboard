@@ -14,21 +14,24 @@ MOBILE_DIR="${MOBILE_DIR:-$APP_ROOT/stockdashboard/mobile_isolated}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-$APP_ROOT/mobile-artifacts}"
 GRADLE_PROPS="${GRADLE_PROPS:-$HOME/.gradle/gradle.properties}"
 
-echo "[1/5] Verify toolchain..."
+echo "[1/6] Verify toolchain..."
 command -v node >/dev/null
 command -v java >/dev/null
 command -v adb >/dev/null
 : "${ANDROID_HOME:?Set ANDROID_HOME to your Android SDK path}"
 
-echo "[2/5] Install mobile dependencies..."
+echo "[2/6] Sync launcher/splash logos from website (public/ayc-logo.png)..."
+"$MOBILE_DIR/scripts/sync_android_brand_assets.sh"
+
+echo "[3/6] Install mobile dependencies..."
 cd "$MOBILE_DIR"
 npm ci
 
-echo "[3/5] Lint + typecheck..."
+echo "[4/6] Lint + typecheck..."
 npm run typecheck
 npm run lint
 
-echo "[4/5] Build release APK + AAB..."
+echo "[5/6] Build release APK + AAB..."
 npm run android:apk:release
 npm run android:aab:release
 
@@ -40,15 +43,37 @@ if [[ ! -f "$APK" || ! -f "$AAB" ]]; then
   exit 1
 fi
 
-echo "[5/5] Publish artifacts to $ARTIFACT_DIR ..."
+echo "[6/6] Publish artifacts to $ARTIFACT_DIR ..."
 mkdir -p "$ARTIFACT_DIR"
 cp -f "$APK" "$ARTIFACT_DIR/ani-stock-release.apk"
 cp -f "$AAB" "$ARTIFACT_DIR/ani-stock-release.aab"
 sha256sum "$ARTIFACT_DIR/ani-stock-release.apk" "$ARTIFACT_DIR/ani-stock-release.aab" > "$ARTIFACT_DIR/SHA256SUMS"
+APK_SHA=$(sha256sum "$ARTIFACT_DIR/ani-stock-release.apk" | awk '{print $1}')
+APK_SIZE=$(stat -c '%s' "$ARTIFACT_DIR/ani-stock-release.apk")
+VERSION_NAME=$(node -p "require('$MOBILE_DIR/package.json').version")
+VERSION_CODE=$(grep -m1 'versionCode' "$MOBILE_DIR/android/app/build.gradle" | grep -oE '[0-9]+')
+cat > "$ARTIFACT_DIR/DOWNLOAD.json" <<EOF
+{
+  "app": "ANI Stock Mobile",
+  "version": "$VERSION_NAME",
+  "versionCode": $VERSION_CODE,
+  "builtAt": "$(date -Iseconds)",
+  "apkUrl": "https://www.aycindustries.com/mobile/ani-stock-release.apk",
+  "sha256": "$APK_SHA",
+  "sizeBytes": $APK_SIZE
+}
+EOF
 
 echo "Done."
 echo "  APK (side-load): $ARTIFACT_DIR/ani-stock-release.apk"
+echo "  Download URL:    https://www.aycindustries.com/mobile/ani-stock-release.apk"
+echo "  Metadata:        https://www.aycindustries.com/mobile/DOWNLOAD.json"
+echo "  SHA256:          $APK_SHA"
 echo "  AAB (Play Store): $ARTIFACT_DIR/ani-stock-release.aab"
+
+echo "[7/7] Bump source version for next release cycle..."
+node "$MOBILE_DIR/scripts/bump-mobile-version.js"
+
 if grep -q "ANI_UPLOAD_STORE_FILE" "$GRADLE_PROPS" 2>/dev/null; then
   echo "  Signing: release upload keystore configured in $GRADLE_PROPS"
 else

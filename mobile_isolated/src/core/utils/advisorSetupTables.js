@@ -52,14 +52,20 @@ export function compactSetupRow(row, levelsBySymbol) {
 export function groupLatestSignalsByTier(rows, levelsBySymbol) {
   const grouped = Object.fromEntries(TIER_SETUPS.map(s => [s.id, []]));
   grouped.other = [];
+  const seenByTier = Object.fromEntries(TIER_SETUPS.map(s => [s.id, new Set()]));
+  const seenOther = new Set();
 
   for (const row of rows || []) {
     const tier = String(row?.buy_sell_tier || '').trim().toUpperCase();
     const compact = compactSetupRow(row, levelsBySymbol);
     if (!compact) continue;
     if (grouped[tier]) {
+      if (seenByTier[tier].has(compact.symbol)) continue;
+      seenByTier[tier].add(compact.symbol);
       grouped[tier].push(compact);
     } else {
+      if (seenOther.has(compact.symbol)) continue;
+      seenOther.add(compact.symbol);
       grouped.other.push(compact);
     }
   }

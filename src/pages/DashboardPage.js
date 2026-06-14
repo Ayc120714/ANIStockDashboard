@@ -38,7 +38,6 @@ function isDashboardCacheIncomplete(cached) {
   const hasIndices = Boolean(cached.indices);
   const gainers = cached.gainers;
   const losers = cached.losers;
-  const ratings = cached.ratings;
   if (
     hasIndices
     && Array.isArray(losers) && losers.length > 0
@@ -46,11 +45,30 @@ function isDashboardCacheIncomplete(cached) {
   ) {
     return true;
   }
-  if (hasIndices && (!Array.isArray(ratings) || ratings.length === 0)) {
-    return true;
+  // Usable cache: indices or movers — do not wipe cache just because ratings/watchlist are missing.
+  if (hasIndices || (Array.isArray(gainers) && gainers.length) || (Array.isArray(losers) && losers.length)) {
+    return false;
   }
-  return false;
+  return !Array.isArray(cached.watchlist);
 }
+
+function dashboardSectionsToRefresh(cached) {
+  const payload = cached || {};
+  return {
+    indices: !payload.indices,
+    movers: !Array.isArray(payload.gainers) || !Array.isArray(payload.losers),
+    watchlist: !Array.isArray(payload.watchlist),
+    signals: !Array.isArray(payload.signals),
+    weekly: !Array.isArray(payload.weeklyData),
+    extras:
+      !Array.isArray(payload.alerts)
+      || !Array.isArray(payload.ratings)
+      || !Array.isArray(payload.trendingStocks),
+    optional: !Array.isArray(payload.sectors) || !Array.isArray(payload.obData),
+  };
+}
+
+const settledValue = (result, fallback) => (result?.status === 'fulfilled' ? result.value : fallback);
 
 function applyDashboardCache(setters, cached, marketModeFallback) {
   if (!cached) return;
@@ -1387,23 +1405,54 @@ function DashboardPage() {
         return;
       }
 
-      const [idx, wl, sigs, wk, adv, ob, sec, g, l, al, rat, trend, sys] = await Promise.allSettled([
-        fetchMarketIndices(),
-        fetchWatchlist(null),
-        fetchWatchlistSignals({ timeframe: 'intraday' }),
-        fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }),
-        fetchLatestSignalsPayload(200),
-        fetchOrderBlocks(),
-        fetchSectorOutlook(),
-        fetchPriceShockers('gainers', 8, 'day'),
-        fetchPriceShockers('losers', 8, 'day'),
-        fetchAlerts({ limit: 25 }),
-        fetchRatings({ limit: 8 }),
-        fetchTrending(20),
+      const need = dashboardSectionsToRefresh(cached);
+      const partial = {};
+
+      const phase1 = await Promise.allSettled([
+        need.indices || forceRefresh ? fetchMarketIndices() : Promise.resolve(cached?.indices || null),
+        need.movers || forceRefresh ? fetchPriceShockers('gainers', 8, 'day') : Promise.resolve(cached?.gainers ?? []),
+        need.movers || forceRefresh ? fetchPriceShockers('losers', 8, 'day') : Promise.resolve(cached?.losers ?? []),
+      ]);
+      partial.indices = settledValue(phase1[0], cached?.indices || null);
+      partial.gainers = settledValue(phase1[1], cached?.gainers ?? []);
+      partial.losers = settledValue(phase1[2], cached?.losers ?? []);
+      setIndices(partial.indices);
+      setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
+      setLosers(Array.isArray(partial.losers) ? partial.losers : []);
+      setLoading(false);
+
+      const phase2 = await Promise.allSettled([
+        need.watchlist || forceRefresh ? fetchWatchlist(null) : Promise.resolve(cached?.watchlist ?? []),
+        need.signals || forceRefresh ? fetchWatchlistSignals({ timeframe: 'intraday' }) : Promise.resolve(cached?.signals ?? []),
+        need.weekly || forceRefresh ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(cached?.weeklyData ?? []),
+        need.extras || forceRefresh ? fetchAlerts({ limit: 25 }) : Promise.resolve(cached?.alerts ?? []),
+        need.extras || forceRefresh ? fetchRatings({ limit: 8 }) : Promise.resolve(cached?.ratings ?? []),
+        need.extras || forceRefresh ? fetchTrending(20) : Promise.resolve(cached?.trendingStocks ?? []),
+      ]);
+      partial.watchlist = settledValue(phase2[0], cached?.watchlist ?? []);
+      partial.signals = settledValue(phase2[1], cached?.signals ?? []);
+      partial.weeklyData = settledValue(phase2[2], cached?.weeklyData ?? []);
+      partial.alerts = settledValue(phase2[3], cached?.alerts ?? []);
+      partial.ratings = settledValue(phase2[4], cached?.ratings ?? []);
+      partial.trendingStocks = settledValue(phase2[5], cached?.trendingStocks ?? []);
+
+      const phase3 = await Promise.allSettled([
+        need.optional || forceRefresh ? fetchSectorOutlook() : Promise.resolve(cached?.sectors ?? []),
+        need.optional || forceRefresh ? fetchOrderBlocks() : Promise.resolve(cached?.obData ?? []),
+        need.weekly || forceRefresh ? fetchLatestSignalsPayload(200) : Promise.resolve({ data: cached?.advisorRegimeStocks ?? [] }),
         apiGet('/system/status'),
       ]);
+      partial.sectors = settledValue(phase3[0], cached?.sectors ?? []);
+      partial.obData = settledValue(phase3[1], cached?.obData ?? []);
+      const advPayload = settledValue(phase3[2], { data: cached?.advisorRegimeStocks ?? [] });
+      partial.advisorRegimeStocks = (Array.isArray(advPayload?.data) ? advPayload.data : []).map((s) => ({
+        symbol: s.symbol,
+        day1d: s.day1d,
+        day1w: s.week1w,
+      }));
+      const sys = phase3[3];
 
-      const coreResults = [idx, wl, sigs, wk, adv, ob, sec, g, l, al, rat, trend];
+      const coreResults = [phase1[0], phase2[0], phase2[1], phase2[2], phase3[2], phase3[0], phase1[1], phase1[2], phase2[3], phase2[4], phase2[5]];
       const fulfilledCount = coreResults.filter((r) => r.status === 'fulfilled').length;
       const allAuthRejected = fulfilledCount === 0
         && coreResults.every(
@@ -1415,53 +1464,31 @@ function DashboardPage() {
         return;
       }
 
-      const nextIndices = idx.status === 'fulfilled' ? (idx.value || null) : (cached?.indices || null);
-      const nextWatchlist = wl.status === 'fulfilled' ? (Array.isArray(wl.value) ? wl.value : []) : (Array.isArray(cached?.watchlist) ? cached.watchlist : []);
-      const nextSignals = sigs.status === 'fulfilled' ? (Array.isArray(sigs.value) ? sigs.value : []) : (Array.isArray(cached?.signals) ? cached.signals : []);
-      const nextWeekly = wk.status === 'fulfilled' ? (Array.isArray(wk.value) ? wk.value : []) : (Array.isArray(cached?.weeklyData) ? cached.weeklyData : []);
-      const nextAdvisorRegime = adv.status === 'fulfilled'
-        ? (Array.isArray(adv.value?.data) ? adv.value.data : []).map((s) => ({
-          symbol: s.symbol,
-          day1d: s.day1d,
-          day1w: s.week1w,
-        }))
-        : (Array.isArray(cached?.advisorRegimeStocks) ? cached.advisorRegimeStocks : []);
-      const nextOrderBlocks = ob.status === 'fulfilled' ? (Array.isArray(ob.value) ? ob.value : []) : (Array.isArray(cached?.obData) ? cached.obData : []);
-      const nextSectors = sec.status === 'fulfilled' ? (Array.isArray(sec.value) ? sec.value : []) : (Array.isArray(cached?.sectors) ? cached.sectors : []);
-      const nextGainers = g.status === 'fulfilled' ? (Array.isArray(g.value) ? g.value : []) : (Array.isArray(cached?.gainers) ? cached.gainers : []);
-      const nextLosers = l.status === 'fulfilled' ? (Array.isArray(l.value) ? l.value : []) : (Array.isArray(cached?.losers) ? cached.losers : []);
-      const nextAlerts = al.status === 'fulfilled' ? (Array.isArray(al.value) ? al.value : []) : (Array.isArray(cached?.alerts) ? cached.alerts : []);
-      const nextRatings = rat.status === 'fulfilled' ? (Array.isArray(rat.value) ? rat.value : []) : (Array.isArray(cached?.ratings) ? cached.ratings : []);
-      const nextTrending = trend.status === 'fulfilled' ? (Array.isArray(trend.value) ? trend.value : []) : (Array.isArray(cached?.trendingStocks) ? cached.trendingStocks : []);
-
-      setIndices(nextIndices);
-      setWatchlist(nextWatchlist);
-      setSignals(nextSignals);
-      setWeeklyData(nextWeekly);
-      setAdvisorRegimeStocks(nextAdvisorRegime);
-      setObData(nextOrderBlocks);
-      setSectors(nextSectors);
-      setGainers(nextGainers);
-      setLosers(nextLosers);
-      setAlerts(nextAlerts);
-      setRatings(nextRatings);
-      setTrendingStocks(nextTrending);
+      setWatchlist(Array.isArray(partial.watchlist) ? partial.watchlist : []);
+      setSignals(Array.isArray(partial.signals) ? partial.signals : []);
+      setWeeklyData(Array.isArray(partial.weeklyData) ? partial.weeklyData : []);
+      setAdvisorRegimeStocks(Array.isArray(partial.advisorRegimeStocks) ? partial.advisorRegimeStocks : []);
+      setObData(Array.isArray(partial.obData) ? partial.obData : []);
+      setSectors(Array.isArray(partial.sectors) ? partial.sectors : []);
+      setAlerts(Array.isArray(partial.alerts) ? partial.alerts : []);
+      setRatings(Array.isArray(partial.ratings) ? partial.ratings : []);
+      setTrendingStocks(Array.isArray(partial.trendingStocks) ? partial.trendingStocks : []);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       setLastUpdated(new Date());
       setLoadError('');
       writePageCache(DASHBOARD_CACHE_KEY, {
-        indices: nextIndices,
-        watchlist: nextWatchlist,
-        signals: nextSignals,
-        weeklyData: nextWeekly,
-        advisorRegimeStocks: nextAdvisorRegime,
-        obData: nextOrderBlocks,
-        sectors: nextSectors,
-        gainers: nextGainers,
-        losers: nextLosers,
-        alerts: nextAlerts,
-        ratings: nextRatings,
-        trendingStocks: nextTrending,
+        indices: partial.indices,
+        watchlist: partial.watchlist,
+        signals: partial.signals,
+        weeklyData: partial.weeklyData,
+        advisorRegimeStocks: partial.advisorRegimeStocks,
+        obData: partial.obData,
+        sectors: partial.sectors,
+        gainers: partial.gainers,
+        losers: partial.losers,
+        alerts: partial.alerts,
+        ratings: partial.ratings,
+        trendingStocks: partial.trendingStocks,
         marketMode: sys.status === 'fulfilled' ? (sys.value?.orchestrator?.mode || 'unknown') : marketMode,
         updatedAt: Date.now(),
       });

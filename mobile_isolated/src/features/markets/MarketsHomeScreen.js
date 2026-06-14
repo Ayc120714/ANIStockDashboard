@@ -14,7 +14,7 @@ import {useTableSort} from '@hooks/useTableSort';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {navigateToMainTab} from '@nav/navigationHelpers';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
+import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 
 const TABS = [
   {id: 'market', label: 'Market Insights'},
@@ -31,7 +31,8 @@ export function MarketsHomeScreen({navigation}) {
   const [subRows, setSubRows] = useState([]);
   const [fii, setFii] = useState(null);
   const [error, setError] = useState('');
-  const {sortConfig, onSort, resetSort} = useTableSort();
+  const tabSortKey = tab === 'subsector' ? 'all' : 'day1d';
+  const {sortConfig, onSort, resetSort} = useTableSort(tabSortKey, false);
 
   const load = useCallback(async ({forceRefresh = false} = {}) => {
     const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
@@ -71,9 +72,14 @@ export function MarketsHomeScreen({navigation}) {
 
   useFocusEffect(
     useCallback(() => {
-      setBusy(true);
-      load();
-    }, [load]),
+      (async () => {
+        const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
+        const stale = await shouldRefreshPageCache(cacheKey);
+        if (stale) {
+          await load();
+        }
+      })();
+    }, [load, tab]),
   );
 
   useEffect(() => {
@@ -85,6 +91,12 @@ export function MarketsHomeScreen({navigation}) {
     setBusy(true);
     load({forceRefresh: true}).finally(() => setRefreshing(false));
   }, [load]);
+
+  const selectTab = useCallback(nextTab => {
+    if (nextTab === tab) return;
+    setError('');
+    setTab(nextTab);
+  }, [tab]);
 
   const list = tab === 'market' ? rows : tab === 'sector' ? sectorRows : subRows;
   const sortFn =
@@ -123,7 +135,7 @@ export function MarketsHomeScreen({navigation}) {
 
         <View style={styles.tabRow}>
           {TABS.map(t => (
-            <Pressable key={t.id} onPress={() => setTab(t.id)} style={[styles.tabChip, tab === t.id && styles.tabOn]}>
+            <Pressable key={t.id} onPress={() => selectTab(t.id)} style={[styles.tabChip, tab === t.id && styles.tabOn]}>
               <Text style={[styles.tabText, tab === t.id && styles.tabTextOn]}>{t.label}</Text>
             </Pressable>
           ))}

@@ -1,4 +1,4 @@
-import React, {useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -11,10 +11,13 @@ import {
   Image,
   View,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {authService} from '@core/api/services/authService';
 import {useAuth} from '@core/auth/AuthContext';
 import {AuthPageBackground} from '@components/auth/AuthPageBackground';
 import {resolvePostLoginRoute} from '@features/auth/postLoginRouting';
+import {resolveTopInset} from '@core/utils/safeAreaTop';
+import {resetLogoutState} from '@core/auth/authSessionControl';
 
 const MAIN_TAB_NAMES = new Set(['Dashboard', 'Stocks', 'Signals', 'Screens', 'Advisor']);
 
@@ -43,12 +46,18 @@ function buildPostLoginReset(screen, params) {
 export const LoginScreen = ({navigation}) => {
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
+  const insets = useSafeAreaInsets();
+  const topPad = resolveTopInset(insets) + 12;
   const {loginWithSession} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [useEmailOtp, setUseEmailOtp] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    resetLogoutState();
+  }, []);
 
   const canSubmit = useEmailOtp
     ? email.trim().length > 0
@@ -97,7 +106,12 @@ export const LoginScreen = ({navigation}) => {
         requires: resp?.requires || ['email'],
       });
     } catch (error) {
-      Alert.alert('Login failed', String(error?.message || error));
+      const msg = String(error?.message || error);
+      const friendly =
+        msg === 'Signed out.'
+          ? 'Could not reach the login service. Check mobile data or Wi‑Fi and try again.'
+          : msg;
+      Alert.alert('Login failed', friendly);
     } finally {
       setLoading(false);
     }
@@ -109,7 +123,7 @@ export const LoginScreen = ({navigation}) => {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 8}>
-        <View style={styles.container}>
+        <View style={[styles.container, {paddingTop: topPad}]}>
         <View style={styles.card}>
           <Image source={require('../../assets/ayc-logo.png')} style={styles.logo} />
           <View style={styles.headerBand}>
@@ -196,7 +210,7 @@ export const LoginScreen = ({navigation}) => {
 
 const styles = StyleSheet.create({
   flex: {flex: 1},
-  container: {flexGrow: 1, padding: 20, justifyContent: 'flex-start', paddingTop: 48},
+  container: {flexGrow: 1, padding: 20, justifyContent: 'flex-start'},
   card: {
     backgroundColor: '#0a183a',
     borderRadius: 16,

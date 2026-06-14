@@ -127,8 +127,8 @@ export function normalizeMarketIndexTableRow(item, idx = 0) {
     symbol: name,
     trend: trend.label,
     trendDirection: trend.direction,
-    value: formatIndexValue(item.value ?? item.cmp ?? item.close ?? item.last ?? item.ltp),
-    ltp: item.value ?? item.cmp ?? item.close ?? item.last ?? item.ltp,
+    value: formatIndexValue(item.value ?? item.cmp ?? item.close ?? item.last ?? item.level ?? item.ltp),
+    ltp: item.value ?? item.cmp ?? item.close ?? item.last ?? item.level ?? item.ltp,
     percentile: item.percentile ?? item.percentile_value ?? '—',
     day1d: fmtPerf(item.perf_1d),
     week1w: fmtPerf(item.perf_1w ?? item.week1w ?? item?.['1w']),
@@ -208,8 +208,22 @@ export function flattenSubsectorOutlookPayload(payload) {
   return out;
 }
 
-export function deriveSubsectorPerformers(grouped, {search = '', subStrength = 'all'} = {}) {
+export function normSubsectorLabel(s) {
+  return String(s || '')
+    .normalize('NFKC')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2013/g, '-')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function deriveSubsectorPerformers(
+  grouped,
+  {search = '', subStrength = 'all', mappedGroups = null} = {},
+) {
   const weekLabels = Array.isArray(grouped?.weekLabels) ? grouped.weekLabels : [];
+  const mappedSet = mappedGroups?.length ? new Set(mappedGroups.map(normSubsectorLabel)) : null;
   const flat = [];
 
   for (const sec of grouped?.data || []) {
@@ -221,6 +235,7 @@ export function deriveSubsectorPerformers(grouped, {search = '', subStrength = '
       if (subStrength === 'mod' && (tp == null || tp > 2 || tp < -2)) continue;
       const name = String(sub?.name || sub?.subsector || '').trim();
       if (!name) continue;
+      if (mappedSet && !mappedSet.has(normSubsectorLabel(name))) continue;
       if (search.trim() && !name.toLowerCase().includes(search.trim().toLowerCase())) continue;
 
       const allNum =

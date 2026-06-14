@@ -1,10 +1,14 @@
 import React, {useState} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAuth} from '@core/auth/AuthContext';
 import {AYC} from '@core/theme/aycMobileTheme';
+import {resolveTopInset} from '@core/utils/safeAreaTop';
+import {useAdvisorTableChangeAlerts} from '@hooks/useAdvisorTableChangeAlerts';
+import {useNotificationInbox} from '@hooks/useNotificationInbox';
 import {AppHeaderBar} from './AppHeaderBar';
 import {HamburgerMenu} from './HamburgerMenu';
+import {NotificationInboxModal} from './NotificationInboxModal';
 import {UserStrip} from './UserStrip';
 
 /**
@@ -13,13 +17,36 @@ import {UserStrip} from './UserStrip';
  */
 export function MobileChrome({navigation, children}) {
   const insets = useSafeAreaInsets();
-  const {user} = useAuth();
+  const topInset = resolveTopInset(insets);
+  const {user, isAuthenticated} = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const userId = String(user?.id || user?.user_id || '');
+  const isSuperAdmin = Boolean(user?.is_super_admin);
+
+  const {sections, counts, loading, error, badgeCount, load, markItemRead, markAllRead} = useNotificationInbox({
+    enabled: isAuthenticated,
+    userId,
+    isSuperAdmin,
+  });
+
+  const {pollTableAlerts} = useAdvisorTableChangeAlerts({enabled: isAuthenticated});
+
+  const openInbox = () => {
+    setInboxOpen(true);
+    pollTableAlerts().finally(() => load());
+  };
 
   return (
-    <View style={styles.root}>
-      <View style={{paddingTop: insets.top, backgroundColor: AYC.appBar}}>
-        <AppHeaderBar onMenuPress={() => setMenuOpen(true)} user={user} />
+    <SafeAreaView style={styles.root} edges={[]}>
+      <View style={[styles.statusPad, {height: topInset}]} />
+      <View style={styles.header}>
+        <AppHeaderBar
+          onMenuPress={() => setMenuOpen(true)}
+          onNotificationsPress={openInbox}
+          notificationCount={badgeCount}
+          user={user}
+        />
       </View>
       <UserStrip user={user} />
       <View style={styles.body}>{children}</View>
@@ -29,11 +56,28 @@ export function MobileChrome({navigation, children}) {
         navigation={navigation}
         user={user}
       />
-    </View>
+      <NotificationInboxModal
+        visible={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+        navigation={navigation}
+        isSuperAdmin={isSuperAdmin}
+        sections={sections}
+        counts={counts}
+        loading={loading}
+        error={error}
+        onRefresh={() => {
+          pollTableAlerts().finally(() => load());
+        }}
+        onMarkItemRead={markItemRead}
+        onMarkAllRead={markAllRead}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: AYC.pageBg},
+  statusPad: {backgroundColor: AYC.appBar},
+  header: {backgroundColor: AYC.appBar},
   body: {flex: 1},
 });

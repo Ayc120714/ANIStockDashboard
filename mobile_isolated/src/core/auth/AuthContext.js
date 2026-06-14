@@ -1,8 +1,10 @@
-import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from 'react';
+import React, {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {configureAuthHandlers} from '@core/api/apiClient';
 import {authService} from '@core/api/services/authService';
 import {dashboardService} from '@core/api/services/dashboardService';
+import {stopAppShellAutoRefresh} from '@core/bootstrap/bootstrapAppShellData';
 import {env} from '@core/config/env';
+import {beginLogout, isLogoutActive, resetLogoutState} from '@core/auth/authSessionControl';
 import {sessionStorage} from '@core/storage/sessionStorage';
 import {tokenStorage} from '@core/storage/tokenStorage';
 
@@ -16,37 +18,72 @@ export const AuthProvider = ({children}) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [tokens, setTokens] = useState({accessToken: null, refreshToken: null});
+  const bootstrapRunRef = useRef(0);
 
   const refreshAccessToken = useCallback(async () => {
+    if (isLogoutActive()) return null;
     const refreshToken = await tokenStorage.getRefreshToken();
-    if (!refreshToken) return null;
+    if (!refreshToken || isLogoutActive()) return null;
     const session = await authService.refreshSession(refreshToken);
+    if (isLogoutActive()) return null;
     const nextTokens = {
       accessToken: session?.access_token || session?.accessToken || null,
       refreshToken: session?.refresh_token || refreshToken,
     };
     await tokenStorage.saveTokens(nextTokens);
+    if (isLogoutActive()) return null;
     setTokens(nextTokens);
     return nextTokens.accessToken;
   }, []);
 
-  const logout = useCallback(async () => {
+  const clearLocalSession = useCallback(async () => {
+    bootstrapRunRef.current += 1;
+    resetLogoutState();
+    setIsAuthenticated(false);
+    setUser(null);
+    setTokens({accessToken: null, refreshToken: null});
     try {
-      const refreshToken = await tokenStorage.getRefreshToken();
-      if (refreshToken) {
-        await authService.logoutSession(refreshToken);
-      }
-    } catch (_) {
-      // Ignore network/logout failures during local sign out.
-    } finally {
       await sessionStorage.clear();
-      setIsAuthenticated(false);
-      setUser(null);
-      setTokens({accessToken: null, refreshToken: null});
+    } catch (_) {
+      /* ignore */
     }
   }, []);
 
+  const logout = useCallback(() => {
+    beginLogout();
+    stopAppShellAutoRefresh();
+    bootstrapRunRef.current += 1;
+
+    setIsAuthenticated(false);
+    setUser(null);
+    setTokens({accessToken: null, refreshToken: null});
+    setIsBootstrapping(false);
+    resetLogoutState();
+
+    void (async () => {
+      let refreshToken = null;
+      try {
+        refreshToken = await tokenStorage.getRefreshToken();
+      } catch (_) {
+        /* local clear still proceeds */
+      }
+      try {
+        await sessionStorage.clear();
+      } catch (_) {
+        /* ignore */
+      }
+      if (refreshToken && !env.localAuthMode) {
+        try {
+          await authService.logoutSession(refreshToken);
+        } catch (_) {
+          /* server revoke is best-effort */
+        }
+      }
+    })();
+  }, []);
+
   const loginWithSession = useCallback(async session => {
+    resetLogoutState();
     const nextTokens = {
       accessToken: session?.access_token || session?.accessToken || null,
       refreshToken: session?.refresh_token || session?.refreshToken || null,
@@ -54,6 +91,7 @@ export const AuthProvider = ({children}) => {
     await tokenStorage.saveTokens(nextTokens);
     setTokens(nextTokens);
     const me = await authService.fetchMe();
+    if (isLogoutActive()) return;
     setUser(me);
     await sessionStorage.saveUser(me);
     setIsAuthenticated(true);
@@ -61,12 +99,16 @@ export const AuthProvider = ({children}) => {
 
   useEffect(() => {
     configureAuthHandlers({
-      getAccessToken: async () => tokenStorage.getAccessToken(),
+      getAccessToken: async () => {
+        if (isLogoutActive()) return null;
+        return tokenStorage.getAccessToken();
+      },
       onUnauthorized: async () => {
+        if (isLogoutActive()) return null;
         try {
           return await refreshAccessToken();
         } catch (_) {
-          await logout();
+          logout();
           return null;
         }
       },
@@ -75,6 +117,9 @@ export const AuthProvider = ({children}) => {
 
   useEffect(() => {
     let mounted = true;
+    const runId = bootstrapRunRef.current + 1;
+    bootstrapRunRef.current = runId;
+
     const bootstrap = async () => {
       try {
         const [storedUser, accessToken, refreshToken] = await Promise.all([
@@ -82,13 +127,13 @@ export const AuthProvider = ({children}) => {
           tokenStorage.getAccessToken(),
           tokenStorage.getRefreshToken(),
         ]);
-        if (!mounted) return;
+        if (!mounted || isLogoutActive() || bootstrapRunRef.current !== runId) return;
         if (storedUser) {
           setUser(storedUser);
         }
         if (accessToken || refreshToken) {
           if ((isLocalDevToken(accessToken) || isLocalDevToken(refreshToken)) && !env.localAuthMode) {
-            await logout();
+            logout();
             return;
           }
           setTokens({accessToken, refreshToken});
@@ -98,22 +143,22 @@ export const AuthProvider = ({children}) => {
           }
           try {
             const me = await authService.fetchMe({timeoutMs: 8000});
-            if (!mounted) return;
+            if (!mounted || isLogoutActive() || bootstrapRunRef.current !== runId) return;
             setUser(me);
             await sessionStorage.saveUser(me);
           } catch (_) {
             if (mounted && !storedUser) {
-              await logout();
+              await clearLocalSession();
             }
           }
           return;
         }
       } catch (_) {
         if (mounted) {
-          await logout();
+          await clearLocalSession();
         }
       } finally {
-        if (mounted) {
+        if (mounted && !isLogoutActive()) {
           setIsBootstrapping(false);
         }
       }
@@ -122,7 +167,7 @@ export const AuthProvider = ({children}) => {
     return () => {
       mounted = false;
     };
-  }, [logout]);
+  }, [clearLocalSession, logout]);
 
   const checkBootstrapReadiness = useCallback(() => dashboardService.fetchSystemReadiness(), []);
 

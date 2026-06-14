@@ -37,7 +37,7 @@ function Sidebar({ variant = 'rail' }) {
   const inDrawer = variant === 'drawer';
   const [collapsed, setCollapsed] = useState(false);
   const navCollapsed = inDrawer ? false : collapsed;
-  const { isSuperAdmin, outlookPremium } = useAuth();
+  const { isSuperAdmin, isAdmin, outlookPremium } = useAuth();
   const moduleLocked = !outlookPremium;
   const { pathname, search } = useLocation();
   const profileTab = new URLSearchParams(search || '').get('tab');
@@ -129,10 +129,12 @@ function Sidebar({ variant = 'rail' }) {
             <span className="label">Alerts</span>
           </SidebarItem>
 
-          <SidebarItem to="/algo-performance" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} title={navCollapsed ? 'Algo performance' : undefined}>
-            <MdAssessment />
-            <span className="label">Algo performance</span>
-          </SidebarItem>
+          {isAdmin ? (
+            <SidebarItem to="/algo-performance" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} title={navCollapsed ? 'Algo performance' : undefined}>
+              <MdAssessment />
+              <span className="label">Algo performance</span>
+            </SidebarItem>
+          ) : null}
         </Section>
 
         <Section collapsed={navCollapsed}>

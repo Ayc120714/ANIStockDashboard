@@ -70,6 +70,35 @@ const checks = [
       return required.every(route => content.includes(`path: '${route}'`));
     },
   },
+  {
+    name: 'Web parity parsers module exists',
+    run: () => {
+      const content = read('src/core/utils/webParity.js');
+      return (
+        content.includes('parseWatchlistResponse') &&
+        content.includes('parseStocksListResponse') &&
+        content.includes('parseWeeklyEntriesResponse')
+      );
+    },
+  },
+  {
+    name: 'Dashboard service unwraps watchlist data array',
+    run: () => {
+      const content = read('src/core/api/services/dashboardService.js');
+      return content.includes('parseWatchlistResponse') && content.includes('parseRatingsResponse');
+    },
+  },
+  {
+    name: 'Signals service returns advisor list rows like web',
+    run: () => {
+      const content = read('src/core/api/services/signalsService.js');
+      return content.includes('parseAdvisorListResponse') && content.includes('limit ?? 200');
+    },
+  },
+  {
+    name: 'Screens alpha tracker uses 6m long horizon like web',
+    run: () => read('src/features/screens/ScreensHubScreen.js').includes("alphaHor === 'long' ? '6m' : '1w'"),
+  },
 ];
 
 let failures = 0;

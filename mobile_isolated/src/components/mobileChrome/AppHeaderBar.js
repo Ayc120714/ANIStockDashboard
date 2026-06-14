@@ -9,11 +9,14 @@ function avatarInitial(user) {
 
 export function AppHeaderBar({
   onMenuPress,
+  onNotificationsPress,
+  notificationCount = 0,
   title = 'AYC INDUSTRIES',
   tagline = 'Analyze • Yield • Conquer',
   user,
 }) {
   const initial = avatarInitial(user);
+  const badgeLabel = notificationCount > 99 ? '99+' : String(notificationCount);
   return (
     <View style={styles.row}>
       <Pressable onPress={onMenuPress} style={styles.ham} accessibilityRole="button" accessibilityLabel="Open menu">
@@ -23,6 +26,19 @@ export function AppHeaderBar({
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.tag}>{tagline}</Text>
       </View>
+      <Pressable
+        onPress={onNotificationsPress}
+        style={styles.bellBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Open notifications"
+      >
+        <Text style={styles.bellIcon}>🔔</Text>
+        {notificationCount > 0 ? (
+          <View style={styles.bellBadge}>
+            <Text style={styles.bellBadgeText}>{badgeLabel}</Text>
+          </View>
+        ) : null}
+      </Pressable>
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>{initial}</Text>
       </View>
@@ -55,4 +71,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   avatarText: {color: AYC.appBarText, fontWeight: '800', fontSize: 14},
+  bellBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  bellIcon: {fontSize: 17},
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  bellBadgeText: {color: '#fff', fontSize: 10, fontWeight: '800'},
 });

@@ -3,11 +3,15 @@ import {v4 as uuidv4} from 'uuid';
 import {env, buildUrl} from '@core/config/env';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {decodeObfuscatedPayload} from '@core/utils/obfuscation';
+import {formatHttpStatusMessage, isRetryableGatewayStatus, sanitizeApiErrorText} from '@core/utils/apiHttpErrors';
+import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
+import {withRequestGate} from '@core/api/requestGate';
+import {isLogoutActive} from '@core/auth/authSessionControl';
 
 const defaultHeaders = {'Content-Type': 'application/json'};
 const DEVICE_ID_HEADER = 'X-Device-Id';
 const OBF_RESPONSE_HEADER = 'X-Obf-Response';
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = API_TIMEOUT_MS.default;
 
 const requestInterceptors = [];
 const responseInterceptors = [];
@@ -71,13 +75,25 @@ const parseError = async response => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await response.json().catch(() => null);
-    return extractApiErrorMessage(data) || `Request failed: ${response.status}`;
+    return extractApiErrorMessage(data) || formatHttpStatusMessage(response.status);
   }
   const text = await response.text().catch(() => '');
-  return text || `Request failed: ${response.status}`;
+  return sanitizeApiErrorText(text, response.status);
 };
 
-export const apiRequest = async (endpoint, options = {}) => {
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/** True for login/signup/refresh routes that must work while signed out. */
+function isPublicAuthEndpoint(endpoint) {
+  const path = String(endpoint || '').split('?')[0].replace(/^\//, '');
+  return path === 'auth' || path.startsWith('auth/');
+}
+
+export const apiRequest = async (endpoint, options = {}) =>
+  withRequestGate(async () => {
+  if (isLogoutActive() && !isPublicAuthEndpoint(endpoint)) {
+    throw new Error('Signed out.');
+  }
   let bearerToken = authTokenGetter ? await authTokenGetter() : null;
   const deviceId = await getOrCreateDeviceId();
   const baseConfig = await runRequestInterceptors({
@@ -113,34 +129,52 @@ export const apiRequest = async (endpoint, options = {}) => {
   };
 
   let response;
-  try {
-    response = await requestWithTimeout(bearerToken);
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timed out. Please check backend and network.');
+  let gatewayAttempts = 0;
+  const maxGatewayRetries = 2;
+  while (true) {
+    try {
+      response = await requestWithTimeout(bearerToken);
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Request timed out. Please check backend and network.');
+      }
+      throw new Error('Unable to reach server. Please check backend and network.');
     }
-    throw new Error('Unable to reach server. Please check backend and network.');
-  }
-  let intercepted = await runResponseInterceptors(response);
+    let intercepted = await runResponseInterceptors(response);
 
-  if (intercepted.status === 401 && unauthorizedHandler) {
-    const nextToken = await unauthorizedHandler(intercepted);
-    if (nextToken) {
-      bearerToken = nextToken;
-      intercepted = await runResponseInterceptors(await requestWithTimeout(nextToken));
+    if (intercepted.status === 401 && unauthorizedHandler && !isLogoutActive()) {
+      const nextToken = await unauthorizedHandler(intercepted);
+      if (isLogoutActive()) {
+        throw new Error('Signed out.');
+      }
+      if (nextToken) {
+        bearerToken = nextToken;
+        intercepted = await runResponseInterceptors(await requestWithTimeout(nextToken));
+      }
     }
-  }
-  if (!intercepted.ok) {
-    throw new Error(await parseError(intercepted));
-  }
 
-  const contentType = intercepted.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const parsed = await intercepted.json();
-    return decodeObfuscatedPayload(parsed, bearerToken);
+    if (
+      !intercepted.ok
+      && isRetryableGatewayStatus(intercepted.status)
+      && gatewayAttempts < maxGatewayRetries
+    ) {
+      gatewayAttempts += 1;
+      await sleep(1200 * gatewayAttempts);
+      continue;
+    }
+
+    if (!intercepted.ok) {
+      throw new Error(await parseError(intercepted));
+    }
+
+    const contentType = intercepted.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const parsed = await intercepted.json();
+      return await decodeObfuscatedPayload(parsed, bearerToken);
+    }
+    return intercepted.text();
   }
-  return intercepted.text();
-};
+  });
 
 export const apiGet = (endpoint, options = {}) => apiRequest(endpoint, {...options, method: 'GET'});
 export const apiPost = (endpoint, body, options = {}) =>

@@ -79,7 +79,7 @@ export function MutualFundsScreen({navigation}) {
   const [tier, setTier] = useState('B1');
   const [view, setView] = useState('enter');
   const [setupMode, setSetupMode] = useState('or_signal');
-  const {sortConfig, onSort, resetSort} = useTableSort();
+  const {sortConfig, onSort, resetSort} = useTableSort('ret_3y', false);
 
   const loadList = useCallback(async ({forceRefresh = false} = {}) => {
     await runScreenPayloadFetch({
@@ -139,6 +139,16 @@ export function MutualFundsScreen({navigation}) {
     else if (tab === 'tiers') loadTiers();
     else loadRs();
   }, [loadList, loadRs, loadTiers, resetSort, tab]);
+
+  const selectTab = useCallback(
+    nextTab => {
+      if (nextTab === tab) return;
+      setError('');
+      setTab(nextTab);
+      resetSort();
+    },
+    [resetSort, tab],
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -227,7 +237,7 @@ export function MutualFundsScreen({navigation}) {
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
         {TABS.map(t => (
-          <Pressable key={t.id} onPress={() => setTab(t.id)} style={[styles.tab, tab === t.id && styles.tabOn]}>
+          <Pressable key={t.id} onPress={() => selectTab(t.id)} style={[styles.tab, tab === t.id && styles.tabOn]}>
             <Text style={[styles.tabText, tab === t.id && styles.tabTextOn]}>{t.label}</Text>
           </Pressable>
         ))}

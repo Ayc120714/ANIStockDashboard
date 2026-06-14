@@ -12,11 +12,13 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {authService} from '@core/api/services/authService';
 import {useAuth} from '@core/auth/AuthContext';
 import {AuthPageBackground} from '@components/auth/AuthPageBackground';
 import {resolvePostLoginRoute} from '@features/auth/postLoginRouting';
 import {STORAGE_KEYS} from '@core/storage/keys';
+import {resolveTopInset} from '@core/utils/safeAreaTop';
 
 const MAIN_TAB_NAMES = new Set(['Dashboard', 'Stocks', 'Signals', 'Screens', 'Advisor']);
 
@@ -66,6 +68,8 @@ async function persistOtpFlow(payload) {
 
 export const OtpVerifyScreen = ({route, navigation}) => {
   const {loginWithSession} = useAuth();
+  const insets = useSafeAreaInsets();
+  const topPad = resolveTopInset(insets) + 12;
   const params = route.params || {};
   const flowId = String(params.flowId || '').trim();
   const purpose = String(params.purpose || 'login').trim();
@@ -160,7 +164,7 @@ export const OtpVerifyScreen = ({route, navigation}) => {
   if (!flowId || !purpose) {
     return (
       <AuthPageBackground>
-        <View style={styles.flex}>
+        <View style={[styles.flex, {paddingTop: topPad}]}>
           <View style={styles.card}>
             <Text style={styles.title}>OTP session missing</Text>
             <Text style={styles.lead}>Start again from login.</Text>
@@ -179,7 +183,7 @@ export const OtpVerifyScreen = ({route, navigation}) => {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 8}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.scroll, {paddingTop: topPad}]} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Image source={require('../../assets/ayc-logo.png')} style={styles.logo} />
           <View style={styles.headerBand}>
@@ -245,8 +249,8 @@ export const OtpVerifyScreen = ({route, navigation}) => {
 };
 
 const styles = StyleSheet.create({
-  flex: {flex: 1, padding: 20, paddingTop: 48, justifyContent: 'flex-start'},
-  scroll: {flexGrow: 1, padding: 20, paddingTop: 48, paddingBottom: 32},
+  flex: {flex: 1, padding: 20, justifyContent: 'flex-start'},
+  scroll: {flexGrow: 1, padding: 20, paddingBottom: 32},
   card: {
     backgroundColor: '#0a183a',
     borderRadius: 16,

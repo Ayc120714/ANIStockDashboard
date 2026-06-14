@@ -10,7 +10,10 @@ import {
   View,
 } from 'react-native';
 import {ScreenScaffold} from '@components/ScreenScaffold';
+import {useAuth} from '@core/auth/AuthContext';
+import {isAppAdmin} from '@core/auth/adminAccess';
 import {authService} from '@core/api/services/authService';
+import {fetchMobileInstallStats} from '@core/api/services/mobileService';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
@@ -104,6 +107,8 @@ function AdminUserCard({row, busy, onApprove, onReject, onBlock, onUnblock}) {
 }
 
 export const AdminScreen = () => {
+  const {user} = useAuth();
+  const canViewInstallStats = isAppAdmin(user);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState([]);
@@ -113,23 +118,26 @@ export const AdminScreen = () => {
   const [includeInactive, setIncludeInactive] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [installStats, setInstallStats] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [userRes, premiumRes] = await Promise.all([
+      const [userRes, premiumRes, statsRes] = await Promise.all([
         authService.fetchAdminUsers(includeInactive),
         authService.fetchPremiumEmails().catch(() => ({data: []})),
+        canViewInstallStats ? fetchMobileInstallStats().catch(() => null) : Promise.resolve(null),
       ]);
       setUsers(extractApiRows(userRes, ['data', 'users']));
       setPremiumRows(extractApiRows(premiumRes, ['data']));
+      setInstallStats(canViewInstallStats ? statsRes?.stats || null : null);
     } catch (err) {
       setError(String(err?.message || err || 'Failed to load admin data'));
     } finally {
       setLoading(false);
     }
-  }, [includeInactive]);
+  }, [canViewInstallStats, includeInactive]);
 
   useEffect(() => {
     load();
@@ -211,6 +219,61 @@ export const AdminScreen = () => {
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
+      ) : null}
+
+      {canViewInstallStats ? (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Mobile app installs</Text>
+        <Text style={styles.adminOnlyHint}>Visible to admin users only</Text>
+        {installStats ? (
+          <View style={styles.statsGrid}>
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{installStats.apk_downloads_total ?? 0}</Text>
+              <Text style={styles.statLabel}>APK downloads</Text>
+            </View>
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{installStats.unique_users_installed ?? 0}</Text>
+              <Text style={styles.statLabel}>Users installed</Text>
+            </View>
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{installStats.unique_devices_installed ?? 0}</Text>
+              <Text style={styles.statLabel}>Devices installed</Text>
+            </View>
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{installStats.active_users_last_7_days ?? 0}</Text>
+              <Text style={styles.statLabel}>Active users (7d)</Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.placeholder}>Install stats unavailable.</Text>
+        )}
+        {installStats?.by_version?.length ? (
+          <View style={styles.versionList}>
+            <Text style={styles.versionTitle}>Installed versions</Text>
+            {installStats.by_version.slice(0, 6).map(row => (
+              <View key={row.version} style={styles.versionRow}>
+                <Text style={styles.versionName}>{row.version}</Text>
+                <Text style={styles.versionCount}>{row.devices} devices</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {installStats?.recent_installs?.length ? (
+          <View style={styles.versionList}>
+            <Text style={styles.versionTitle}>Recent app opens</Text>
+            {installStats.recent_installs.slice(0, 5).map((row, idx) => (
+              <View key={`${row.user_id}-${row.device_id}-${idx}`} style={styles.versionRow}>
+                <Text style={styles.versionName} numberOfLines={1}>
+                  {row.user_email || `User ${row.user_id}`}
+                </Text>
+                <Text style={styles.versionCount}>
+                  v{row.app_version || '—'} · {formatWhen(row.last_opened_at)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
       ) : null}
 
       <View style={styles.card}>
@@ -311,6 +374,12 @@ export const AdminScreen = () => {
 const styles = StyleSheet.create({
   card: {...mobileStyles.card, borderRadius: 12, padding: 12},
   cardTitle: mobileStyles.cardTitle,
+  adminOnlyHint: {
+    fontSize: AYC.type.caption,
+    color: AYC.textMuted,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
   input: mobileStyles.input,
   primaryBtn: mobileStyles.btnPrimary,
   primaryBtnText: mobileStyles.btnPrimaryText,
@@ -388,4 +457,32 @@ const styles = StyleSheet.create({
   actionBtnWarn: {backgroundColor: '#fff7ed', borderColor: '#fdba74'},
   actionBtnWarnText: {fontSize: AYC.type.caption, fontWeight: '800', color: '#c2410c'},
   actionBtnDisabled: {opacity: 0.5},
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  statTile: {
+    flexGrow: 1,
+    minWidth: '46%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: AYC.cardBorder,
+    padding: 10,
+    gap: 2,
+  },
+  statValue: {fontSize: 22, fontWeight: '900', color: AYC.text},
+  statLabel: {fontSize: AYC.type.caption, color: AYC.textMuted, fontWeight: '700'},
+  versionList: {gap: 6, marginTop: 10},
+  versionTitle: {fontSize: AYC.type.caption, fontWeight: '800', color: AYC.textMuted},
+  versionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  versionName: {flex: 1, fontSize: AYC.type.caption, fontWeight: '700', color: AYC.text},
+  versionCount: {fontSize: AYC.type.caption, color: AYC.textMuted, fontWeight: '600'},
 });

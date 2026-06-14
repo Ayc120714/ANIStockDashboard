@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useDeferredValue } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Alert, Box, Button, Checkbox, CircularProgress, IconButton, MenuItem, Select, TextField } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
@@ -118,6 +118,7 @@ function StockAlertsPage() {
   const [loading, setLoading] = useState(true);
   const [listTypeFilter, setListTypeFilter] = useState('');
   const [symbolFilter, setSymbolFilter] = useState('');
+  const deferredSymbolFilter = useDeferredValue(symbolFilter);
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [advisorAlerts, setAdvisorAlerts] = useState([]);
@@ -142,8 +143,8 @@ function StockAlertsPage() {
     // Backfilled weekly/RSI rows use the *event* date as timestamp, so "today only" hides almost everything.
     const specialPromise = accessToken
       ? fetchSpecialAlerts({
-        limit: 5000,
-        symbol: symbolFilter,
+        limit: 1000,
+        symbol: deferredSymbolFilter,
         currentDayOnly: false,
         includeHistory: true,
       })
@@ -169,7 +170,7 @@ function StockAlertsPage() {
       setErrorMsg((prev) => prev || (e?.message || 'Failed to load weekly/divergence alerts'));
     }
     setLoading(false);
-  }, [userId, symbolFilter, accessToken]);
+  }, [userId, deferredSymbolFilter, accessToken]);
 
   useEffect(() => { load(); }, [load]);
 

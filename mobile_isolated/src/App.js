@@ -1,5 +1,6 @@
 import React from 'react';
-import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {StatusBar} from 'react-native';
+import {SafeAreaProvider, initialWindowMetrics} from 'react-native-safe-area-context';
 import {enableScreens} from 'react-native-screens';
 import {AuthProvider} from '@core/auth/AuthContext';
 import {AppNavigator} from '@nav/AppNavigator';
@@ -10,7 +11,8 @@ enableScreens(true);
 
 const App = () => (
   <AppErrorBoundary>
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <StatusBar barStyle="light-content" backgroundColor="#060b19" translucent={false} />
       <AuthProvider>
         <AppNavigator />
       </AuthProvider>

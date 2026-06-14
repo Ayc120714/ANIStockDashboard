@@ -91,16 +91,36 @@ function AiPicksPage() {
     let cancelled = false;
     const init = async () => {
       const resp = await load();
-      if (cancelled) return;
-      const empty = (!resp?.bullish?.length && !resp?.bearish?.length);
+      if (cancelled || !resp) return;
+      const empty = !resp?.bullish?.length && !resp?.bearish?.length;
       if (empty && !autoGenerateAttemptedRef.current) {
         autoGenerateAttemptedRef.current = true;
         setTriggering(true);
         try {
           await generateWeeklyPicks();
-          if (!cancelled) await load();
+          if (cancelled) return;
+          for (let attempt = 0; attempt < 12; attempt += 1) {
+            await new Promise((r) => setTimeout(r, 5000));
+            if (cancelled) return;
+            try {
+              const retry = await fetchWeeklyPicks();
+              if (retry?.bullish?.length || retry?.bearish?.length) {
+                setData({
+                  bullish: retry?.bullish ?? [],
+                  bearish: retry?.bearish ?? [],
+                  fno_bullish: retry?.fno_bullish ?? [],
+                  fno_bearish: retry?.fno_bearish ?? [],
+                  pick_date: retry?.pick_date ?? null,
+                });
+                setError(null);
+                break;
+              }
+            } catch {
+              /* keep polling */
+            }
+          }
         } catch (_) {
-          /* ignore */
+          /* ignore — user can refresh manually */
         } finally {
           if (!cancelled) setTriggering(false);
         }
@@ -114,15 +134,35 @@ function AiPicksPage() {
     setTriggering(true);
     try {
       await generateWeeklyPicks();
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          const retry = await fetchWeeklyPicks();
+          if (retry?.bullish?.length || retry?.bearish?.length) {
+            setData({
+              bullish: retry?.bullish ?? [],
+              bearish: retry?.bearish ?? [],
+              fno_bullish: retry?.fno_bullish ?? [],
+              fno_bearish: retry?.fno_bearish ?? [],
+              pick_date: retry?.pick_date ?? null,
+            });
+            setError(null);
+            return;
+          }
+        } catch {
+          /* keep polling */
+        }
+      }
       await load();
     } catch (_) {
       try {
         await triggerWeeklyPicks();
-        await new Promise(r => setTimeout(r, 3000));
-        await load();
-      } catch (_2) { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setTriggering(false);
     }
-    setTriggering(false);
   };
 
   const handleAdd = async (symbol, listType) => {

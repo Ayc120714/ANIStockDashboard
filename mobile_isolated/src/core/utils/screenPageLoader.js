@@ -1,3 +1,4 @@
+import {ALWAYS_FETCH_FROM_DB} from '@core/config/dataRefreshPolicy';
 import {
   ensureMarketSession,
   getCachedMarketSession,
@@ -7,8 +8,19 @@ import {
   shouldSkipNetworkForClosedMarket,
 } from '@core/utils/marketSession';
 import {cacheHasUsableData, readPageCache, writePageCache} from '@core/storage/pageCache';
+import {fetchWithRetry} from '@core/utils/fetchWithRetry';
 
 export const SCREEN_LIVE_POLL_MS = 30_000;
+
+/** True when live session cache expired and a network refresh is warranted. */
+export async function shouldRefreshPageCache(cacheKey, {forceRefresh = false} = {}) {
+  if (forceRefresh) return true;
+  await ensureMarketSession();
+  const session = getCachedMarketSession();
+  const cached = await readPageCache(cacheKey);
+  if (!cached?.updatedAt) return true;
+  return isPageCacheStale(cached.updatedAt, session);
+}
 
 export function extractRowArray(data) {
   if (Array.isArray(data)) return data;
@@ -17,6 +29,7 @@ export function extractRowArray(data) {
 }
 
 export async function shouldSkipScreenFetch(cacheKey) {
+  if (ALWAYS_FETCH_FROM_DB) return false;
   await ensureMarketSession();
   const session = getCachedMarketSession();
   if (shouldPollLiveMarket(session)) return false;
@@ -40,7 +53,10 @@ export async function runScreenTableFetch({
   const cached = await readPageCache(cacheKey);
   if (cached?.data != null) {
     const rows = extractRowArray(cached.data);
-    if (rows.length > 0) {
+    const isRowPayload =
+      Array.isArray(cached.data)
+      || (cached.data && typeof cached.data === 'object' && Array.isArray(cached.data.data));
+    if (isRowPayload) {
       setRows(rows);
       hydrated = true;
       if (setLoading) setLoading(false);
@@ -59,7 +75,7 @@ export async function runScreenTableFetch({
   if (!hydrated && setLoading) setLoading(true);
 
   try {
-    const fresh = await fetcher();
+    const fresh = await fetchWithRetry(fetcher, {retries: 1});
     const rows = extractRowArray(fresh);
     await writePageCache(cacheKey, Array.isArray(fresh) ? fresh : rows);
     setRows(rows);
@@ -68,6 +84,8 @@ export async function runScreenTableFetch({
     if (!hydrated) {
       if (setError) setError(e?.message || 'Failed to load data.');
       setRows([]);
+    } else if (setError) {
+      setError(null);
     }
   } finally {
     if (setLoading) setLoading(false);
@@ -105,13 +123,15 @@ export async function runScreenPayloadFetch({
   if (!hydrated && setLoading) setLoading(true);
 
   try {
-    const fresh = await fetcher();
+    const fresh = await fetchWithRetry(fetcher, {retries: 1});
     await writePageCache(cacheKey, fresh);
     applyPayload(fresh);
     if (setError) setError(null);
   } catch (e) {
     if (!hydrated) {
       if (setError) setError(e?.message || 'Failed to load data.');
+    } else if (setError) {
+      setError(null);
     }
   } finally {
     if (setLoading) setLoading(false);

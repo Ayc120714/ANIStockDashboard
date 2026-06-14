@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {AppState, Text, Vibration, View} from 'react-native';
+import {AppState, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {BottomTabBar} from '@react-navigation/bottom-tabs';
@@ -7,8 +8,11 @@ import {AppShellBanner} from '@components/AppShellBanner';
 import {useAuth} from '@core/auth/AuthContext';
 import {authService} from '@core/api/services/authService';
 import {signalsService} from '@core/api/services/signalsService';
+import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {diffNewSignals, signalsDigest} from '@core/utils/signalsDigest';
+import {buildSignalNotificationPayload} from '@core/utils/signalNotificationCopy';
+import {ensureNotificationPermission, notifyNewSignals, showSystemNotification, consumePendingEntryHint} from '@core/utils/signalNotifications';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {DashboardScreen} from '@features/dashboard/DashboardScreen';
 import {StocksHubScreen} from '@features/stocks/StocksHubScreen';
@@ -43,7 +47,8 @@ function TabIcon({emoji, focused}) {
 
 /** Use stack `navigation` prop — `useNavigation()` can throw when this navigator mounts as a stack screen. */
 export function MainTabNavigator({navigation}) {
-  const {user} = useAuth();
+  const insets = useSafeAreaInsets();
+  const {user, isAuthenticated} = useAuth();
   const isSuperAdmin = Boolean(user?.is_super_admin);
   const [entryHint, setEntryHint] = useState('');
   const [adminHint, setAdminHint] = useState('');
@@ -60,11 +65,11 @@ export function MainTabNavigator({navigation}) {
         ? authService.fetchAdminUsers(true).catch(() => null)
         : Promise.resolve(null);
       const [sigRes, adminRes] = await Promise.all([
-        signalsService.fetchLatestSignals({limit: 40, timeoutMs: 12_000}).catch(() => null),
+        signalsService.fetchLatestSignals({limit: 40, timeoutMs: API_TIMEOUT_MS.advisor}).catch(() => null),
         adminPromise,
       ]);
 
-      const data = extractApiRows(sigRes);
+      const data = Array.isArray(sigRes) ? sigRes : extractApiRows(sigRes);
       const digest = signalsDigest(data);
       const prev =
         (await AsyncStorage.getItem(STORAGE_KEYS.signalsDigest)) ??
@@ -72,18 +77,12 @@ export function MainTabNavigator({navigation}) {
       if (!firstPoll.current && prev != null && digest !== prev) {
         const fresh = diffNewSignals(prev, data);
         if (fresh.length) {
-          const names = fresh
-            .slice(0, 4)
-            .map(r => r.symbol)
-            .join(', ');
-          const entryReady = fresh.filter(r => String(r.status) === 'entry_ready');
-          setEntryHint(
-            entryReady.length
-              ? `New entry-ready signal${entryReady.length > 1 ? 's' : ''}: ${names}. Tap Signals tab.`
-              : `New advisor signal${fresh.length > 1 ? 's' : ''}: ${names}. Tap Signals tab.`,
-          );
-          setSignalsBadge(fresh.length > 99 ? '99+' : fresh.length);
-          Vibration.vibrate(280);
+          const payload = buildSignalNotificationPayload(fresh);
+          if (payload) {
+            setEntryHint(payload.entryHint);
+            setSignalsBadge(fresh.length > 99 ? '99+' : fresh.length);
+            await notifyNewSignals(fresh, {vibrateInApp: true});
+          }
         }
       }
       await AsyncStorage.setItem(STORAGE_KEYS.signalsDigest, digest);
@@ -111,7 +110,10 @@ export function MainTabNavigator({navigation}) {
               ? `New registration pending approval${names ? `: ${names}` : ''}. Review in Admin.`
               : 'Registration queue updated. Review pending users in Admin.',
           );
-          Vibration.vibrate(280);
+          await showSystemNotification(
+            'Registration pending',
+            names || 'A new user is waiting for approval.',
+          );
         }
         await AsyncStorage.setItem(STORAGE_KEYS.pendingApprovalDigest, pendingDigest);
         firstAdminPoll.current = false;
@@ -122,6 +124,7 @@ export function MainTabNavigator({navigation}) {
   }, [isSuperAdmin]);
 
   useEffect(() => {
+    ensureNotificationPermission().catch(() => {});
     const bootTimer = setTimeout(refreshShell, 4000);
     const t = setInterval(refreshShell, POLL_MS);
     const sub = AppState.addEventListener('change', s => {
@@ -135,6 +138,19 @@ export function MainTabNavigator({navigation}) {
       sub.remove();
     };
   }, [refreshShell]);
+
+  useEffect(() => {
+    const applyPendingHint = async () => {
+      const hint = await consumePendingEntryHint();
+      if (hint) {
+        setEntryHint(hint);
+        setSignalsBadge('1');
+      }
+    };
+    applyPendingHint();
+    const t = setInterval(applyPendingHint, 2000);
+    return () => clearInterval(t);
+  }, []);
 
   const onOpenSignals = useCallback(() => {
     navigation?.navigate('MainTabs', {screen: 'Signals'});
@@ -155,6 +171,7 @@ export function MainTabNavigator({navigation}) {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        lazy: true,
         tabBarActiveTintColor: '#0d1b4b',
         tabBarInactiveTintColor: '#94a3b8',
         tabBarLabelStyle: {fontSize: 11, fontWeight: '700'},
@@ -169,7 +186,9 @@ export function MainTabNavigator({navigation}) {
             onOpenAdmin={onOpenAdmin}
             onDismissAdmin={onDismissAdmin}
           />
-          <BottomTabBar {...props} />
+          <View style={{paddingBottom: insets.bottom}}>
+            <BottomTabBar {...props} />
+          </View>
         </View>
       )}
     >

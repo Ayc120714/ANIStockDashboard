@@ -1,6 +1,7 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Pressable,
@@ -12,14 +13,33 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {TradeProductPicker} from '@components/TradeProductPicker';
+import {TradingViewLink} from '@components/TradingViewLink';
 import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {signalsService} from '@core/api/services/signalsService';
+import {alertsService} from '@core/api/services/alertsService';
+import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {runScreenTableFetch} from '@core/utils/screenPageLoader';
+import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
+import {ListPagePager} from '@components/ListPagePager';
+import {usePagedList} from '@hooks/usePagedList';
+
+const SIGNALS_PAGE_SIZE = 10;
+
+function dedupeSignalsBySymbol(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows || []) {
+    const sym = String(row?.symbol || '').trim().toUpperCase();
+    if (!sym || seen.has(sym)) continue;
+    seen.add(sym);
+    out.push(row);
+  }
+  return out;
+}
 
 const FILTERS = [
   {id: 'all', label: 'All'},
@@ -61,7 +81,10 @@ function SignalCard({item, onTrade}) {
         </View>
         <Text style={[styles.badgeStatus, statusStyle]}>{status.replace(/_/g, ' ')}</Text>
       </View>
-      <Text style={styles.sym}>{item.symbol}</Text>
+      <View style={styles.symRow}>
+        <TradingViewLink symbol={item.symbol} size={16} />
+        <Text style={styles.sym}>{item.symbol}</Text>
+      </View>
       <Text style={styles.cmpRow}>
         <Text style={styles.cmp}>Live {formatINR(item.cmp)}</Text>
         {pct != null ? (
@@ -105,6 +128,7 @@ export function SignalsScreen({navigation}) {
   const [error, setError] = useState('');
   const [rows, setRows] = useState([]);
   const [tradePickerSignal, setTradePickerSignal] = useState(null);
+  const [demoBusy, setDemoBusy] = useState(false);
 
   const load = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     setError('');
@@ -117,8 +141,8 @@ export function SignalsScreen({navigation}) {
     await runScreenTableFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
       fetcher: async () => {
-        const res = await signalsService.fetchLatestSignals({limit: 150, timeoutMs: 30_000});
-        return extractApiRows(res);
+        const res = await signalsService.fetchLatestSignals({limit: 150});
+        return Array.isArray(res) ? res : extractApiRows(res);
       },
       setRows,
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
@@ -129,27 +153,63 @@ export function SignalsScreen({navigation}) {
     setRefreshing(false);
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   useFocusEffect(
     useCallback(() => {
-      load({silent: rows.length > 0});
+      (async () => {
+        const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
+        if (stale || !rows.length) {
+          await load({silent: rows.length > 0});
+        }
+      })();
     }, [load, rows.length]),
   );
 
   const [filter, setFilter] = useState('all');
 
   const filtered = useMemo(() => {
+    const deduped = dedupeSignalsBySymbol(rows);
     if (filter === 'entry_ready') {
-      return rows.filter(r => String(r.status) === 'entry_ready');
+      return deduped.filter(r => String(r.status) === 'entry_ready');
     }
     if (filter === 'high') {
-      return rows.filter(r => r.high_conviction);
+      return deduped.filter(r => r.high_conviction);
     }
-    return rows;
+    return deduped;
   }, [rows, filter]);
+
+  const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(filtered, {
+    pageSize: SIGNALS_PAGE_SIZE,
+    resetDeps: [filter],
+  });
 
   const onRefresh = useCallback(() => {
     load({silent: true, forceRefresh: true});
   }, [load]);
+
+  const onDemoAlert = useCallback(async () => {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    try {
+      const res = await alertsService.createDummyDemoAlert();
+      const signal = res?.signal;
+      await fireDemoSignalAlert({signal});
+      if (signal) {
+        setRows(prev => [signal, ...prev.filter(r => !r?._demo)]);
+      }
+      Alert.alert(
+        'Demo alert sent',
+        'Check your notification shade, the banner above the tabs, Stocks → Alerts, and this Signals list.',
+      );
+    } catch (e) {
+      Alert.alert('Demo alert failed', String(e?.message || e));
+    } finally {
+      setDemoBusy(false);
+    }
+  }, [demoBusy]);
 
   const header = (
     <View style={styles.headBlock}>
@@ -161,13 +221,27 @@ export function SignalsScreen({navigation}) {
         {FILTERS.map(c => (
           <Pressable
             key={c.id}
-            onPress={() => setFilter(c.id)}
+            onPress={() => {
+              setFilter(c.id);
+              setPage(1);
+            }}
             style={[styles.chip, filter === c.id ? styles.chipOn : styles.chipOff]}
           >
             <Text style={[styles.chipTxt, filter === c.id ? styles.chipTxtOn : styles.chipTxtOff]}>{c.label}</Text>
           </Pressable>
         ))}
       </View>
+      <Pressable
+        style={[styles.demoBtn, demoBusy && styles.demoBtnBusy]}
+        onPress={onDemoAlert}
+        disabled={demoBusy}
+      >
+        {demoBusy ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.demoBtnText}>Try demo alert</Text>
+        )}
+      </Pressable>
       {error ? (
         <View style={styles.errWrap}>
           <Text style={styles.err}>{error}</Text>
@@ -187,13 +261,21 @@ export function SignalsScreen({navigation}) {
       </View>
     ) : (
       <FlatList
-        data={filtered}
+        data={pagedItems}
         keyExtractor={(item, i) => `${item.symbol}-${i}`}
         style={styles.flex}
         contentContainerStyle={styles.listPad}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={header}
         ListEmptyComponent={<Text style={styles.muted}>No setups match this filter right now.</Text>}
+        ListFooterComponent={
+          <ListPagePager
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            onPageChange={setPage}
+          />
+        }
         renderItem={({item}) => (
           <SignalCard item={item} onTrade={navigation ? signal => setTradePickerSignal(signal) : null} />
         )}
@@ -267,6 +349,18 @@ const styles = StyleSheet.create({
   chipTxt: {fontSize: AYC.type.body, fontWeight: '700'},
   chipTxtOn: {color: '#fff'},
   chipTxtOff: {color: AYC.text},
+  demoBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#6366f1',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  demoBtnBusy: {opacity: 0.7},
+  demoBtnText: {color: '#fff', fontWeight: '800', fontSize: AYC.type.body},
   listPad: {...mobilePad, paddingHorizontal: 16, paddingBottom: 24},
   card: {...mobileStyles.card, borderRadius: 14, padding: 14, marginBottom: 4},
   cardTop: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6},
@@ -305,6 +399,7 @@ const styles = StyleSheet.create({
   badgeWatch: {color: '#92400e', backgroundColor: '#fef3c7'},
   badgeDone: {color: '#4b5563', backgroundColor: '#e5e7eb'},
   sym: mobileStyles.metricLg,
+  symRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   cmpRow: {marginTop: 4},
   cmp: mobileStyles.metricMd,
   pct: mobileStyles.body,

@@ -2,14 +2,20 @@ import React from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 
-function AdminRoute({ children }) {
-  const { isAuthenticated, isSuperAdmin } = useAuth();
+/**
+ * @param {'super' | 'admin'} level
+ *   - super: is_super_admin (default; telegram-admin, admin-users, next-week-setup)
+ *   - admin: is_admin or configured admin emails (algo-performance)
+ */
+function AdminRoute({ children, level = 'super' }) {
+  const { isAuthenticated, isSuperAdmin, isAdmin } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isSuperAdmin) {
+  const allowed = level === 'admin' ? isAdmin : isSuperAdmin;
+  if (!allowed) {
     return <Navigate to="/" replace />;
   }
 

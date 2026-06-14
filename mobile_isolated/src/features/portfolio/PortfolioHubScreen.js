@@ -1,45 +1,86 @@
 import React, {useCallback, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {ScreenScaffold} from '@components/ScreenScaffold';
+import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {ordersService} from '@core/api/services/ordersService';
+import {brokerPortfolioService} from '@core/api/services/brokerPortfolioService';
+import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
 import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 import {ensureMarketSession, shouldPollLiveMarket} from '@core/utils/marketSession';
 import {useFocusEffect} from '@react-navigation/native';
+import {navigateToStocksOrders} from '@nav/navigationHelpers';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 
-function sumPnL(rows, field) {
-  return (rows || []).reduce((a, r) => a + (Number(r[field]) || 0), 0);
+function resolveUserId(user) {
+  return String(user?.id || user?.user_id || user?.email || '');
+}
+
+async function loadPortfolioPayload(userId) {
+  const [portfolioRes, brokerRes, dhanOrdersRes] = await Promise.allSettled([
+    ordersService.fetchPortfolioPositions().catch(() => ({data: []})),
+    resolveDashboardBrokerHoldings(userId, {forceLive: true}),
+    userId ? brokerPortfolioService.fetchDhanOrders({userId}) : Promise.resolve([]),
+  ]);
+
+  let positions = portfolioRes.status === 'fulfilled' ? extractApiRows(portfolioRes.value) : [];
+  const brokerRows = brokerRes.status === 'fulfilled' ? brokerRes.value?.rows || [] : [];
+
+  if (!positions.length && brokerRows.length) {
+    positions = brokerRows;
+  }
+
+  let orders = [];
+  if (dhanOrdersRes.status === 'fulfilled') {
+    orders = extractApiRows(dhanOrdersRes.value);
+  }
+  if (!orders.length) {
+    const fallbackOrders = await ordersService.fetchOrders().catch(() => ({data: []}));
+    orders = extractApiRows(fallbackOrders);
+  }
+
+  return {
+    orders,
+    positions,
+    brokerConnected: Boolean(brokerRes.status === 'fulfilled' && brokerRes.value?.authenticated),
+    activeBroker: brokerRes.status === 'fulfilled' ? brokerRes.value?.activeBroker : null,
+  };
 }
 
 export function PortfolioHubScreen({navigation}) {
+  const {user} = useAuth();
+  const userId = resolveUserId(user);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  const load = useCallback(async ({forceRefresh = false} = {}) => {
-    await runScreenPayloadFetch({
-      cacheKey: MOBILE_PAGE_CACHE_KEYS.portfolio,
-      fetcher: async () => {
-        const [o, p] = await Promise.all([
-          ordersService.fetchOrders().catch(() => ({data: []})),
-          ordersService.fetchPortfolioPositions().catch(() => ({data: []})),
-        ]);
-        return {
-          orders: extractApiRows(o),
-          positions: extractApiRows(p),
-        };
-      },
-      applyPayload: payload => {
-        setOrders(payload.orders || []);
-        setPositions(payload.positions || []);
-      },
-      setLoading,
-      forceNetwork: forceRefresh,
-      hasUsable: data => (data?.orders?.length > 0) || (data?.positions?.length > 0),
-    });
-  }, []);
+  const load = useCallback(
+    async ({forceRefresh = false} = {}) => {
+      await runScreenPayloadFetch({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.portfolio,
+        fetcher: () => loadPortfolioPayload(userId),
+        applyPayload: payload => {
+          setOrders(payload.orders || []);
+          setPositions(payload.positions || []);
+        },
+        setLoading,
+        forceNetwork: forceRefresh,
+        hasUsable: data => (data?.orders?.length > 0) || (data?.positions?.length > 0),
+      });
+    },
+    [userId],
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load({forceRefresh: true});
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,72 +93,54 @@ export function PortfolioHubScreen({navigation}) {
   );
 
   const openPos = positions.filter(x => String(x.state || '').toLowerCase() === 'open' || Number(x.net_qty));
-  const closedTrades = orders.filter(x => /FILLED|CLOSED|COMPLETE/i.test(String(x.status || '')));
-  const realized = sumPnL(positions, 'realized_pnl');
-  const unreal = sumPnL(positions, 'unrealized_pnl');
 
   return (
-    <ScreenScaffold title="Portfolio manager" subtitle="Live orders & positions">
-      {loading ? <ActivityIndicator style={{marginTop: 16}} /> : null}
-      <ScrollView contentContainerStyle={styles.pad}>
-        <View style={styles.pills}>
-          <View style={[styles.pill, styles.pillBlue]}>
-            <Text style={styles.pillTxt}>Open: {openPos.length}</Text>
-          </View>
-          <View style={[styles.pill, styles.pillGrey]}>
-            <Text style={styles.pillTxt}>Closed: {closedTrades.length}</Text>
-          </View>
-          <View style={[styles.pill, styles.pillGr]}>
-            <Text style={styles.pillTxt}>Realized: ₹{realized.toFixed(2)}</Text>
-          </View>
-          <View style={[styles.pill, styles.pillOr]}>
-            <Text style={styles.pillTxt}>Unrealized: ₹{unreal.toFixed(2)}</Text>
-          </View>
-        </View>
+    <MobileChrome navigation={navigation}>
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={styles.pad}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <Text style={styles.pageTitle}>Portfolio</Text>
+        {loading ? <ActivityIndicator style={{marginVertical: 16}} /> : null}
 
-        <View style={styles.card}>
+      <View style={styles.card}>
           <Text style={styles.cardTitle}>Open positions</Text>
           {openPos.length ? (
             openPos.map(p => (
-              <Text key={p.id} style={styles.line}>
+              <Text key={`${p.symbol}-${p.product_type || 'pos'}`} style={styles.line}>
                 {p.symbol} · qty {p.net_qty} · LTP {p.ltp ?? '—'}
               </Text>
             ))
           ) : (
             <Text style={styles.placeholder}>No open positions.</Text>
           )}
-        </View>
+      </View>
 
-        <View style={styles.card}>
+      <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent orders</Text>
           {orders.slice(0, 12).length ? (
-            orders.slice(0, 12).map(o => (
-              <Text key={String(o.id)} style={styles.line}>
-                {o.symbol} · {o.side} · {o.status}
+            orders.slice(0, 12).map((o, idx) => (
+              <Text key={String(o.id || o.orderId || idx)} style={styles.line}>
+                {o.symbol || o.tradingSymbol} · {o.side || o.transactionType} · {o.status || o.orderStatus}
               </Text>
             ))
           ) : (
             <Text style={styles.placeholder}>No orders available.</Text>
           )}
-        </View>
+      </View>
 
-        <Pressable style={styles.secondary} onPress={() => navigation.navigate('Orders')}>
-          <Text style={styles.secondaryText}>Open orders screen</Text>
-        </Pressable>
+      <Pressable style={styles.secondary} onPress={() => navigateToStocksOrders(navigation)}>
+        <Text style={styles.secondaryText}>Open orders screen</Text>
+      </Pressable>
       </ScrollView>
-    </ScreenScaffold>
+    </MobileChrome>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {flex: 1},
+  pageTitle: mobileStyles.pageTitle,
   pad: mobilePad,
-  pills: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  pill: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999},
-  pillBlue: {backgroundColor: '#1d4ed8'},
-  pillGrey: {backgroundColor: '#94a3b8'},
-  pillGr: {backgroundColor: '#15803d'},
-  pillOr: {backgroundColor: '#ea580c'},
-  pillTxt: {color: '#fff', fontWeight: '800', fontSize: AYC.type.caption},
   card: {...mobileStyles.card, borderRadius: 14, padding: 16},
   cardTitle: mobileStyles.cardTitle,
   line: mobileStyles.body,

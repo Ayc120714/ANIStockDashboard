@@ -1,14 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {v4 as uuidv4} from 'uuid';
 import {apiGet, apiPost} from '@core/api/apiClient';
-import {STORAGE_KEYS} from '@core/storage/keys';
+import {APP_VERSION_NAME} from '@core/config/appVersion';
+import {getOrCreateDeviceId} from '@core/utils/deviceId';
 
 async function getDeviceId() {
-  const existing = await AsyncStorage.getItem(STORAGE_KEYS.deviceId);
-  if (existing) return existing;
-  const generated = uuidv4();
-  await AsyncStorage.setItem(STORAGE_KEYS.deviceId, generated);
-  return generated;
+  return getOrCreateDeviceId();
 }
 
 const withTimeout = (promise, ms = 5000) =>
@@ -67,7 +62,7 @@ export async function registerMobileClientIp({appVersion = ''} = {}) {
   const payload = await apiPost('/mobile/register-client-ip', {
     ip,
     device_id: deviceId,
-    app_version: appVersion,
+    app_version: appVersion || APP_VERSION_NAME,
   });
   const enablements = payload?.enablements || (payload?.enablement ? [payload.enablement] : []);
   return {

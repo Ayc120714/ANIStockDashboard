@@ -469,8 +469,9 @@ function SignalsAlertsTab() {
   }, [customSetupMode]);
 
   useEffect(() => {
-    if (view !== 'signals') return;
-    loadCustomSetup(false);
+    if (view !== 'signals') return undefined;
+    const t = setTimeout(() => loadCustomSetup(false), 1500);
+    return () => clearTimeout(t);
   }, [view, loadCustomSetup]);
 
   const EarlyDetectionSortIcon = ({ col }) => {
@@ -500,7 +501,7 @@ function SignalsAlertsTab() {
     fetchEarlyDetectionRecent({
       timeframe: earlyDetectionTimeframe,
       lookback_days: recentLookbackDaysForTimeframe(earlyDetectionTimeframe),
-      limit: 1000,
+      limit: 300,
       dedupe_symbol: true,
       sort_by: earlyDetectionSortCol,
       sort_dir: earlyDetectionSortDir,
@@ -537,7 +538,7 @@ function SignalsAlertsTab() {
       timeframe: earlyDetectionTimeframe,
       from_date: from,
       to_date: to,
-      limit: 2000,
+      limit: 1000,
       sort_by: earlyDetectionSortCol,
       sort_dir: earlyDetectionSortDir,
     })
@@ -633,11 +634,11 @@ function SignalsAlertsTab() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'signals') return;
+    if (view !== 'signals') return undefined;
     setEarlyDetectionPage(1);
-    if (earlyDetectionViewMode === 'recent') {
-      loadEarlyDetectionRecent();
-    }
+    if (earlyDetectionViewMode !== 'recent') return undefined;
+    const t = setTimeout(() => loadEarlyDetectionRecent(), 2000);
+    return () => clearTimeout(t);
   }, [view, earlyDetectionViewMode, earlyDetectionTimeframe, loadEarlyDetectionRecent]);
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import {
   Alert,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -48,6 +49,7 @@ import {
   orderLabel,
   positionLabel,
 } from '@features/brokers/brokerConfig';
+import {navigateToStocksOrders} from '@nav/navigationHelpers';
 
 const pickRows = payload => extractApiRows(payload, ['data', 'positions', 'orders', 'items']);
 
@@ -75,7 +77,7 @@ function buildValidatePayload(row, userId, draftCred = {}) {
   };
 }
 
-export const BrokersScreen = ({route, navigation}) => {
+export const BrokersScreen = ({route, navigation, embedded = false}) => {
   const {user} = useAuth();
   const userId = String(user?.id || user?.user_id || '');
   const isAdmin = Boolean(user?.is_super_admin || user?.is_admin);
@@ -170,7 +172,7 @@ export const BrokersScreen = ({route, navigation}) => {
 
   const syncMobileIp = useCallback(async () => {
     try {
-      const res = await registerMobileClientIp({appVersion: '1.0.0'});
+      const res = await registerMobileClientIp();
       setMobileIp(res.ip || '');
       if (res.enablements?.length) {
         setIpEnableStatus(summarizeBrokerEnablements(res.enablements));
@@ -250,10 +252,14 @@ export const BrokersScreen = ({route, navigation}) => {
   }, [activeRow?.broker, activeRow?.has_session]);
 
   const finishReturnNavigation = useCallback(() => {
-    if (returnTo && navigation) {
-      navigation.navigate(returnTo, returnParams || {});
+    if (!returnTo || !navigation) return;
+    const params = returnParams || {};
+    if (embedded || String(returnTo).toLowerCase() === 'orders') {
+      navigateToStocksOrders(navigation, params);
+      return;
     }
-  }, [navigation, returnParams, returnTo]);
+    navigation.navigate(returnTo, params);
+  }, [embedded, navigation, returnParams, returnTo]);
 
   useEffect(() => {
     load();
@@ -405,7 +411,7 @@ export const BrokersScreen = ({route, navigation}) => {
         }
         setMessage(`${BROKER_LABELS.dhan} validation successful.`);
         await persistBrokerDraftForRow(userId, activeRow);
-        const ipRes = await registerMobileClientIp({appVersion: '1.0.0'});
+        const ipRes = await registerMobileClientIp();
         const ip = ipRes?.ip || mobileIp;
         if (ip) {
           setMobileIp(ip);
@@ -426,11 +432,14 @@ export const BrokersScreen = ({route, navigation}) => {
 
       await connectBroker(activeRow.broker, payload);
 
-      const res = await brokersService.validateBrokerSetup(payload);
+      const res =
+        activeRow.broker === 'dhan'
+          ? {validated: true}
+          : await brokersService.validateBrokerSetup(payload);
       if (res?.validated) {
         setMessage(`${BROKER_LABELS[activeRow.broker]} validation successful.`);
         await persistBrokerDraftForRow(userId, activeRow);
-        const ipRes = await registerMobileClientIp({appVersion: '1.0.0'});
+        const ipRes = await registerMobileClientIp();
         const ip = ipRes?.ip || mobileIp;
         if (ip) {
           setMobileIp(ip);
@@ -469,6 +478,13 @@ export const BrokersScreen = ({route, navigation}) => {
   };
 
   if (loading) {
+    if (embedded) {
+      return (
+        <View style={styles.embeddedLoading}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      );
+    }
     return (
       <ScreenScaffold title="Brokers" subtitle="Broker integration">
         <ActivityIndicator style={{marginTop: 24}} color="#2563eb" />
@@ -478,8 +494,8 @@ export const BrokersScreen = ({route, navigation}) => {
 
   const fields = BROKER_CREDENTIAL_FIELDS[activeRow?.broker] || [];
 
-  return (
-    <ScreenScaffold title="Brokers" subtitle="Connect broker, validate session, view live positions">
+  const content = (
+    <>
       {returnTo ? (
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
@@ -670,11 +686,28 @@ export const BrokersScreen = ({route, navigation}) => {
           </Text>
         )}
       </View>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <ScrollView style={styles.embeddedWrap} contentContainerStyle={styles.embeddedContent} keyboardShouldPersistTaps="handled">
+        {content}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScreenScaffold title="Brokers" subtitle="Connect broker, validate session, view live positions">
+      {content}
     </ScreenScaffold>
   );
 };
 
 const styles = StyleSheet.create({
+  embeddedLoading: {alignItems: 'center', justifyContent: 'center', paddingVertical: 24},
+  embeddedWrap: {flex: 1},
+  embeddedContent: {gap: 10, paddingBottom: 16},
   card: {...mobileStyles.card, borderRadius: 12, padding: 12},
   cardTitle: mobileStyles.cardTitle,
   hint: mobileStyles.caption,

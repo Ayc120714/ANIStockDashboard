@@ -1,9 +1,11 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {ScreenScaffold} from '@components/ScreenScaffold';
 import {TradeProductPicker} from '@components/TradeProductPicker';
 import {useAuth} from '@core/auth/AuthContext';
 import {alertsService} from '@core/api/services/alertsService';
+import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
+import {safeFetch} from '@core/utils/safeFetch';
 import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
@@ -30,7 +32,7 @@ const renderSignalLine = item => {
   return `Entry ${entry ?? '-'} | SL ${sl ?? '-'} | T1 ${t1 ?? '-'} | T2 ${t2 ?? '-'}`;
 };
 
-export const AlertsScreen = ({navigation}) => {
+export const AlertsScreen = ({navigation, embedded = false}) => {
   const {user} = useAuth();
   const userId = String(user?.id || user?.user_id || '');
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,7 @@ export const AlertsScreen = ({navigation}) => {
   const [newCount, setNewCount] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [tradePickerAlert, setTradePickerAlert] = useState(null);
+  const [loadError, setLoadError] = useState('');
 
   const normalizeList = raw => {
     if (Array.isArray(raw)) {
@@ -51,14 +54,18 @@ export const AlertsScreen = ({navigation}) => {
     return [];
   };
 
-  const load = useCallback(async ({silent = false} = {}) => {
+  const load = useCallback(async ({silent = false, notify = false} = {}) => {
     if (silent) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
     try {
-      const resp = await alertsService.fetchLiveAdvisorAlerts({limit: 120});
+      const resp = await safeFetch(() => alertsService.fetchLiveAdvisorAlerts({limit: 120}), {
+        timeoutMs: API_TIMEOUT_MS.screen,
+        retries: 2,
+        label: 'Alerts',
+      });
       const list = normalizeList(resp);
       setAlerts(prev => {
         const prevIds = new Set((prev || []).map(item => String(item?.id || '')));
@@ -70,8 +77,13 @@ export const AlertsScreen = ({navigation}) => {
         return list;
       });
       setLastSyncAt(new Date());
+      setLoadError('');
     } catch (error) {
-      Alert.alert('Alerts', String(error?.message || error));
+      const msg = String(error?.message || error || 'Could not load alerts');
+      setLoadError(msg);
+      if (notify) {
+        Alert.alert('Alerts', msg);
+      }
     } finally {
       if (silent) {
         setRefreshing(false);
@@ -107,6 +119,13 @@ export const AlertsScreen = ({navigation}) => {
   const items = useMemo(() => (Array.isArray(alerts) ? alerts : []), [alerts]);
 
   if (loading) {
+    if (embedded) {
+      return (
+        <View style={styles.embeddedLoading}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      );
+    }
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color="#2563eb" />
@@ -114,14 +133,14 @@ export const AlertsScreen = ({navigation}) => {
     );
   }
 
-  return (
-    <ScreenScaffold title="Live Alerts" subtitle="Real-time advisor alerts with entry/exit/SL sync">
+  const content = (
+    <>
       <View style={styles.toolbar}>
         <Pressable
           style={styles.primaryBtn}
           onPress={() => {
             setNewCount(0);
-            load({silent: true});
+            load({silent: true, notify: true});
           }}>
           <Text style={styles.primaryBtnText}>{refreshing ? 'Syncing...' : 'Sync now'}</Text>
         </Pressable>
@@ -129,6 +148,16 @@ export const AlertsScreen = ({navigation}) => {
           <Text style={styles.secondaryBtnText}>{autoSync ? 'Auto sync: ON' : 'Auto sync: OFF'}</Text>
         </Pressable>
       </View>
+
+      {loadError ? (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorTitle}>Could not sync alerts</Text>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <Pressable style={styles.errorBtn} onPress={() => load({silent: true, notify: true})}>
+            <Text style={styles.errorBtnText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.metaCard}>
         <Text style={styles.metaText}>Alerts: {items.length}</Text>
@@ -169,12 +198,29 @@ export const AlertsScreen = ({navigation}) => {
       />
 
       {items.length === 0 ? <Text style={styles.empty}>No live alerts available right now.</Text> : null}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <ScrollView style={styles.embeddedWrap} contentContainerStyle={styles.embeddedContent} keyboardShouldPersistTaps="handled">
+        {content}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScreenScaffold title="Live Alerts" subtitle="Real-time advisor alerts with entry/exit/SL sync">
+      {content}
     </ScreenScaffold>
   );
 };
 
 const styles = StyleSheet.create({
   loading: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: AYC.pageBg},
+  embeddedLoading: {alignItems: 'center', justifyContent: 'center', paddingVertical: 24},
+  embeddedWrap: {flex: 1},
+  embeddedContent: {gap: 10, paddingBottom: 16},
   toolbar: {flexDirection: 'row', gap: 8},
   primaryBtn: {...mobileStyles.btnPrimary, flex: 1},
   primaryBtnText: mobileStyles.btnPrimaryText,
@@ -200,4 +246,21 @@ const styles = StyleSheet.create({
   tradeBtn: {marginTop: 2, backgroundColor: '#10b981', borderRadius: 10, paddingVertical: 10, alignItems: 'center'},
   tradeBtnText: mobileStyles.btnPrimaryText,
   empty: {...mobileStyles.caption, fontStyle: 'italic'},
+  errorCard: {
+    ...mobileStyles.card,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    gap: 6,
+  },
+  errorTitle: {fontSize: AYC.type.body, fontWeight: '800', color: '#991b1b'},
+  errorText: {fontSize: AYC.type.caption, color: '#7f1d1d', lineHeight: 18},
+  errorBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  errorBtnText: {color: '#fff', fontWeight: '700', fontSize: AYC.type.caption},
 });

@@ -1,30 +1,36 @@
 import {apiGet} from '@core/api/apiClient';
+import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
+import {mergeApiOpts} from '@core/utils/screenDataFetch';
 
 export const mutualFundsService = {
-  fetchFunds: ({collection, direct_only = true, refresh = false} = {}) => {
+  fetchFunds: ({collection, direct_only = true, refresh = false, timeoutMs} = {}) => {
     const params = new URLSearchParams({
       collection: collection || 'LONG_TERM_WEALTH_GENERATORS',
       direct_only: String(direct_only),
     });
     if (refresh) params.set('refresh', '1');
-    return apiGet(`/mutual-funds/?${params}`);
+    return apiGet(`/mutual-funds/?${params}`, {timeoutMs: timeoutMs ?? API_TIMEOUT_MS.screenHeavy});
   },
-  fetchBuyTierCards: ({collection, fund_limit = 100, refresh = false} = {}) => {
+  fetchBuyTierCards: ({collection, fund_limit = 100, refresh = false, timeoutMs} = {}) => {
     const params = new URLSearchParams({
       collection: collection || 'LONG_TERM_WEALTH_GENERATORS',
       fund_limit: String(fund_limit),
     });
     if (refresh) params.set('refresh', 'true');
-    return apiGet(`/mutual-funds/signals/buy-tier-cards?${params}`);
+    return apiGet(`/mutual-funds/signals/buy-tier-cards?${params}`, {
+      timeoutMs: timeoutMs ?? API_TIMEOUT_MS.screenHeavy,
+    });
   },
-  fetchRsSetup: ({collection, fund_limit = 100, setup_mode = 'or_signal', refresh = false} = {}) => {
+  fetchRsSetup: ({collection, fund_limit = 100, setup_mode = 'or_signal', refresh = false, timeoutMs} = {}) => {
     const params = new URLSearchParams({
       collection: collection || 'LONG_TERM_WEALTH_GENERATORS',
       fund_limit: String(fund_limit),
       setup_mode,
     });
     if (refresh) params.set('refresh', 'true');
-    return apiGet(`/mutual-funds/signals/rs-setup?${params}`);
+    return apiGet(`/mutual-funds/signals/rs-setup?${params}`, {
+      timeoutMs: timeoutMs ?? API_TIMEOUT_MS.screenHeavy,
+    });
   },
 };
 

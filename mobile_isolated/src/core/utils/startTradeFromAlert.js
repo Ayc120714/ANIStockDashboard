@@ -6,6 +6,7 @@ import {
   buildOrdersRouteFromAlert,
   pickConnectedBrokerRow,
 } from '@core/utils/tradePreflight';
+import {navigateToStocksBrokers, navigateToStocksOrders} from '@nav/navigationHelpers';
 
 export async function startTradeFromAlert(navigation, alert, {productType, side, userId} = {}) {
   if (!navigation || !alert) return;
@@ -23,7 +24,7 @@ export async function startTradeFromAlert(navigation, alert, {productType, side,
 
   if (connected?.broker) {
     orderParams.broker = String(connected.broker).toLowerCase();
-    navigation.navigate('Orders', orderParams);
+    navigateToStocksOrders(navigation, orderParams);
     return;
   }
 
@@ -35,8 +36,8 @@ export async function startTradeFromAlert(navigation, alert, {productType, side,
       {
         text: 'Validate broker',
         onPress: () =>
-          navigation.navigate('Brokers', {
-            returnTo: 'Orders',
+          navigateToStocksBrokers(navigation, {
+            returnTo: 'orders',
             returnParams: orderParams,
             openBrokerSetup: true,
             selectedBroker: 'dhan',

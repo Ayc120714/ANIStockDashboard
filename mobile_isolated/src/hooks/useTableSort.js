@@ -1,7 +1,7 @@
 import {useCallback, useState} from 'react';
 import {toggleSortConfig} from '@core/utils/tableSort';
 
-export function useTableSort(initialKey = null, initialAscending = true) {
+export function useTableSort(initialKey = null, initialAscending = false) {
   const [sortConfig, setSortConfig] = useState({
     key: initialKey,
     ascending: initialAscending,

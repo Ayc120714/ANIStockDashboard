@@ -78,7 +78,7 @@ function AppRouter() {
           <Route path="/video-screener" element={<Navigate to="/screens" replace />} />
           <Route path="/portfolio-manager" element={<PremiumModuleRoute><PortfolioManagerPage /></PremiumModuleRoute>} />
           <Route path="/alerts" element={<PremiumModuleRoute><StockAlertsPage /></PremiumModuleRoute>} />
-          <Route path="/algo-performance" element={<AlgoPerformancePage />} />
+          <Route path="/algo-performance" element={<AdminRoute level="admin"><AlgoPerformancePage /></AdminRoute>} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/upgrade-premium" element={<UpgradePremiumPage />} />
           <Route path="/callback" element={<DhanCallbackPage />} />

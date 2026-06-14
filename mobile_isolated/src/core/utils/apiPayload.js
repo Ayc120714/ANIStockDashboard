@@ -10,3 +10,13 @@ export function extractApiRows(payload, keys = []) {
   if (Array.isArray(payload?.items)) return payload.items;
   return [];
 }
+
+/** `/api/watchlist` returns `{ count, data: [] }` — same keys as the web client. */
+export function parseWatchlistRows(payload) {
+  return extractApiRows(payload, ['data', 'watchlist', 'rows']);
+}
+
+/** `/api/watchlist/signals` and similar signal list endpoints. */
+export function parseSignalRows(payload) {
+  return extractApiRows(payload, ['signals', 'rows', 'data']);
+}

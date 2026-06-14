@@ -107,4 +107,15 @@ export const authService = {
   addPremiumEmail: email => apiPost('/auth/admin/premium-emails', {email: String(email || '').trim()}),
   deletePremiumEmail: entryId =>
     apiRequest(`/auth/admin/premium-emails/${encodeURIComponent(String(entryId))}`, {method: 'DELETE'}),
+  fetchAdminNotifications: ({unreadOnly = false, limit = 40} = {}) => {
+    const q = new URLSearchParams({
+      unread_only: unreadOnly ? 'true' : 'false',
+      limit: String(limit),
+    });
+    return apiGet(`/auth/admin/notifications?${q.toString()}`);
+  },
+  markAdminNotificationRead: notificationId =>
+    apiRequest(`/auth/admin/notifications/${encodeURIComponent(String(notificationId))}/read`, {
+      method: 'PUT',
+    }),
 };

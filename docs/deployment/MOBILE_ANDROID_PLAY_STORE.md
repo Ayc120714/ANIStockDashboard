@@ -49,6 +49,13 @@ Outputs (copied for download):
 - `/opt/ani-stock/mobile-artifacts/ani-stock-release.aab` — **upload to Google Play**
 - `/opt/ani-stock/mobile-artifacts/ani-stock-release.apk` — side-load / QA
 
+**Public download (side-load on Android):**
+
+- APK: **https://www.aycindustries.com/mobile/ani-stock-release.apk**
+- Build metadata (version, SHA256): **https://www.aycindustries.com/mobile/DOWNLOAD.json**
+
+Nginx serves the APK from `mobile-artifacts/` with `no-cache` so reinstalls always fetch the latest build.
+
 Or from `mobile_isolated/`:
 
 ```bash

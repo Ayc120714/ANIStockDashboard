@@ -1,40 +1,57 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
+import {useFocusEffect, useRoute} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
+import {ListPagePager} from '@components/ListPagePager';
+import {OptionPicker} from '@components/OptionPicker';
+import {SymbolAutocomplete} from '@components/SymbolAutocomplete';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {mobilePad, mobileStyles, AYC} from '@core/theme/mobileStyles';
-import {signalsService} from '@core/api/services/signalsService';
 import {advisorService} from '@core/api/services/advisorService';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
+import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
+import {readPageCache} from '@core/storage/pageCache';
+import {
+  extractChartBlocks,
+  extractTrendGrid,
+  fetchAdvisorChartPayload,
+  fetchAdvisorSignalsPayload,
+  fetchAdvisorTrendPayload,
+  hasUsableAdvisorChartPayload,
+  hasUsableAdvisorSignalsPayload,
+  hasUsableAdvisorTrendPayload,
+  mergeChartDisplayBlocks,
+  normalizeAdvisorSignalsPayload,
+} from '@core/utils/advisorHubCache';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {
-  EXTRA_SETUPS,
   TIER_SETUPS,
-  buildLevelsLookup,
-  groupLatestSignalsByTier,
-  mapSetupRows,
 } from '@core/utils/advisorSetupTables';
-import {
-  buildChartFundamentalBlocks,
-  formatChartCell,
-} from '@core/utils/chartFundamentalTables';
+import {formatChartCell} from '@core/utils/chartFundamentalTables';
+import {groupTrendReversalGridRows} from '@core/utils/buyTierGrid';
 import {formatINR} from '@core/utils/formatMarket';
+import {navigateToStocksAlerts} from '@nav/navigationHelpers';
 import {sortRows} from '@core/utils/tableSort';
 import {getAdvisorSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
+import {usePagedList} from '@hooks/usePagedList';
+import {AI_ANALYSIS_SETUPS, getAnalysisSetupLabel} from '@core/utils/aiAnalysisSetups';
+import {loadUserEnabledSymbols} from '@core/utils/userEnabledSymbols';
+import {AdvisorSignalsSection} from './AdvisorSignalsSection';
+
+import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
+
+const ADVISOR_PAGE_SIZE = 10;
+const TREND_TIER_PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
 
 const TABS = [
   {id: 'sig', label: 'Signals & alerts'},
@@ -44,48 +61,113 @@ const TABS = [
   {id: 'health', label: 'Portfolio health'},
 ];
 
-const SETUP_META = [...TIER_SETUPS, ...EXTRA_SETUPS.filter(s => s.id !== 'other')];
+function formatChgPct(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
 
-function SetupLevelsTable({title, rows, enabled, tone}) {
-  if (!rows?.length) return null;
+function HoldingsChipRow({
+  symbols = [],
+  selectedSymbol = '',
+  onPick,
+  multiSelect = false,
+  selectedSet,
+  onToggle,
+}) {
+  if (!symbols.length) {
+    return <Text style={styles.holdingsEmpty}>No holdings or watchlist stocks yet. Add stocks in Short/Long Term watchlist or connect a broker.</Text>;
+  }
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+      {symbols.map(row => {
+        const sym = row.symbol;
+        const active = multiSelect ? selectedSet?.has(sym) : selectedSymbol === sym;
+        return (
+          <Pressable
+            key={sym}
+            onPress={() => (multiSelect ? onToggle(sym) : onPick(sym))}
+            style={[styles.chip, active ? styles.chipOn : null]}>
+            <Text style={[styles.chipText, active ? styles.chipTextOn : null]}>{sym}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function TrendTierTable({title, rows, enabled, tone, pageSize = TREND_TIER_PAGE_SIZE, timeframe = ''}) {
+  const list = rows || [];
+  const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(list, {
+    pageSize,
+    resetDeps: [title, timeframe, list.length],
+  });
   return (
     <View style={styles.setupBlock}>
-      <View style={[styles.setupTitleWrap, enabled ? styles.setupTitleOn : styles.setupTitleOff]}>
-        <Text style={[styles.setupTitle, enabled ? styles.setupTitleTextOn : null]}>{title}</Text>
-        <Text style={[styles.setupCount, enabled ? styles.setupTitleTextOn : null]}>{rows.length}</Text>
+      <View style={[styles.setupTitleWrap, enabled && list.length ? styles.setupTitleOn : styles.setupTitleOff]}>
+        <Text style={[styles.setupTitle, enabled && list.length ? styles.setupTitleTextOn : null]}>{title}</Text>
+        <Text style={[styles.setupCount, enabled && list.length ? styles.setupTitleTextOn : null]}>{list.length}</Text>
       </View>
-      <View style={styles.thRow}>
-        <Text style={[styles.th, styles.colSym]}>Symbol</Text>
-        <Text style={[styles.th, styles.colTv]} />
-        <Text style={[styles.th, styles.colLvl]}>SL</Text>
-        <Text style={[styles.th, styles.colLvl]}>T1</Text>
-        <Text style={[styles.th, styles.colLvl]}>T2</Text>
-      </View>
-      {rows.map((row, index) => (
-        <View
-          key={`${title}-${row.symbol}-${index}`}
-          style={[
-            styles.tr,
-            index % 2 === 0 ? styles.trAlt : null,
-            tone === 'bull' ? styles.trBull : tone === 'bear' ? styles.trBear : null,
-          ]}>
-          <Text style={[styles.td, styles.colSym, styles.symBold]} numberOfLines={1}>
-            {row.symbol}
-          </Text>
-          <View style={[styles.td, styles.colTv]}>
-            <TradingViewLink symbol={row.symbol} />
-          </View>
-          <Text style={[styles.td, styles.colLvl]}>{row.stop_loss != null ? formatINR(row.stop_loss) : '—'}</Text>
-          <Text style={[styles.td, styles.colLvl]}>{row.target_1 != null ? formatINR(row.target_1) : '—'}</Text>
-          <Text style={[styles.td, styles.colLvl]}>{row.target_2 != null ? formatINR(row.target_2) : '—'}</Text>
-        </View>
-      ))}
+      {!list.length ? (
+        <Text style={styles.tierEmpty}>No matches for this timeframe.</Text>
+      ) : (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View>
+              <View style={styles.thRow}>
+                <Text style={[styles.th, styles.trSym]}>Symbol</Text>
+                <Text style={[styles.th, styles.trTv]} />
+                <Text style={[styles.th, styles.trCompany]}>Company</Text>
+                <Text style={[styles.th, styles.trSector]}>Sector</Text>
+                <Text style={[styles.th, styles.trNum]}>Close</Text>
+                <Text style={[styles.th, styles.trNum]}>CHG%</Text>
+                <Text style={[styles.th, styles.trTier]}>Tier</Text>
+                <Text style={[styles.th, styles.trContext]}>Setup</Text>
+              </View>
+              {pagedItems.map((row, index) => (
+                <View
+                  key={`${title}-${row.symbol}-${index}`}
+                  style={[
+                    styles.tr,
+                    index % 2 === 0 ? styles.trAlt : null,
+                    tone === 'bull' ? styles.trBull : tone === 'bear' ? styles.trBear : null,
+                    row.is_fresh ? styles.trFresh : null,
+                  ]}>
+                  <Text style={[styles.td, styles.trSym, styles.symBold]} numberOfLines={1}>
+                    {row.symbol}
+                  </Text>
+                  <View style={[styles.td, styles.trTv]}>
+                    <TradingViewLink symbol={row.symbol} />
+                  </View>
+                  <Text style={[styles.td, styles.trCompany]} numberOfLines={1}>
+                    {row.company || '—'}
+                  </Text>
+                  <Text style={[styles.td, styles.trSector]} numberOfLines={1}>
+                    {row.sector || '—'}
+                  </Text>
+                  <Text style={[styles.td, styles.trNum]}>{row.close != null ? formatINR(row.close) : '—'}</Text>
+                  <Text style={[styles.td, styles.trNum]}>{formatChgPct(row.chg_pct)}</Text>
+                  <Text style={[styles.td, styles.trTier]}>{row.buy_sell_tier || '—'}</Text>
+                  <Text style={[styles.td, styles.trContext]} numberOfLines={2}>
+                    {row.reversal_context || '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+          <ListPagePager page={page} totalPages={totalPages} totalItems={totalItems} onPageChange={setPage} />
+        </>
+      )}
     </View>
   );
 }
 
-function ChartFundamentalTable({block}) {
+function ChartFundamentalTable({block, pageSize = ADVISOR_PAGE_SIZE}) {
   const hasPrev = Boolean(block.prevHeader);
+  const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(block.rows || [], {
+    pageSize,
+    resetDeps: [block.id, block.rows?.length],
+  });
   return (
     <View style={styles.setupBlock}>
       <View style={[styles.setupTitleWrap, block.rows.length ? styles.setupTitleOn : styles.setupTitleOff]}>
@@ -109,8 +191,14 @@ function ChartFundamentalTable({block}) {
               <Text style={[styles.th, styles.cfRating]}>Rating</Text>
               <Text style={[styles.th, styles.cfHorizon]}>Horizon</Text>
             </View>
-            {block.rows.map((row, index) => (
-              <View key={`${block.id}-${row.symbol}-${index}`} style={[styles.tr, index % 2 === 0 ? styles.trAlt : null]}>
+            {pagedItems.map((row, index) => (
+              <View
+                key={`${block.id}-${row.symbol}-${index}`}
+                style={[
+                  styles.tr,
+                  index % 2 === 0 ? styles.trAlt : null,
+                  row.passed_all ? styles.trPass : null,
+                ]}>
                 <Text style={[styles.td, styles.cfSym, styles.symBold]} numberOfLines={1}>
                   {row.symbol}
                 </Text>
@@ -137,11 +225,20 @@ function ChartFundamentalTable({block}) {
       ) : (
         <Text style={styles.empty}>No symbols match this setup.</Text>
       )}
+      {block.rows.length ? (
+        <ListPagePager
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          onPageChange={setPage}
+        />
+      ) : null}
     </View>
   );
 }
 
 export function AdvisorHubScreen({navigation}) {
+  const route = useRoute();
   const [tab, setTab] = useState('sig');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -149,109 +246,176 @@ export function AdvisorHubScreen({navigation}) {
   const [monthlyRows, setMonthlyRows] = useState([]);
   const [customRows, setCustomRows] = useState([]);
   const [mondayRows, setMondayRows] = useState([]);
-  const [enabledSetups, setEnabledSetups] = useState(() => new Set(SETUP_META.map(s => s.id).concat(['other'])));
-  const [indRows, setIndRows] = useState([]);
+  const [trendGrid, setTrendGrid] = useState(null);
+  const [trendTf, setTrendTf] = useState('weekly');
   const [aiSym, setAiSym] = useState('');
   const [aiType, setAiType] = useState('earnings');
   const [aiHist, setAiHist] = useState([]);
   const [aiLatest, setAiLatest] = useState(null);
-  const [healthSym, setHealthSym] = useState('');
-  const [healthText, setHealthText] = useState('');
+  const [showAiSetupPicker, setShowAiSetupPicker] = useState(false);
+  const [enabledSymbols, setEnabledSymbols] = useState([]);
+  const [healthSelected, setHealthSelected] = useState(() => new Set());
+  const [healthResult, setHealthResult] = useState(null);
   const [chartBlocks, setChartBlocks] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [cacheHydrated, setCacheHydrated] = useState(false);
   const {sortConfig, onSort, resetSort} = useTableSort();
+
+  const applySignalsPayload = useCallback(payload => {
+    setSigRows(payload?.sigRows || []);
+    setMonthlyRows(payload?.monthlyRows || []);
+    setCustomRows(payload?.customRows || []);
+    setMondayRows(payload?.mondayRows || []);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [sigCache, trendCache, chartCache] = await Promise.all([
+        readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals),
+        readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend),
+        readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubChart),
+      ]);
+      if (cancelled) return;
+
+      const signals = normalizeAdvisorSignalsPayload(sigCache?.data);
+      if (hasUsableAdvisorSignalsPayload(signals)) {
+        applySignalsPayload(signals);
+      }
+      const hydratedTrend = extractTrendGrid(trendCache?.data);
+      if (hydratedTrend) {
+        setTrendGrid(hydratedTrend);
+      }
+      const hydratedChart = extractChartBlocks(chartCache?.data);
+      if (hasUsableAdvisorChartPayload(chartCache?.data)) {
+        setChartBlocks(hydratedChart);
+      }
+      setCacheHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applySignalsPayload]);
 
   useEffect(() => {
     resetSort();
   }, [tab, resetSort]);
 
-  const sortedIndRows = useMemo(
-    () => sortRows(indRows, sortConfig, getAdvisorSortValue),
-    [indRows, sortConfig],
+  const selectTab = useCallback(
+    nextTab => {
+      if (nextTab === tab) return;
+      setErr('');
+      setTab(nextTab);
+      resetSort();
+    },
+    [resetSort, tab],
   );
+
+  useEffect(() => {
+    const next = route?.params?.advisorTab;
+    if (next && TABS.some(t => t.id === next)) {
+      selectTab(next);
+    }
+  }, [route?.params?.advisorTab, selectTab]);
+
+  useEffect(() => {
+    const tf = route?.params?.trendTf;
+    if (tf && ['daily', 'weekly', 'monthly'].includes(tf)) {
+      setTrendTf(tf);
+    }
+  }, [route?.params?.trendTf]);
+
+  const refreshEnabledSymbols = useCallback(async () => {
+    const rows = await loadUserEnabledSymbols();
+    setEnabledSymbols(rows);
+    setHealthSelected(new Set(rows.map(r => r.symbol)));
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'ai' || tab === 'health') {
+      refreshEnabledSymbols().catch(() => {});
+    }
+  }, [refreshEnabledSymbols, tab]);
+
+  const toggleHealthSymbol = useCallback(sym => {
+    const key = String(sym || '').trim().toUpperCase();
+    if (!key) return;
+    setHealthSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const healthRows = useMemo(() => {
+    const result = healthResult?.result;
+    if (!result || typeof result !== 'object') return [];
+    const table = Array.isArray(result.sentiment_table) ? result.sentiment_table : [];
+    return table.map(row => ({
+      stock: String(row?.stock || '—').trim(),
+      sentiment: String(row?.sentiment || '—').trim(),
+      expectation: String(row?.analyst_expectation || '').trim(),
+    }));
+  }, [healthResult]);
+
+  const trendGrouped = useMemo(
+    () => groupTrendReversalGridRows(trendGrid, {timeframe: trendTf}),
+    [trendGrid, trendTf],
+  );
+
+  const trendVisibleRows = useMemo(
+    () => TIER_SETUPS.reduce((n, setup) => n + (trendGrouped[setup.id]?.length || 0), 0),
+    [trendGrouped],
+  );
+
+  const trendHasData = Boolean(extractTrendGrid(trendGrid));
+  const chartDisplayBlocks = useMemo(() => mergeChartDisplayBlocks(chartBlocks), [chartBlocks]);
+  const chartHasData = chartDisplayBlocks.some(b => (b?.rows?.length || 0) > 0);
+
   const sortedAiHist = useMemo(
     () => sortRows(aiHist, sortConfig, getAdvisorSortValue),
     [aiHist, sortConfig],
   );
 
-  const levelsBySymbol = useMemo(() => buildLevelsLookup(sigRows), [sigRows]);
+  const aiPaged = usePagedList(sortedAiHist, {
+    pageSize: ADVISOR_PAGE_SIZE,
+    resetDeps: [aiSym, sortConfig?.key, sortConfig?.ascending],
+  });
 
-  const tierGrouped = useMemo(
-    () => groupLatestSignalsByTier(sigRows, levelsBySymbol),
-    [sigRows, levelsBySymbol],
-  );
-
-  const extraGrouped = useMemo(
-    () => ({
-      monthly_setup: mapSetupRows(monthlyRows, levelsBySymbol),
-      custom_rs: mapSetupRows(customRows, levelsBySymbol),
-      monday_pwh: mapSetupRows(mondayRows, levelsBySymbol),
-    }),
-    [customRows, levelsBySymbol, mondayRows, monthlyRows],
-  );
-
-  const activeSetupIds = useMemo(() => {
-    const active = new Set();
-    for (const setup of SETUP_META) {
-      const rows =
-        setup.tier != null && setup.tier !== '__other__'
-          ? tierGrouped[setup.id] || []
-          : extraGrouped[setup.id] || [];
-      if (rows.length) active.add(setup.id);
-    }
-    if ((tierGrouped.other || []).length) active.add('other');
-    return active;
-  }, [extraGrouped, tierGrouped]);
+  const signalsHasData = hasUsableAdvisorSignalsPayload({
+    sigRows,
+    monthlyRows,
+    customRows,
+    mondayRows,
+  });
 
   const loadSignals = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     if (forceRefresh) setRefreshing(true);
     await runScreenPayloadFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubSignals,
-      fetcher: async () => {
-        const [latestRes, monthlyRes, customRes, mondayRes] = await Promise.all([
-          signalsService.fetchLatestSignals({limit: 200}),
-          advisorService.fetchMonthlyMacdSetup(300).catch(() => null),
-          advisorService.fetchCustomRsMacdSetup({limit: 400, setup_mode: 'or_signal'}).catch(() => null),
-          advisorService.fetchMondayPrevWeekHighCross({limit: 500}).catch(() => null),
-        ]);
-        return {
-          sigRows: extractApiRows(latestRes),
-          monthlyRows: extractApiRows(monthlyRes),
-          customRows: extractApiRows(customRes),
-          mondayRows: extractApiRows(mondayRes),
-        };
-      },
+      fetcher: () => fetchAdvisorSignalsPayload({forceRefresh}),
+      applyPayload: applySignalsPayload,
+      setLoading: silent && !forceRefresh ? () => {} : setLoading,
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+      hasUsable: hasUsableAdvisorSignalsPayload,
+    });
+    setRefreshing(false);
+  }, [applySignalsPayload]);
+
+  const loadTrend = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
+    if (forceRefresh) setRefreshing(true);
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
+      fetcher: () => fetchAdvisorTrendPayload({forceRefresh}),
       applyPayload: payload => {
-        setSigRows(payload.sigRows || []);
-        setMonthlyRows(payload.monthlyRows || []);
-        setCustomRows(payload.customRows || []);
-        setMondayRows(payload.mondayRows || []);
+        setTrendGrid(extractTrendGrid(payload));
       },
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
-    });
-    setRefreshing(false);
-  }, []);
-
-  const loadTrend = useCallback(async ({forceRefresh = false} = {}) => {
-    if (forceRefresh) setRefreshing(true);
-    await runScreenPayloadFetch({
-      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
-      fetcher: async () => {
-        const res = await advisorService.fetchIndicatorScreener({
-          timeframe: 'weekly',
-          indicator: 'rsi',
-          condition: 'cross_above',
-          universe: 'all',
-          limit: 120,
-        });
-        return {indRows: extractApiRows(res)};
-      },
-      applyPayload: payload => setIndRows(payload.indRows || []),
-      setLoading,
-      setError: msg => setErr(msg || ''),
-      forceNetwork: forceRefresh,
+      hasUsable: hasUsableAdvisorTrendPayload,
     });
     setRefreshing(false);
   }, []);
@@ -260,112 +424,119 @@ export function AdvisorHubScreen({navigation}) {
     if (forceRefresh) setRefreshing(true);
     await runScreenPayloadFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubChart,
-      fetcher: async () => {
-        const [customRes, latestRes] = await Promise.all([
-          advisorService.fetchCustomRsMacdSetup({limit: 800, setup_mode: 'or_signal'}).catch(() => null),
-          signalsService.fetchLatestSignals({limit: 200, timeoutMs: 20_000}).catch(() => null),
-        ]);
-        const customSetupRows = extractApiRows(customRes);
-        const signals = extractApiRows(latestRes);
-        return {chartBlocks: buildChartFundamentalBlocks(customSetupRows, signals)};
-      },
-      applyPayload: payload => setChartBlocks(payload.chartBlocks || []),
+      fetcher: () => fetchAdvisorChartPayload({forceRefresh}),
+      applyPayload: payload => setChartBlocks(extractChartBlocks(payload)),
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
+      hasUsable: hasUsableAdvisorChartPayload,
     });
     setRefreshing(false);
   }, []);
 
+  useEffect(() => {
+    if (!cacheHydrated) return;
+    loadSignals({silent: true});
+    loadTrend({silent: true});
+    loadChart({silent: true});
+  }, [cacheHydrated, loadChart, loadSignals, loadTrend]);
+
   useFocusEffect(
     useCallback(() => {
-      if (tab === 'sig') {
-        loadSignals({silent: sigRows.length > 0});
-      } else if (tab === 'trend') {
-        loadTrend();
-      } else if (tab === 'chart') {
-        loadChart({silent: chartBlocks.length > 0});
-      }
-    }, [chartBlocks.length, loadChart, loadSignals, loadTrend, sigRows.length, tab]),
+      (async () => {
+        if (tab === 'sig') {
+          const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals);
+          if (stale || !signalsHasData) {
+            await loadSignals({silent: signalsHasData});
+          }
+        } else if (tab === 'trend') {
+          const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
+          if (stale || !trendHasData) {
+            await loadTrend({silent: trendHasData});
+          }
+        } else if (tab === 'chart') {
+          const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubChart);
+          if (stale || !chartHasData) {
+            await loadChart({silent: chartHasData});
+          }
+        }
+      })();
+    }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData]),
   );
 
-  const toggleSetup = setupId => {
-    setEnabledSetups(prev => {
-      const next = new Set(prev);
-      if (next.has(setupId)) next.delete(setupId);
-      else next.add(setupId);
-      return next;
-    });
-  };
-
-  const totalVisibleRows = useMemo(() => {
-    let n = 0;
-    for (const setup of SETUP_META) {
-      if (!enabledSetups.has(setup.id)) continue;
-      const rows =
-        setup.tier != null && setup.tier !== '__other__'
-          ? tierGrouped[setup.id] || []
-          : extraGrouped[setup.id] || [];
-      n += rows.length;
-    }
-    if (enabledSetups.has('other')) n += tierGrouped.other?.length || 0;
-    return n;
-  }, [enabledSetups, extraGrouped, tierGrouped]);
-
-  const loadAi = async () => {
+  const loadAi = useCallback(async () => {
     if (!aiSym.trim()) {
-      setErr('Enter a symbol');
+      setErr('Select a symbol from your holdings');
       return;
     }
     setErr('');
     setLoading(true);
     try {
-      const res = await advisorService.fetchAnalysis(aiSym.trim().toUpperCase(), 12);
-      const rows = Array.isArray(res?.data) ? res.data : [];
+      const res = await advisorService.fetchAnalysis(aiSym.trim().toUpperCase(), 20);
+      const rows = extractApiRows(res, ['data']);
       setAiHist(rows);
-      setAiLatest(rows[0] || null);
+      const match = rows.find(r => String(r.analysis_type) === aiType);
+      setAiLatest(match || rows[0] || null);
     } catch (e) {
       setErr(String(e?.message || e));
     } finally {
       setLoading(false);
     }
-  };
+  }, [aiSym, aiType]);
 
-  const runAi = async () => {
-    if (!aiSym.trim()) return;
+  const runAi = useCallback(async () => {
+    if (!aiSym.trim()) {
+      setErr('Select a symbol from your holdings');
+      return;
+    }
     setLoading(true);
     setErr('');
     try {
-      await advisorService.triggerAnalyze(aiSym.trim().toUpperCase(), aiType);
+      const res = await advisorService.triggerAnalyze(aiSym.trim().toUpperCase(), aiType);
+      const payload = res?.result || res;
+      setAiLatest(
+        payload
+          ? {
+              ...payload,
+              analysis_type: res?.analysis_type || aiType,
+              rating: payload.rating,
+              confidence: payload.confidence,
+              summary: payload.summary,
+            }
+          : null,
+      );
       await loadAi();
     } catch (e) {
       setErr(String(e?.message || e));
     } finally {
       setLoading(false);
     }
-  };
+  }, [aiSym, aiType, loadAi]);
 
-  const runHealth = async () => {
-    if (!healthSym.trim()) return;
+  const runHealth = useCallback(async () => {
+    const syms = [...healthSelected];
+    if (!syms.length) {
+      setErr('Select at least one holding stock');
+      return;
+    }
     setLoading(true);
     setErr('');
     try {
-      const res = await advisorService.fetchPortfolioHealth(healthSym.trim().toUpperCase());
-      const r = res?.result;
-      setHealthText(typeof r === 'string' ? r : JSON.stringify(r, null, 2));
+      const res = await advisorService.fetchPortfolioHealth(syms.join(','));
+      setHealthResult(res);
     } catch (e) {
       setErr(String(e?.message || e));
     } finally {
       setLoading(false);
     }
-  };
+  }, [healthSelected]);
 
   const head = (
     <View style={{gap: 8}}>
       <Text style={mobileStyles.pageTitle}>Financial advisor</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {TABS.map(t => (
-          <Pressable key={t.id} onPress={() => setTab(t.id)} style={[styles.chip, tab === t.id ? styles.chipOn : null]}>
+          <Pressable key={t.id} onPress={() => selectTab(t.id)} style={[styles.chip, tab === t.id ? styles.chipOn : null]}>
             <Text style={[styles.chipText, tab === t.id ? styles.chipTextOn : null]}>{t.label}</Text>
           </Pressable>
         ))}
@@ -377,6 +548,10 @@ export function AdvisorHubScreen({navigation}) {
             <Pressable onPress={() => loadSignals()} style={styles.retryBtn}>
               <Text style={styles.retryTxt}>Retry</Text>
             </Pressable>
+          ) : tab === 'trend' ? (
+            <Pressable onPress={() => loadTrend()} style={styles.retryBtn}>
+              <Text style={styles.retryTxt}>Retry</Text>
+            </Pressable>
           ) : tab === 'chart' ? (
             <Pressable onPress={() => loadChart()} style={styles.retryBtn}>
               <Text style={styles.retryTxt}>Retry</Text>
@@ -384,7 +559,11 @@ export function AdvisorHubScreen({navigation}) {
           ) : null}
         </View>
       ) : null}
-      {loading && ((tab === 'sig' && !sigRows.length) || (tab === 'chart' && !chartBlocks.length)) ? (
+      {((!cacheHydrated && (tab === 'sig' || tab === 'trend' || tab === 'chart')) ||
+        (loading &&
+          ((tab === 'sig' && !signalsHasData) ||
+            (tab === 'trend' && !trendHasData) ||
+            (tab === 'chart' && !chartHasData)))) ? (
         <ActivityIndicator color={AYC.accent} />
       ) : null}
     </View>
@@ -403,96 +582,64 @@ export function AdvisorHubScreen({navigation}) {
             />
           }>
           {head}
-          <Text style={mobileStyles.subtitle}>
-            Live advisor setups · {totalVisibleRows} rows across {activeSetupIds.size} active tables
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {SETUP_META.map(setup => {
-              const rows =
-                setup.tier != null && setup.tier !== '__other__'
-                  ? tierGrouped[setup.id] || []
-                  : extraGrouped[setup.id] || [];
-              const hasRows = rows.length > 0;
-              const on = enabledSetups.has(setup.id);
-              return (
-                <Pressable
-                  key={setup.id}
-                  onPress={() => toggleSetup(setup.id)}
-                  style={[styles.chip, on && hasRows ? styles.chipOn : null, !hasRows ? styles.chipDim : null]}>
-                  <Text style={[styles.chipText, on && hasRows ? styles.chipTextOn : null]}>
-                    {setup.label.split(' · ')[0]}
-                    {hasRows ? ` (${rows.length})` : ''}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {SETUP_META.map(setup => {
-            if (!enabledSetups.has(setup.id)) return null;
-            const rows =
-              setup.tier != null && setup.tier !== '__other__'
-                ? tierGrouped[setup.id] || []
-                : extraGrouped[setup.id] || [];
-            const enabled = activeSetupIds.has(setup.id);
-            return (
-              <SetupLevelsTable
-                key={setup.id}
-                title={setup.label}
-                rows={rows}
-                enabled={enabled}
-                tone={setup.tone}
-              />
-            );
-          })}
-
-          {enabledSetups.has('other') ? (
-            <SetupLevelsTable
-              title="Other live signals"
-              rows={tierGrouped.other || []}
-              enabled={activeSetupIds.has('other')}
-            />
-          ) : null}
-
-          {!loading && totalVisibleRows === 0 ? (
-            <Text style={styles.empty}>No advisor signals loaded yet. Pull down to refresh.</Text>
-          ) : null}
+          <AdvisorSignalsSection
+            sigRows={sigRows}
+            monthlyRows={monthlyRows}
+            customRows={customRows}
+            mondayRows={mondayRows}
+            loading={loading}
+            cacheHydrated={cacheHydrated}
+          />
         </ScrollView>
       </MobileChrome>
     );
   }
 
   if (tab === 'trend') {
+    const TREND_TFS = [
+      {id: 'daily', label: 'Daily'},
+      {id: 'weekly', label: 'Weekly'},
+      {id: 'monthly', label: 'Monthly'},
+    ];
     return (
       <MobileChrome navigation={navigation}>
-        <FlatList
-          data={sortedIndRows}
-          keyExtractor={(it, i) => `${it.symbol}-${i}`}
+        <ScrollView
           style={{flex: 1}}
           contentContainerStyle={styles.pad}
-          ListHeaderComponent={
-            <View>
-              {head}
-              <Text style={mobileStyles.subtitle}>Weekly RSI cross (screen) · {indRows.length} matches</Text>
-              <View style={styles.thRow}>
-                <SortableTableHeader label="Symbol" sortKey="symbol" sortConfig={sortConfig} onSort={onSort} style={{flex: 1}} textStyle={styles.th} />
-                <SortableTableHeader label="RSI" sortKey="current_value" sortConfig={sortConfig} onSort={onSort} style={{width: 44}} textStyle={styles.th} />
-                <SortableTableHeader label="Trend" sortKey="trend" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.8}} textStyle={styles.th} />
-                <SortableTableHeader label="Score" sortKey="score" sortConfig={sortConfig} onSort={onSort} style={{width: 48}} textStyle={styles.th} />
-              </View>
-            </View>
-          }
-          renderItem={({item, index}) => (
-            <View style={[styles.tr, index % 2 === 0 ? styles.trAlt : null]}>
-              <Text style={[styles.td, {flex: 1, fontWeight: '800'}]}>{item.symbol}</Text>
-              <Text style={[styles.td, {width: 44}]}>{item.current_value != null ? Number(item.current_value).toFixed(1) : '—'}</Text>
-              <Text style={[styles.td, {flex: 0.8}]} numberOfLines={1}>
-                {item.trend || '—'}
-              </Text>
-              <Text style={[styles.td, {width: 48}]}>{item.signal_score != null ? String(item.signal_score) : '—'}</Text>
-            </View>
-          )}
-        />
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadTrend({silent: true, forceRefresh: true})} />
+          }>
+          {head}
+          <Text style={mobileStyles.subtitle}>
+            Trend reversal · B1–S3 buy / sell tiers · {trendVisibleRows} matches · {trendTf}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {TREND_TFS.map(tf => (
+              <Pressable
+                key={tf.id}
+                onPress={() => setTrendTf(tf.id)}
+                style={[styles.chip, trendTf === tf.id ? styles.chipOn : null]}>
+                <Text style={[styles.chipText, trendTf === tf.id ? styles.chipTextOn : null]}>{tf.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {TIER_SETUPS.map(setup => (
+            <TrendTierTable
+              key={`${setup.id}-${trendTf}`}
+              title={setup.label}
+              rows={trendGrouped[setup.id] || []}
+              enabled={(trendGrouped[setup.id] || []).length > 0}
+              tone={setup.tone}
+              pageSize={TREND_TIER_PAGE_SIZE}
+              timeframe={trendTf}
+            />
+          ))}
+
+          {cacheHydrated && !loading && !trendHasData ? (
+            <Text style={styles.empty}>No trend reversal matches for this timeframe. Pull down to refresh.</Text>
+          ) : null}
+        </ScrollView>
       </MobileChrome>
     );
   }
@@ -511,10 +658,10 @@ export function AdvisorHubScreen({navigation}) {
           }>
           {head}
           <Text style={mobileStyles.subtitle}>RS daily / weekly / monthly setup screener</Text>
-          {chartBlocks.map(block => (
-            <ChartFundamentalTable key={block.id} block={block} />
-          ))}
-          {!loading && !chartBlocks.some(b => b.rows.length) ? (
+          {cacheHydrated
+            ? chartDisplayBlocks.map(block => <ChartFundamentalTable key={block.id} block={block} />)
+            : null}
+          {cacheHydrated && !loading && !chartHasData ? (
             <Text style={styles.empty}>No RS setup rows loaded. Pull down to refresh.</Text>
           ) : null}
         </ScrollView>
@@ -525,32 +672,49 @@ export function AdvisorHubScreen({navigation}) {
   if (tab === 'ai') {
     return (
       <MobileChrome navigation={navigation}>
-        <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad}>
+        <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
           {head}
-          <View style={styles.rowInp}>
-            <TextInput style={styles.inp} placeholder="Symbol" placeholderTextColor={AYC.textMuted} value={aiSym} onChangeText={setAiSym} autoCapitalize="characters" />
-            <Pressable style={[styles.chipSm, aiType === 'earnings' ? styles.chipOn : null]} onPress={() => setAiType('earnings')}>
-              <Text style={[styles.mini, aiType === 'earnings' ? styles.chipTextOn : null]}>Earnings</Text>
-            </Pressable>
-            <Pressable style={[styles.chipSm, aiType === 'weekly' ? styles.chipOn : null]} onPress={() => setAiType('weekly')}>
-              <Text style={[styles.mini, aiType === 'weekly' ? styles.chipTextOn : null]}>Weekly</Text>
-            </Pressable>
-          </View>
+          <Text style={mobileStyles.subtitle}>AI company analysis · pick setup and symbol</Text>
+
+          <Text style={styles.fieldLabel}>Analysis setup</Text>
+          <Pressable style={styles.selectBtn} onPress={() => setShowAiSetupPicker(true)}>
+            <Text style={styles.selectBtnText}>{getAnalysisSetupLabel(aiType)}</Text>
+            <Text style={styles.selectBtnCaret}>▾</Text>
+          </Pressable>
+
+          <Text style={styles.fieldLabel}>Your holdings & watchlist ({enabledSymbols.length})</Text>
+          <HoldingsChipRow
+            symbols={enabledSymbols}
+            selectedSymbol={aiSym}
+            onPick={sym => setAiSym(sym)}
+          />
+
+          <Text style={styles.fieldLabel}>Symbol</Text>
+          <SymbolAutocomplete
+            value={aiSym}
+            onChange={setAiSym}
+            options={enabledSymbols}
+            placeholder="Search your enabled stocks…"
+          />
+
           <View style={styles.rowBtn}>
-            <Pressable style={styles.btn} onPress={loadAi}>
-              <Text style={styles.btnTxt}>Load</Text>
+            <Pressable style={styles.btn} onPress={loadAi} disabled={loading}>
+              <Text style={styles.btnTxt}>Load history</Text>
             </Pressable>
-            <Pressable style={[styles.btn, styles.btnGhost]} onPress={runAi}>
-              <Text style={[styles.btnTxt, {color: AYC.accent}]}>Run analysis</Text>
+            <Pressable style={[styles.btn, styles.btnGhost]} onPress={runAi} disabled={loading}>
+              <Text style={[styles.btnTxt, {color: AYC.accent}]}>{loading ? 'Running…' : 'Run analysis'}</Text>
             </Pressable>
           </View>
+
           {aiLatest ? (
             <View style={styles.aiBox}>
+              <Text style={styles.aiTypeTag}>{getAnalysisSetupLabel(aiLatest.analysis_type || aiType)}</Text>
               <Text style={styles.aiRating}>{String(aiLatest.rating || '—').toUpperCase()}</Text>
               <Text style={styles.aiConf}>Confidence: {aiLatest.confidence ?? '—'}%</Text>
               <Text style={styles.aiSum}>{aiLatest.summary || '—'}</Text>
             </View>
           ) : null}
+
           <Text style={styles.blockTitle}>Analysis history</Text>
           <View style={styles.thRow}>
             <SortableTableHeader label="Type" sortKey="analysis_type" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.8}} textStyle={styles.th} />
@@ -558,10 +722,10 @@ export function AdvisorHubScreen({navigation}) {
             <SortableTableHeader label="Conf" sortKey="confidence" sortConfig={sortConfig} onSort={onSort} style={{width: 44}} textStyle={styles.th} />
             <SortableTableHeader label="Date" sortKey="date" sortConfig={sortConfig} onSort={onSort} style={{flex: 1}} textStyle={styles.th} />
           </View>
-          {sortedAiHist.map((r, i) => (
+          {aiPaged.pagedItems.map((r, i) => (
             <View key={r.id || i} style={[styles.tr, i % 2 === 1 ? styles.trAlt : null]}>
               <Text style={[styles.td, {flex: 0.8}]} numberOfLines={1}>
-                {r.analysis_type}
+                {getAnalysisSetupLabel(r.analysis_type)}
               </Text>
               <Text style={[styles.td, {flex: 0.6}]}>{r.rating || '—'}</Text>
               <Text style={[styles.td, {width: 44}]}>{r.confidence ?? '—'}</Text>
@@ -570,41 +734,90 @@ export function AdvisorHubScreen({navigation}) {
               </Text>
             </View>
           ))}
+          <ListPagePager
+            page={aiPaged.page}
+            totalPages={aiPaged.totalPages}
+            totalItems={aiPaged.totalItems}
+            onPageChange={aiPaged.setPage}
+          />
+        </ScrollView>
+        <OptionPicker
+          visible={showAiSetupPicker}
+          title="Analysis setup"
+          subtitle="Choose the AI analysis type to run"
+          options={AI_ANALYSIS_SETUPS}
+          selectedId={aiType}
+          onSelect={setAiType}
+          onClose={() => setShowAiSetupPicker(false)}
+        />
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'health') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad}>
+          {head}
+          <Text style={mobileStyles.subtitle}>Portfolio health · select your enabled holdings</Text>
+          <View style={styles.healthActions}>
+            <Pressable
+              style={styles.chipSm}
+              onPress={() => setHealthSelected(new Set(enabledSymbols.map(r => r.symbol)))}>
+              <Text style={styles.mini}>Select all</Text>
+            </Pressable>
+            <Pressable style={styles.chipSm} onPress={() => setHealthSelected(new Set())}>
+              <Text style={styles.mini}>Clear</Text>
+            </Pressable>
+            <Text style={styles.healthCount}>{healthSelected.size} selected</Text>
+          </View>
+          <HoldingsChipRow
+            symbols={enabledSymbols}
+            multiSelect
+            selectedSet={healthSelected}
+            onToggle={toggleHealthSymbol}
+          />
+          <Pressable style={styles.btn} onPress={runHealth} disabled={loading || healthSelected.size === 0}>
+            <Text style={styles.btnTxt}>{loading ? 'Checking…' : 'Check portfolio health'}</Text>
+          </Pressable>
+          {healthRows.length ? (
+            <View style={styles.healthTable}>
+              <View style={styles.thRow}>
+                <Text style={[styles.th, {flex: 0.8}]}>Stock</Text>
+                <Text style={[styles.th, {flex: 0.7}]}>Sentiment</Text>
+                <Text style={[styles.th, {flex: 1.2}]}>Analysis</Text>
+              </View>
+              {healthRows.map(row => (
+                <View key={row.stock} style={styles.tr}>
+                  <Text style={[styles.td, {flex: 0.8, fontWeight: '800'}]}>{row.stock}</Text>
+                  <Text style={[styles.td, {flex: 0.7}]}>{row.sentiment}</Text>
+                  <Text style={[styles.td, {flex: 1.2}]} numberOfLines={3}>
+                    {row.expectation || '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : healthResult?.result ? (
+            <View style={styles.healthBox}>
+              <Text style={styles.healthTxt}>
+                {typeof healthResult.result === 'string'
+                  ? healthResult.result
+                  : healthResult.result.summary || JSON.stringify(healthResult.result, null, 2)}
+              </Text>
+            </View>
+          ) : null}
+          <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigation.navigate('Portfolio')}>
+            <Text style={[styles.btnTxt, {color: AYC.accent}]}>Portfolio manager</Text>
+          </Pressable>
+          <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigateToStocksAlerts(navigation)}>
+            <Text style={[styles.btnTxt, {color: AYC.accent}]}>Stock alerts</Text>
+          </Pressable>
         </ScrollView>
       </MobileChrome>
     );
   }
 
-  return (
-    <MobileChrome navigation={navigation}>
-      <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad}>
-        {head}
-        <Text style={mobileStyles.subtitle}>Portfolio health check (single symbol)</Text>
-        <TextInput
-          style={styles.inp}
-          placeholder="Symbol (e.g. RELIANCE)"
-          placeholderTextColor={AYC.textMuted}
-          value={healthSym}
-          onChangeText={setHealthSym}
-          autoCapitalize="characters"
-        />
-        <Pressable style={styles.btn} onPress={runHealth}>
-          <Text style={styles.btnTxt}>Check health</Text>
-        </Pressable>
-        {healthText ? (
-          <View style={styles.healthBox}>
-            <Text style={styles.healthTxt}>{healthText}</Text>
-          </View>
-        ) : null}
-        <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigation.navigate('Portfolio')}>
-          <Text style={[styles.btnTxt, {color: AYC.accent}]}>Portfolio manager</Text>
-        </Pressable>
-        <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigation.navigate('Alerts')}>
-          <Text style={[styles.btnTxt, {color: AYC.accent}]}>Stock alerts</Text>
-        </Pressable>
-      </ScrollView>
-    </MobileChrome>
-  );
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -635,6 +848,7 @@ const styles = StyleSheet.create({
   },
   retryTxt: {color: AYC.negative, fontWeight: '800', fontSize: AYC.type.caption},
   empty: {paddingVertical: 16, color: AYC.textMuted, textAlign: 'center', fontSize: AYC.type.body},
+  tierEmpty: {paddingVertical: 10, paddingHorizontal: 12, color: AYC.textMuted, fontSize: AYC.type.cardLabel},
   chartHint: {fontSize: AYC.type.caption, color: AYC.textMuted, paddingHorizontal: 4, marginBottom: 4},
   setupBlock: {marginTop: 12},
   setupTitleWrap: {
@@ -662,6 +876,15 @@ const styles = StyleSheet.create({
   cfDi: {width: 44, textAlign: 'right'},
   cfRating: {width: 64, textAlign: 'center'},
   cfHorizon: {width: 80},
+  trSym: {width: 72},
+  trTv: {width: 28, alignItems: 'center', justifyContent: 'center'},
+  trCompany: {width: 120},
+  trSector: {width: 88},
+  trNum: {width: 72, textAlign: 'right'},
+  trTier: {width: 40},
+  trContext: {width: 140},
+  trFresh: {borderLeftWidth: 3, borderLeftColor: '#2563eb'},
+  trPass: {backgroundColor: '#ecfdf5'},
   rsPos: {color: AYC.positive},
   symBold: {fontWeight: '800'},
   thRow: {flexDirection: 'row', backgroundColor: AYC.appBar, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 8},
@@ -688,7 +911,26 @@ const styles = StyleSheet.create({
   },
   rowBtn: {flexDirection: 'row', gap: 10},
   aiBox: {backgroundColor: AYC.accentSoft, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: AYC.cardBorder},
+  aiTypeTag: {fontSize: AYC.type.caption, fontWeight: '800', color: AYC.accent, marginBottom: 4},
   aiRating: {fontSize: AYC.type.metricSm, fontWeight: '900', color: AYC.positive},
+  fieldLabel: {fontSize: AYC.type.caption, fontWeight: '800', color: AYC.textMuted, marginTop: 8},
+  selectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: AYC.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: AYC.card,
+  },
+  selectBtnText: {fontSize: AYC.type.body, fontWeight: '800', color: AYC.text},
+  selectBtnCaret: {fontSize: 16, color: AYC.accent, fontWeight: '800'},
+  holdingsEmpty: {fontSize: AYC.type.caption, color: AYC.textMuted, fontStyle: 'italic', paddingVertical: 6},
+  healthActions: {flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap'},
+  healthCount: {fontSize: AYC.type.caption, color: AYC.textMuted, fontWeight: '700'},
+  healthTable: {marginTop: 10, gap: 2},
   aiConf: {fontSize: AYC.type.body, fontWeight: '700', marginTop: 4},
   aiSum: {fontSize: AYC.type.body, color: AYC.text, marginTop: 8, lineHeight: 18},
   blockTitle: {fontSize: AYC.type.metricSm, fontWeight: '800', marginTop: 12, color: AYC.text},

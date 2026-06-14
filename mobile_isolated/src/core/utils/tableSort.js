@@ -1,8 +1,8 @@
-/** Web-style table sort: tap header toggles asc/desc; third tap on new column starts asc. */
+/** Web-style table sort: tap header toggles asc/desc; third tap on new column starts desc. */
 export function toggleSortConfig(prev, key) {
   return {
     key,
-    ascending: prev?.key === key ? !prev?.ascending : true,
+    ascending: prev?.key === key ? !prev?.ascending : false,
   };
 }
 

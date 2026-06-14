@@ -3,14 +3,17 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {useFocusEffect, useRoute} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {SortableTableHeader} from '@components/SortableTableHeader';
+import {TradingViewLink} from '@components/TradingViewLink';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {formatPct, parseStockListResponse, stockRowPct} from '@core/utils/stockListPayload';
@@ -19,7 +22,9 @@ import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
+import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
+import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
+import {safeFetch} from '@core/utils/safeFetch';
 
 const MAIN_TABS = [
   {id: 'ai', label: 'AI picks'},
@@ -51,6 +56,10 @@ const IPO_FILTERS = [
   {id: 'Closed', label: 'Closed'},
 ];
 
+const SCREEN_HEAVY_OPTS = {timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1};
+const SCREEN_OPTS = {timeoutMs: API_TIMEOUT_MS.screen, retries: 1};
+const PAGINATED_MAIN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
+
 function stockSym(r) {
   return r?.symbol || r?.ticker || '—';
 }
@@ -65,6 +74,7 @@ function volJump(r) {
 }
 
 export function ScreensHubScreen({navigation}) {
+  const route = useRoute();
   const [main, setMain] = useState('ai');
   const [gl, setGl] = useState('gainers');
   const [perM, setPerM] = useState('day');
@@ -72,27 +82,76 @@ export function ScreensHubScreen({navigation}) {
   const [alphaHor, setAlphaHor] = useState('short');
   const [ipoFilter, setIpoFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [trendPage, setTrendPage] = useState(1);
+  const [listPage, setListPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [list, setList] = useState([]);
   const [weeklyMeta, setWeeklyMeta] = useState({pickDate: null, subtitle: ''});
-  const {sortConfig, onSort, resetSort} = useTableSort();
+  const [screenDates, setScreenDates] = useState([]);
+  const [screenDate, setScreenDate] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const screenDefaultSortKey = useMemo(() => {
+    if (main === 'alpha') return 'rs';
+    if (main === 'movers') return perM === 'week' ? 'week1w' : perM === 'month' ? 'month1m' : 'day1d';
+    if (main === 'volume') return perV === 'week' ? 'week1w' : perV === 'month' ? 'month1m' : 'day1d';
+    if (main === 'trending') return 'chg';
+    if (main === 'ipo') return 'gain';
+    return null;
+  }, [main, perM, perV]);
+  const {sortConfig, onSort, setSortConfig} = useTableSort(screenDefaultSortKey, false);
 
   const pageSize = 7;
 
+  const resetTabState = useCallback(() => {
+    setErr('');
+    setList([]);
+    setWeeklyMeta({pickDate: null, subtitle: ''});
+  }, []);
+
+  const selectMainTab = useCallback(
+    tabId => {
+      resetTabState();
+      setMain(tabId);
+      setListPage(1);
+    },
+    [resetTabState],
+  );
+
   useEffect(() => {
-    resetSort();
-    setTrendPage(1);
-  }, [main, resetSort]);
+    const next = route?.params?.screensMain;
+    if (next && MAIN_TABS.some(t => t.id === next)) {
+      selectMainTab(next);
+    }
+  }, [route?.params?.screensMain, selectMainTab]);
+
+  useEffect(() => {
+    setSortConfig({key: screenDefaultSortKey, ascending: false});
+    setListPage(1);
+  }, [gl, main, perM, perV, screenDefaultSortKey, setSortConfig]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const dates = await dashboardService.fetchScreenDates(SCREEN_OPTS);
+        setScreenDates(Array.isArray(dates) ? dates : []);
+      } catch (_) {
+        setScreenDates([]);
+      }
+    })();
+  }, []);
 
   const load = useCallback(async ({forceRefresh = false} = {}) => {
-    const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter);
+    const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
     await runScreenPayloadFetch({
       cacheKey,
       fetcher: async () => {
         if (main === 'ai') {
-          const picks = await dashboardService.fetchWeeklyPicks();
+          const picks = await safeFetch(() => dashboardService.fetchWeeklyPicks(SCREEN_HEAVY_OPTS), {
+            ...SCREEN_HEAVY_OPTS,
+            label: 'Weekly picks',
+            fallback: null,
+          });
+          if (!picks) throw new Error('Weekly AI picks timed out. Pull down to retry.');
           const bull = Array.isArray(picks?.bullish) ? picks.bullish : [];
           const bear = Array.isArray(picks?.bearish) ? picks.bearish : [];
           return {
@@ -109,36 +168,77 @@ export function ScreensHubScreen({navigation}) {
           };
         }
         if (main === 'trending') {
-          const res = await dashboardService.fetchTrending(120);
+          const res = await safeFetch(
+            () => dashboardService.fetchTrending(50, {...SCREEN_HEAVY_OPTS, date: screenDate || undefined}),
+            {
+            ...SCREEN_HEAVY_OPTS,
+            label: 'Trending',
+            fallback: null,
+          });
+          if (!res) throw new Error('Trending data timed out. Pull down to retry.');
           return {
-            weeklyMeta: {pickDate: null, subtitle: 'Trending stocks'},
-            list: parseStockListResponse(res),
+            weeklyMeta: {pickDate: screenDate || null, subtitle: screenDate ? `Trending · ${screenDate}` : 'Trending stocks'},
+            list: Array.isArray(res) ? res : parseStockListResponse(res),
           };
         }
         if (main === 'movers') {
-          const res = await dashboardService.fetchPriceShockers({type: gl, period: perM});
+          const res = await safeFetch(
+            () =>
+              dashboardService.fetchPriceShockers({
+                type: gl,
+                period: perM,
+                date: screenDate || undefined,
+                timeoutMs: API_TIMEOUT_MS.screen,
+              }),
+            {timeoutMs: API_TIMEOUT_MS.screen, retries: 1, label: 'Movers', fallback: null},
+          );
+          if (!res) throw new Error('Top movers timed out. Pull down to retry.');
           return {
-            weeklyMeta: {pickDate: null, subtitle: `${gl} · ${perM}`},
-            list: parseStockListResponse(res),
+            weeklyMeta: {pickDate: screenDate || null, subtitle: `${gl} · ${perM}${screenDate ? ` · ${screenDate}` : ''}`},
+            list: Array.isArray(res) ? res : parseStockListResponse(res),
           };
         }
         if (main === 'volume') {
-          const res = await dashboardService.fetchVolumeShockers({limit: 80, period: perV});
+          const res = await safeFetch(
+            () =>
+              dashboardService.fetchVolumeShockers({
+                limit: 50,
+                period: perV,
+                date: screenDate || undefined,
+                timeoutMs: API_TIMEOUT_MS.screen,
+              }),
+            {timeoutMs: API_TIMEOUT_MS.screen, retries: 1, label: 'Volume', fallback: null},
+          );
+          if (!res) throw new Error('Volume screen timed out. Pull down to retry.');
           return {
-            weeklyMeta: {pickDate: null, subtitle: `Volume movers · ${perV}`},
-            list: parseStockListResponse(res),
+            weeklyMeta: {pickDate: screenDate || null, subtitle: `Volume movers · ${perV}${screenDate ? ` · ${screenDate}` : ''}`},
+            list: Array.isArray(res) ? res : parseStockListResponse(res),
           };
         }
         if (main === 'alpha') {
-          const period = alphaHor === 'long' ? '1y' : '1w';
-          const res = await dashboardService.fetchRelativePerformance({period, limit: 60});
+          const period = alphaHor === 'long' ? '6m' : '1w';
+          const res = await safeFetch(
+            () =>
+              dashboardService.fetchRelativePerformance({
+                period,
+                limit: 50,
+                date: screenDate || undefined,
+                timeoutMs: API_TIMEOUT_MS.screenHeavy,
+              }),
+            {...SCREEN_HEAVY_OPTS, label: 'Alpha tracker', fallback: null},
+          );
+          if (!res) throw new Error('Alpha tracker timed out. Pull down to retry.');
           return {
             weeklyMeta: {pickDate: null, subtitle: `RS% vs NIFTY (${period.toUpperCase()})`},
-            list: parseStockListResponse(res),
+            list: Array.isArray(res) ? res : parseStockListResponse(res),
           };
         }
-        const res = await dashboardService.fetchIpos({status: ipoFilter || undefined, limit: 120});
-        const rows = Array.isArray(res?.data) ? res.data : [];
+        const res = await safeFetch(
+          () => dashboardService.fetchIpos({status: ipoFilter || undefined, limit: 200, timeoutMs: API_TIMEOUT_MS.screen}),
+          {...SCREEN_OPTS, label: 'IPOs', fallback: null},
+        );
+        if (!res) throw new Error('IPO list timed out. Pull down to retry.');
+        const rows = Array.isArray(res) ? res : [];
         return {
           weeklyMeta: {pickDate: null, subtitle: `IPOs (${rows.length})`},
           list: rows,
@@ -153,10 +253,31 @@ export function ScreensHubScreen({navigation}) {
       forceNetwork: forceRefresh,
       hasUsable: data => Array.isArray(data?.list) && data.list.length > 0,
     });
-  }, [alphaHor, gl, ipoFilter, main, perM, perV]);
+  }, [alphaHor, gl, ipoFilter, main, perM, perV, screenDate]);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
+        const stale = await shouldRefreshPageCache(cacheKey);
+        if (stale) {
+          await load();
+        }
+      })();
+    }, [alphaHor, gl, ipoFilter, load, main, perM, perV, screenDate]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load({forceRefresh: true});
+    } finally {
+      setRefreshing(false);
+    }
   }, [load]);
 
   const filteredTrend = useMemo(() => {
@@ -174,13 +295,18 @@ export function ScreensHubScreen({navigation}) {
     );
   }, [filteredTrend, list, main, perM, perV, sortConfig]);
 
-  const pagedTrend = useMemo(() => {
-    if (main !== 'trending') return sortedList;
-    const start = (trendPage - 1) * pageSize;
-    return sortedList.slice(start, start + pageSize);
-  }, [main, pageSize, sortedList, trendPage]);
+  useEffect(() => {
+    setListPage(1);
+  }, [gl, perM, perV, alphaHor, screenDate]);
 
-  const trendPages = Math.max(1, Math.ceil(sortedList.length / pageSize));
+  const pagedList = useMemo(() => {
+    if (!PAGINATED_MAIN_TABS.has(main)) return sortedList;
+    const start = (listPage - 1) * pageSize;
+    return sortedList.slice(start, start + pageSize);
+  }, [listPage, main, pageSize, sortedList]);
+
+  const listPages = Math.max(1, Math.ceil(sortedList.length / pageSize));
+  const isPaginated = PAGINATED_MAIN_TABS.has(main);
 
   const moversPctLabel = periodColLabel(perM);
   const volumePctLabel = periodColLabel(perV);
@@ -192,11 +318,28 @@ export function ScreensHubScreen({navigation}) {
       <Text style={mobileStyles.pageTitle}>Screens</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {MAIN_TABS.map(t => (
-          <Pressable key={t.id} onPress={() => { setMain(t.id); setTrendPage(1); }} style={[styles.chip, main === t.id ? styles.chipOn : null]}>
+          <Pressable key={t.id} onPress={() => selectMainTab(t.id)} style={[styles.chip, main === t.id ? styles.chipOn : null]}>
             <Text style={[styles.chipText, main === t.id ? styles.chipTextOn : null]}>{t.label}</Text>
           </Pressable>
         ))}
       </ScrollView>
+      {['trending', 'movers', 'volume', 'alpha'].includes(main) && screenDates.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <Pressable
+            onPress={() => setScreenDate('')}
+            style={[styles.chipSm, !screenDate ? styles.chipOn : null]}>
+            <Text style={[styles.chipText, !screenDate ? styles.chipTextOn : null]}>Live</Text>
+          </Pressable>
+          {screenDates.slice(0, 14).map(d => (
+            <Pressable
+              key={d}
+              onPress={() => setScreenDate(d)}
+              style={[styles.chipSm, screenDate === d ? styles.chipOn : null]}>
+              <Text style={[styles.chipText, screenDate === d ? styles.chipTextOn : null]}>{d}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
       {main === 'movers' ? (
         <View style={{gap: 6}}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -253,7 +396,7 @@ export function ScreensHubScreen({navigation}) {
           placeholder="Search…"
           placeholderTextColor={AYC.textMuted}
           value={search}
-          onChangeText={t => { setSearch(t); setTrendPage(1); }}
+          onChangeText={t => { setSearch(t); setListPage(1); }}
         />
       ) : null}
       {weeklyMeta.subtitle ? <Text style={styles.subHead}>{weeklyMeta.subtitle}</Text> : null}
@@ -316,7 +459,7 @@ export function ScreensHubScreen({navigation}) {
     </View>
   );
 
-  const dataForList = main === 'trending' ? pagedTrend : main === 'ai' ? list : sortedList;
+  const dataForList = isPaginated ? pagedList : main === 'ai' ? list : sortedList;
 
   const renderItem = ({item, index}) => {
     if (item._hdr) {
@@ -335,10 +478,16 @@ export function ScreensHubScreen({navigation}) {
       return (
         <View style={[styles.rowAi, bull ? styles.rowAiBull : styles.rowAiBear]}>
           <Text style={styles.aiNum}>{String(item._n).padStart(2, '0')}</Text>
-          <Text style={styles.aiSym}>{stockSym(item)}</Text>
+          <View style={styles.aiSymWrap}>
+            <TradingViewLink symbol={stockSym(item)} size={14} />
+            <Text style={styles.aiSym}>{stockSym(item)}</Text>
+          </View>
           <Text style={styles.aiGr}>{item.grade || '—'}</Text>
           <Text style={styles.aiSmall}>{px != null ? formatINR(px) : '—'}</Text>
           <Text style={styles.aiSmall}>{item.entry_price != null ? formatINR(item.entry_price) : '—'}</Text>
+          <Text style={[styles.aiSmall, {color: bull ? AYC.positive : AYC.negative, fontWeight: '700'}]}>
+            {item.target_1 != null ? formatINR(item.target_1) : '—'}
+          </Text>
           <View style={[styles.reco, {backgroundColor: badgeBg}]}>
             <Text style={styles.recoTxt}>{bull ? 'BUY' : 'SELL'}</Text>
           </View>
@@ -359,14 +508,20 @@ export function ScreensHubScreen({navigation}) {
             ? '#fef2f2'
             : '#fff'
         : '#fff';
-    const ix = main === 'trending' ? (trendPage - 1) * pageSize + index + 1 : index + 1;
+    const ix = isPaginated ? (listPage - 1) * pageSize + index + 1 : index + 1;
+    const symCell = (flex = 1) => (
+      <View style={[styles.td, {flex, flexDirection: 'row', alignItems: 'center'}]}>
+        <TradingViewLink symbol={stockSym(item)} size={14} />
+        <Text style={{fontWeight: '800', flex: 1}} numberOfLines={1}>
+          {stockSym(item)}
+        </Text>
+      </View>
+    );
     if (main === 'trending') {
       return (
         <View style={[styles.tr, {backgroundColor: rowBg}]}>
           <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
-          <Text style={[styles.td, {flex: 1, fontWeight: '800'}]} numberOfLines={1}>
-            {stockSym(item)}
-          </Text>
+          {symCell(1)}
           <Text style={[styles.td, {flex: 0.9}]} numberOfLines={1}>
             {item.sector || '—'}
           </Text>
@@ -383,9 +538,7 @@ export function ScreensHubScreen({navigation}) {
       return (
         <View style={[styles.tr, {backgroundColor: rowBg}]}>
           <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
-          <Text style={[styles.td, {flex: 1, fontWeight: '800'}]} numberOfLines={1}>
-            {stockSym(item)}
-          </Text>
+          {symCell(1)}
           <Text style={[styles.td, {flex: 0.85}]} numberOfLines={1}>
             {item.sector || '—'}
           </Text>
@@ -402,9 +555,7 @@ export function ScreensHubScreen({navigation}) {
       return (
         <View style={[styles.tr, {backgroundColor: rowBg}]}>
           <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
-          <Text style={[styles.td, {flex: 1, fontWeight: '800'}]} numberOfLines={1}>
-            {stockSym(item)}
-          </Text>
+          {symCell(1)}
           <Text style={[styles.td, {width: 52, color: vjColor, fontWeight: '800'}]}>{vj}</Text>
           <Text style={[styles.td, {flex: 0.6}]}>{item.price != null ? formatINR(item.price) : '—'}</Text>
           <Text style={[styles.td, {flex: 0.5, color: pct >= 0 ? AYC.positive : AYC.negative, fontWeight: '800'}]}>
@@ -419,9 +570,7 @@ export function ScreensHubScreen({navigation}) {
       return (
         <View style={[styles.tr, {backgroundColor: index % 2 === 0 ? '#f0fdf4' : '#fff'}]}>
           <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
-          <Text style={[styles.td, {flex: 1, fontWeight: '800'}]} numberOfLines={1}>
-            {stockSym(item)}
-          </Text>
+          {symCell(1)}
           <Text style={[styles.td, {flex: 0.75}]} numberOfLines={1}>
             {item.sector || '—'}
           </Text>
@@ -441,9 +590,12 @@ export function ScreensHubScreen({navigation}) {
       return (
         <View style={[styles.tr, {borderBottomWidth: 1}]}>
           <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
-          <Text style={[styles.td, {flex: 0.9, fontWeight: '800'}]} numberOfLines={1}>
-            {item.symbol}
-          </Text>
+          <View style={[styles.td, {flex: 0.9, flexDirection: 'row', alignItems: 'center'}]}>
+            {item.symbol ? <TradingViewLink symbol={item.symbol} size={14} /> : null}
+            <Text style={{fontWeight: '800', flex: 1}} numberOfLines={1}>
+              {item.symbol || '—'}
+            </Text>
+          </View>
           <Text style={[styles.td, {flex: 0.75, color: AYC.accent}]} numberOfLines={1}>
             {item.status || '—'}
           </Text>
@@ -476,17 +628,19 @@ export function ScreensHubScreen({navigation}) {
         keyExtractor={keyExtractor}
         style={{flex: 1}}
         contentContainerStyle={styles.pad}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <View>
             {renderHeader()}
             {main === 'ai' && !loading ? (
               <View style={styles.tableHeadAi}>
-                <Text style={[styles.th, {width: 30}]}>#</Text>
+                <Text style={[styles.th, {width: 28}]}>#</Text>
                 <Text style={[styles.th, {flex: 1}]}>Symbol</Text>
-                <Text style={[styles.th, {width: 36}]}>Grd</Text>
-                <Text style={[styles.th, {flex: 0.75}]}>CMP</Text>
-                <Text style={[styles.th, {flex: 0.75}]}>Entry</Text>
-                <Text style={[styles.th, {width: 44}]}>Reco</Text>
+                <Text style={[styles.th, {width: 32}]}>Grd</Text>
+                <Text style={[styles.th, {flex: 0.7}]}>CMP</Text>
+                <Text style={[styles.th, {flex: 0.7}]}>Entry</Text>
+                <Text style={[styles.th, {flex: 0.7}]}>T1</Text>
+                <Text style={[styles.th, {width: 40}]}>Reco</Text>
               </View>
             ) : null}
           </View>
@@ -495,15 +649,15 @@ export function ScreensHubScreen({navigation}) {
         ListEmptyComponent={!loading ? <Text style={styles.muted}>No rows.</Text> : null}
         ListFooterComponent={
           <View>
-            {main === 'trending' && !loading ? (
+            {isPaginated && !loading ? (
               <View style={styles.pager}>
-                {Array.from({length: Math.min(trendPages, 5)}, (_, j) => j + 1).map(p => (
+                {Array.from({length: Math.min(listPages, 5)}, (_, j) => j + 1).map(p => (
                   <Pressable
                     key={p}
-                    onPress={() => setTrendPage(p)}
-                    style={[styles.pgDot, trendPage === p ? styles.pgDotOn : null]}
+                    onPress={() => setListPage(p)}
+                    style={[styles.pgDot, listPage === p ? styles.pgDotOn : null]}
                   >
-                    <Text style={[styles.pgDotTxt, trendPage === p ? styles.pgDotTxtOn : null]}>{p}</Text>
+                    <Text style={[styles.pgDotTxt, listPage === p ? styles.pgDotTxtOn : null]}>{p}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -569,11 +723,12 @@ const styles = StyleSheet.create({
   },
   rowAiBull: {backgroundColor: '#f0fdf4'},
   rowAiBear: {backgroundColor: '#fff1f2'},
-  aiNum: {width: 30, fontSize: AYC.type.caption, fontWeight: '800', color: AYC.text},
+  aiNum: {width: 28, fontSize: AYC.type.caption, fontWeight: '800', color: AYC.text},
+  aiSymWrap: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4},
   aiSym: {flex: 1, fontSize: AYC.type.body, fontWeight: '900', color: AYC.text},
-  aiGr: {width: 36, fontSize: AYC.type.caption, fontWeight: '800', color: AYC.positive},
-  aiSmall: {flex: 0.75, fontSize: AYC.type.caption, color: AYC.text},
-  reco: {width: 44, paddingVertical: 4, borderRadius: 6, alignItems: 'center'},
+  aiGr: {width: 32, fontSize: AYC.type.caption, fontWeight: '800', color: AYC.positive},
+  aiSmall: {flex: 0.7, fontSize: AYC.type.caption, color: AYC.text},
+  reco: {width: 40, paddingVertical: 4, borderRadius: 6, alignItems: 'center'},
   recoTxt: {color: '#fff', fontSize: AYC.type.cardLabel, fontWeight: '900'},
   tr: {flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6},
   td: mobileStyles.td,

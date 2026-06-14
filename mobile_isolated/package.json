@@ -1,6 +1,6 @@
 {
   "name": "ani-stock-mobile",
-  "version": "0.1.0",
+  "version": "1.2.39",
   "private": true,
   "scripts": {
     "start": "react-native start --port 8081",
@@ -20,7 +20,8 @@
     "test": "jest",
     "doctor": "react-native doctor",
     "check:parity": "node scripts/verify-mobile-parity.js",
-    "check:pages": "node scripts/verify-pages.js"
+    "check:pages": "node scripts/verify-pages.js",
+    "check:signals-notify": "node scripts/verify-signal-notifications.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
