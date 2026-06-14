@@ -36,7 +36,7 @@ export const emptyCredentials = () => ({
 
 export const BROKER_FIELD_HINTS = {
   dhan: 'OAuth uses numeric Client ID plus App ID and App Secret from Dhan → Access DhanHQ APIs.',
-  samco: 'Samco uses server SAMCO_* env on backend. Optional fields below are for your records.',
+  samco: 'Enter your Samco Client ID, Trade API password, and YOB. Credentials are saved to your account and used for IP enablement and live trading.',
   angelone: 'Use Published API key from SmartAPI console. Enter PIN and 6-digit TOTP to validate.',
   upstox: 'OAuth2 redirect flow: register app, set redirect URI, exchange auth code for tokens.',
   kotak: 'Enter Kotak Neo API credentials (consumer key, PIN, TOTP, or tokens).',
@@ -54,7 +54,9 @@ export const BROKER_CREDENTIAL_FIELDS = {
     {key: 'access_token', label: 'Access Token (JWT optional)'},
   ],
   samco: [
-    {key: 'pin', label: 'PIN/Password (optional)', secret: true},
+    {key: 'pin', label: 'Trade API Password', secret: true},
+    {key: 'api_secret', label: 'Year of Birth (YOB)', secret: true},
+    {key: 'api_key', label: 'Secret API Key (optional)'},
     {key: 'access_token', label: 'Access Token (optional)'},
   ],
   angelone: [
@@ -136,7 +138,9 @@ export function hasBrokerCredentials(row) {
     }
     return Boolean(clientId && ((pin && totp) || accessToken || (apiKey && apiSecret)));
   }
-  if (broker === 'samco') return true;
+  if (broker === 'samco') {
+    return Boolean(clientId && pin && apiSecret);
+  }
   if (broker === 'angelone' || broker === 'kotak') return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
   if (broker === 'upstox') return Boolean(clientId && (accessToken || (authCode && clientSecret && redirectUri)));
   if (broker === 'fyers' || broker === 'zerodha') {

@@ -19,6 +19,14 @@ import {ordersService} from '@core/api/services/ordersService';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {setBrokerCallbackHandler} from '@features/brokers/useBrokerDeepLinking';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
+import {
+  enableBrokerIpsForMobile,
+  fetchMobileClientIpStatus,
+  registerMobileClientIp,
+  summarizeBrokerEnablements,
+} from '@core/utils/mobileClientIp';
 import {
   mergeBrokerRowsWithAccount,
   pendingDhanConnectKey,
@@ -63,6 +71,7 @@ function buildValidatePayload(row, userId, draftCred = {}) {
     redirect_uri: String(cred.redirect_uri || draftCred.redirect_uri || '').trim(),
     auth_code: String(cred.auth_code || draftCred.auth_code || '').trim(),
     access_token: String(cred.access_token || '').trim(),
+    yob: broker === 'samco' ? String(cred.api_secret || draftCred.api_secret || '').trim() : '',
   };
 }
 
@@ -82,6 +91,8 @@ export const BrokersScreen = ({route, navigation}) => {
   const [positions, setPositions] = useState([]);
   const [orders, setOrders] = useState([]);
   const [accountHint, setAccountHint] = useState('');
+  const [mobileIp, setMobileIp] = useState('');
+  const [ipEnableStatus, setIpEnableStatus] = useState('');
 
   const brokerRows = rows;
   const activeRow = useMemo(
@@ -123,47 +134,94 @@ export const BrokersScreen = ({route, navigation}) => {
     [userId],
   );
 
-  const load = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
+  const buildAccountHint = useCallback(async merged => {
+    const dhan = merged.find(r => r.broker === 'dhan');
+    if (!dhan?.client_id) return '';
+    const draft = await readBrokerDraft(userId, 'dhan');
+    const restoredDraft = Boolean(
+      draft?.credentials?.api_key || draft?.credentials?.pin || dhan?.credentials?.api_key,
+    );
+    if (dhan.has_session) {
+      return 'Your Dhan Client ID is loaded from your account. Session is active.';
     }
-    setLoading(true);
-    setError('');
-    setAccountHint('');
-    try {
-      const setup = await brokersService.fetchBrokerSetup({userId});
-      const apiRows = extractApiRows(setup, ['data']);
-      const merged = await mergeBrokerRowsWithAccount(userId, apiRows.length ? apiRows : setup);
-      setRows(merged);
+    if (dhan.token_stored || dhan.last_auth_at) {
+      return restoredDraft
+        ? 'Account details restored. Tap Validate to renew your saved Dhan session.'
+        : 'Client ID loaded from your account. Tap Validate to renew session, or enter PIN/TOTP if needed.';
+    }
+    if (restoredDraft || dhan?.credentials?.api_key) {
+      return 'Saved broker details restored from your account or this device.';
+    }
+    return 'Client ID loaded from your account. Enter PIN/TOTP or App ID/Secret to connect.';
+  }, [userId]);
 
-      const dhan = merged.find(r => r.broker === 'dhan');
-      if (dhan?.client_id) {
-        const draft = await readBrokerDraft(userId, 'dhan');
-        const restoredDraft = Boolean(
-          draft?.credentials?.api_key || draft?.credentials?.pin || dhan?.credentials?.api_key,
-        );
-        if (dhan.has_session) {
-          setAccountHint('Your Dhan Client ID is loaded from your account. Session is active.');
-        } else if (dhan.token_stored || dhan.last_auth_at) {
-          setAccountHint(
-            restoredDraft
-              ? 'Account details restored. Tap Validate to renew your saved Dhan session.'
-              : 'Client ID loaded from your account. Tap Validate to renew session, or enter PIN/TOTP if needed.',
-          );
-        } else if (restoredDraft || dhan?.credentials?.api_key) {
-          setAccountHint('Saved broker details restored from your account or this device.');
-        } else {
-          setAccountHint('Client ID loaded from your account. Enter PIN/TOTP or App ID/Secret to connect.');
+  const fetchBrokerSetupPayload = useCallback(async () => {
+    const setup = await brokersService.fetchBrokerSetup({userId});
+    const apiRows = extractApiRows(setup, ['data']);
+    const merged = await mergeBrokerRowsWithAccount(userId, apiRows.length ? apiRows : setup);
+    const hint = await buildAccountHint(merged);
+    return {rows: merged, accountHint: hint};
+  }, [buildAccountHint, userId]);
+
+  const applyBrokerPayload = useCallback(payload => {
+    setRows(payload.rows || []);
+    setAccountHint(payload.accountHint || '');
+  }, []);
+
+  const syncMobileIp = useCallback(async () => {
+    try {
+      const res = await registerMobileClientIp({appVersion: '1.0.0'});
+      setMobileIp(res.ip || '');
+      if (res.enablements?.length) {
+        setIpEnableStatus(summarizeBrokerEnablements(res.enablements));
+        return;
+      }
+      const en = res.enablement;
+      if (en?.status === 'ok') {
+        setIpEnableStatus(summarizeBrokerEnablements([en]));
+      } else if (en?.status === 'error') {
+        setIpEnableStatus(String(en.detail || 'IP enablement pending'));
+      } else if (res.ip) {
+        const status = await fetchMobileClientIpStatus().catch(() => null);
+        if (status?.broker_enablement && Object.keys(status.broker_enablement).length) {
+          const rows = Object.entries(status.broker_enablement).map(([broker, row]) => ({
+            broker,
+            status: row?.status,
+            detail: row?.detail || row?.last_error,
+          }));
+          setIpEnableStatus(summarizeBrokerEnablements(rows));
+        } else if (status?.pending_enablement) {
+          setIpEnableStatus('IP registered — server will enable for connected brokers');
+        } else if (status?.ip) {
+          setIpEnableStatus(`Registered IP: ${status.ip}`);
         }
       }
-    } catch (err) {
-      setError(String(err?.message || err || 'Failed to load broker setup'));
-      setRows([]);
-    } finally {
-      setLoading(false);
+    } catch (_) {
+      /* non-blocking */
     }
-  }, [userId]);
+  }, []);
+
+  const load = useCallback(
+    async ({forceRefresh = false} = {}) => {
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+      setError('');
+      await runScreenPayloadFetch({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.brokersSetup(userId),
+        fetcher: fetchBrokerSetupPayload,
+        applyPayload: applyBrokerPayload,
+        setLoading,
+        setError: msg => {
+          if (msg) setError(String(msg));
+        },
+        forceNetwork: forceRefresh,
+        hasUsable: data => Array.isArray(data?.rows) && data.rows.length > 0,
+      });
+    },
+    [applyBrokerPayload, fetchBrokerSetupPayload, userId],
+  );
 
   const loadLiveData = useCallback(async () => {
     if (!activeRow?.has_session) {
@@ -199,7 +257,14 @@ export const BrokersScreen = ({route, navigation}) => {
 
   useEffect(() => {
     load();
-  }, [load]);
+    syncMobileIp();
+  }, [load, syncMobileIp]);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncMobileIp();
+    }, [syncMobileIp]),
+  );
 
   useEffect(() => {
     const preferred = String(route?.params?.selectedBroker || '').toLowerCase();
@@ -299,6 +364,9 @@ export const BrokersScreen = ({route, navigation}) => {
       const draft = await readBrokerDraft(userId, activeRow.broker);
       const draftCred = draft?.credentials || {};
       const payload = buildValidatePayload(activeRow, userId, draftCred);
+      if (mobileIp) {
+        payload.mobile_client_ip = mobileIp;
+      }
       if (!activeRow.is_enabled) {
         await saveRow(activeRow);
         setMessage(`${BROKER_LABELS[activeRow.broker]} saved for later. Enable integration when ready.`);
@@ -335,15 +403,51 @@ export const BrokersScreen = ({route, navigation}) => {
           updateCredential('dhan', 'access_token', String(connectRes.session_token));
           payload.access_token = String(connectRes.session_token);
         }
-      } else {
-        await connectBroker(activeRow.broker, payload);
+        setMessage(`${BROKER_LABELS.dhan} validation successful.`);
+        await persistBrokerDraftForRow(userId, activeRow);
+        const ipRes = await registerMobileClientIp({appVersion: '1.0.0'});
+        const ip = ipRes?.ip || mobileIp;
+        if (ip) {
+          setMobileIp(ip);
+          try {
+            const en = await enableBrokerIpsForMobile(ip, 'dhan');
+            if (en?.summary) setIpEnableStatus(en.summary);
+          } catch (ipErr) {
+            setIpEnableStatus(String(ipErr?.message || 'IP enablement pending'));
+          }
+        }
+        await load({forceRefresh: true});
+        await loadLiveData();
+        if (returnTo) {
+          finishReturnNavigation();
+        }
+        return;
       }
+
+      await connectBroker(activeRow.broker, payload);
 
       const res = await brokersService.validateBrokerSetup(payload);
       if (res?.validated) {
         setMessage(`${BROKER_LABELS[activeRow.broker]} validation successful.`);
         await persistBrokerDraftForRow(userId, activeRow);
-        await load();
+        const ipRes = await registerMobileClientIp({appVersion: '1.0.0'});
+        const ip = ipRes?.ip || mobileIp;
+        if (ip) {
+          setMobileIp(ip);
+          try {
+            const en = await enableBrokerIpsForMobile(ip, activeRow.broker);
+            if (en?.summary) {
+              setIpEnableStatus(en.summary);
+            } else if (res?.ip_enablements?.length) {
+              setIpEnableStatus(summarizeBrokerEnablements(res.ip_enablements));
+            }
+          } catch (ipErr) {
+            setIpEnableStatus(String(ipErr?.message || 'IP enablement pending'));
+          }
+        } else if (res?.ip_enablements?.length) {
+          setIpEnableStatus(summarizeBrokerEnablements(res.ip_enablements));
+        }
+        await load({forceRefresh: true});
         await loadLiveData();
         if (returnTo) {
           finishReturnNavigation();
@@ -394,6 +498,15 @@ export const BrokersScreen = ({route, navigation}) => {
       {accountHint ? (
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>{accountHint}</Text>
+        </View>
+      ) : null}
+
+      {mobileIp ? (
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Device IP: {mobileIp}
+            {ipEnableStatus ? ` · ${ipEnableStatus}` : ''}
+          </Text>
         </View>
       ) : null}
 

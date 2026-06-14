@@ -20,7 +20,8 @@ import {sortRows} from '@core/utils/tableSort';
 import {getWatchlistSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 
-const REFRESH_MS = 60_000;
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenTableFetchWithLivePoll, SCREEN_LIVE_POLL_MS} from '@core/utils/screenPageLoader';
 
 const PRODUCT_OPTIONS = [
   {value: 'INTRADAY', label: 'MIS (Intraday)'},
@@ -73,14 +74,12 @@ export function WatchlistScreen({navigation, route}) {
   const [orderType, setOrderType] = useState('MARKET');
   const {sortConfig, onSort} = useTableSort();
 
-  const load = useCallback(async () => {
-    try {
-      const res = await dashboardService.fetchWatchlistByListType(listType);
-      setRows(parseWatchlist(res));
-    } finally {
-      setLoading(false);
-    }
-  }, [listType]);
+  const cacheKey = MOBILE_PAGE_CACHE_KEYS.watchlist(listType);
+
+  const fetchRows = useCallback(
+    async () => parseWatchlist(await dashboardService.fetchWatchlistByListType(listType)),
+    [listType],
+  );
 
   const loadSymbols = useCallback(async () => {
     try {
@@ -92,15 +91,23 @@ export function WatchlistScreen({navigation, route}) {
   }, []);
 
   useEffect(() => {
+    let pollId;
     setLoading(true);
-    load();
     loadSymbols();
-  }, [load, loadSymbols]);
-
-  useEffect(() => {
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load]);
+    (async () => {
+      pollId = await runScreenTableFetchWithLivePoll({
+        cacheKey,
+        fetcher: fetchRows,
+        setRows,
+        setLoading,
+        setError: () => {},
+        liveIntervalMs: SCREEN_LIVE_POLL_MS,
+      });
+    })();
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [cacheKey, fetchRows, loadSymbols]);
 
   const sortedRows = useMemo(
     () => sortRows(rows, sortConfig, (row, key) => getWatchlistSortValue(row, key, listType)),
@@ -141,7 +148,7 @@ export function WatchlistScreen({navigation, route}) {
       <View style={{flex: 1}}>
         <View style={styles.headRow}>
           <Text style={styles.screenTitle}>{title}</Text>
-          <Text style={styles.refreshHint}>Auto-refresh 60s</Text>
+          <Text style={styles.refreshHint}>Live refresh during market hours</Text>
         </View>
 
         <View style={styles.panel}>

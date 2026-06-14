@@ -13,6 +13,8 @@ import {getMarketIndexSortValue, getSectorSortValue, getSubsectorSortValue} from
 import {useTableSort} from '@hooks/useTableSort';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {navigateToMainTab} from '@nav/navigationHelpers';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 
 const TABS = [
   {id: 'market', label: 'Market Insights'},
@@ -31,29 +33,40 @@ export function MarketsHomeScreen({navigation}) {
   const [error, setError] = useState('');
   const {sortConfig, onSort, resetSort} = useTableSort();
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      if (tab === 'market') {
-        const [market, fd] = await Promise.all([
-          dashboardService.fetchMarketIndices(),
-          dashboardService.fetchFiiDii({days: MIN_FII_DII_DAYS}).catch(() => null),
-        ]);
-        setRows(Array.isArray(market) ? market : []);
-        setFii(fd);
-      } else if (tab === 'sector') {
-        const data = await dashboardService.fetchSectorOutlook();
-        setSectorRows(Array.isArray(data) ? data : []);
-      } else {
+  const load = useCallback(async ({forceRefresh = false} = {}) => {
+    const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher: async () => {
+        if (tab === 'market') {
+          const [market, fd] = await Promise.all([
+            dashboardService.fetchMarketIndices(),
+            dashboardService.fetchFiiDii({days: MIN_FII_DII_DAYS}).catch(() => null),
+          ]);
+          return {rows: Array.isArray(market) ? market : [], fii: fd, sectorRows: [], subRows: []};
+        }
+        if (tab === 'sector') {
+          const data = await dashboardService.fetchSectorOutlook();
+          return {rows: [], fii: null, sectorRows: Array.isArray(data) ? data : [], subRows: []};
+        }
         const data = await dashboardService.fetchSubsectorOutlook();
-        setSubRows(Array.isArray(data) ? data : []);
-      }
-    } catch (e) {
-      setError(String(e?.message || e));
-    } finally {
-      setBusy(false);
-      setRefreshing(false);
-    }
+        return {rows: [], fii: null, sectorRows: [], subRows: Array.isArray(data) ? data : []};
+      },
+      applyPayload: payload => {
+        setRows(payload.rows || []);
+        setFii(payload.fii ?? null);
+        setSectorRows(payload.sectorRows || []);
+        setSubRows(payload.subRows || []);
+      },
+      setLoading: v => setBusy(v),
+      setError: msg => setError(msg || ''),
+      forceNetwork: forceRefresh,
+      hasUsable: data => {
+        if (tab === 'market') return (data?.rows?.length > 0) || data?.fii != null;
+        if (tab === 'sector') return data?.sectorRows?.length > 0;
+        return data?.subRows?.length > 0;
+      },
+    });
   }, [tab]);
 
   useFocusEffect(
@@ -70,7 +83,7 @@ export function MarketsHomeScreen({navigation}) {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setBusy(true);
-    load();
+    load({forceRefresh: true}).finally(() => setRefreshing(false));
   }, [load]);
 
   const list = tab === 'market' ? rows : tab === 'sector' ? sectorRows : subRows;

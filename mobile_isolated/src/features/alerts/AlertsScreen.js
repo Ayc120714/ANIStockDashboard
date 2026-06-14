@@ -4,6 +4,7 @@ import {ScreenScaffold} from '@components/ScreenScaffold';
 import {TradeProductPicker} from '@components/TradeProductPicker';
 import {useAuth} from '@core/auth/AuthContext';
 import {alertsService} from '@core/api/services/alertsService';
+import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
@@ -88,10 +89,19 @@ export const AlertsScreen = ({navigation}) => {
     if (!autoSync) {
       return undefined;
     }
-    const id = setInterval(() => {
-      load({silent: true});
-    }, POLL_MS);
-    return () => clearInterval(id);
+    let id;
+    (async () => {
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(POLL_MS, 0);
+      if (pollMs > 0) {
+        id = setInterval(() => {
+          load({silent: true});
+        }, pollMs);
+      }
+    })();
+    return () => {
+      if (id) clearInterval(id);
+    };
   }, [autoSync, load]);
 
   const items = useMemo(() => (Array.isArray(alerts) ? alerts : []), [alerts]);

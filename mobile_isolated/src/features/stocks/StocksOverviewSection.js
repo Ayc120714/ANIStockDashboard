@@ -19,6 +19,8 @@ import {sortRows} from '@core/utils/tableSort';
 import {getSectorSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {isStockOutlookTab} from '@nav/navigationHelpers';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 
 const OUTLOOK_TABS = [
   {id: 'market', label: 'Market insights'},
@@ -61,29 +63,40 @@ export function StocksOverviewSection({navigation, initialTab}) {
 
   const pageSize = 10;
 
-  const load = useCallback(async () => {
-    setErr('');
-    setBusy(true);
-    try {
-      if (tab === 'market') {
-        const [ix, fd] = await Promise.all([
-          dashboardService.fetchMarketIndices(),
-          dashboardService.fetchFiiDii({days: MIN_FII_DII_DAYS}).catch(() => null),
-        ]);
-        setIndices(toList(ix));
-        setFii(fd);
-      } else if (tab === 'sector') {
-        const data = await dashboardService.fetchSectorOutlook();
-        setSectorRows(toList(data));
-      } else {
+  const load = useCallback(async ({forceRefresh = false} = {}) => {
+    const cacheKey = MOBILE_PAGE_CACHE_KEYS.stocksOutlook(tab);
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher: async () => {
+        if (tab === 'market') {
+          const [ix, fd] = await Promise.all([
+            dashboardService.fetchMarketIndices(),
+            dashboardService.fetchFiiDii({days: MIN_FII_DII_DAYS}).catch(() => null),
+          ]);
+          return {indices: toList(ix), fii: fd, sectorRows: [], grouped: null};
+        }
+        if (tab === 'sector') {
+          const data = await dashboardService.fetchSectorOutlook();
+          return {indices: [], fii: null, sectorRows: toList(data), grouped: null};
+        }
         const g = await dashboardService.fetchSubsectorOutlookGrouped();
-        setGrouped(g && typeof g === 'object' ? g : null);
-      }
-    } catch (e) {
-      setErr(String(e?.message || e));
-    } finally {
-      setBusy(false);
-    }
+        return {indices: [], fii: null, sectorRows: [], grouped: g && typeof g === 'object' ? g : null};
+      },
+      applyPayload: payload => {
+        setIndices(payload.indices || []);
+        setFii(payload.fii ?? null);
+        setSectorRows(payload.sectorRows || []);
+        setGrouped(payload.grouped ?? null);
+      },
+      setLoading: v => setBusy(v),
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+      hasUsable: data => {
+        if (tab === 'market') return data?.indices?.length > 0 || data?.fii != null;
+        if (tab === 'sector') return data?.sectorRows?.length > 0;
+        return data?.grouped != null;
+      },
+    });
   }, [tab]);
 
   useEffect(() => {

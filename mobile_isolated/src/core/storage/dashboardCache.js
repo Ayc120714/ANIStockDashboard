@@ -1,30 +1,19 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {readPageCache, writePageCache} from '@core/storage/pageCache';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 
-const CACHE_KEY = '@ani/mobile/dashboard-cache-v1';
-const MAX_AGE_MS = 15 * 60 * 1000;
+const CACHE_KEY = MOBILE_PAGE_CACHE_KEYS.dashboard;
 
 export async function readDashboardCache() {
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.cached_at || Date.now() - parsed.cached_at > MAX_AGE_MS) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  const cached = await readPageCache(CACHE_KEY);
+  if (!cached?.data) return null;
+  return {
+    data: cached.data,
+    brokerConnected: Boolean(cached.data.brokerConnected),
+    cached_at: cached.updatedAt,
+    updatedAt: cached.updatedAt,
+  };
 }
 
 export async function writeDashboardCache(payload) {
-  try {
-    await AsyncStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({
-        ...payload,
-        cached_at: Date.now(),
-      }),
-    );
-  } catch {
-    /* ignore cache write failures */
-  }
+  await writePageCache(CACHE_KEY, payload);
 }

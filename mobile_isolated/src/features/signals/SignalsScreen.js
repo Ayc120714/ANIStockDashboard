@@ -15,7 +15,8 @@ import {TradeProductPicker} from '@components/TradeProductPicker';
 import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {signalsService} from '@core/api/services/signalsService';
-import {readAdvisorSignalsCache, writeAdvisorSignalsCache} from '@core/storage/advisorSignalsCache';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenTableFetch} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
@@ -105,30 +106,27 @@ export function SignalsScreen({navigation}) {
   const [rows, setRows] = useState([]);
   const [tradePickerSignal, setTradePickerSignal] = useState(null);
 
-  const load = useCallback(async ({silent = false} = {}) => {
+  const load = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     setError('');
-    if (!silent) setLoading(true);
-
-    const cached = await readAdvisorSignalsCache();
-    if (cached.length) {
-      setRows(cached);
-      if (!silent) setLoading(false);
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else if (!silent) {
+      setLoading(true);
     }
 
-    try {
-      const res = await signalsService.fetchLatestSignals({limit: 150, timeoutMs: 30_000});
-      const next = extractApiRows(res);
-      setRows(next);
-      await writeAdvisorSignalsCache(next);
-    } catch (e) {
-      if (!cached.length) {
-        setError(String(e?.message || e));
-        setRows([]);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    await runScreenTableFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
+      fetcher: async () => {
+        const res = await signalsService.fetchLatestSignals({limit: 150, timeoutMs: 30_000});
+        return extractApiRows(res);
+      },
+      setRows,
+      setLoading: silent && !forceRefresh ? () => {} : setLoading,
+      setError: msg => setError(msg || ''),
+      forceNetwork: forceRefresh,
+    });
+
+    setRefreshing(false);
   }, []);
 
   useFocusEffect(
@@ -150,8 +148,7 @@ export function SignalsScreen({navigation}) {
   }, [rows, filter]);
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    load({silent: true});
+    load({silent: true, forceRefresh: true});
   }, [load]);
 
   const header = (

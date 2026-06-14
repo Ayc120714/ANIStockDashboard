@@ -1,0 +1,55 @@
+name: Android AAB (Play Store)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "mobile_isolated/**"
+      - ".github/workflows/android-aab.yml"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build-android-aab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile_isolated
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24.15.0"
+          cache: "npm"
+          cache-dependency-path: mobile_isolated/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build release AAB
+        run: npm run android:aab:release
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ani-stock-mobile-release-aab
+          path: mobile_isolated/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30

@@ -17,6 +17,9 @@ import {
   productTypeLabel,
   shouldCheckFunds,
 } from '@core/utils/tradePreflight';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch, runScreenTableFetchWithLivePoll, SCREEN_LIVE_POLL_MS} from '@core/utils/screenPageLoader';
+import {enableBrokerIpsForMobile, registerMobileClientIp, summarizeBrokerEnablements} from '@core/utils/mobileClientIp';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
 const PRODUCT_TYPES = ['INTRADAY', 'MTF', 'DELIVERY'];
@@ -116,30 +119,6 @@ const parseNum = value => {
   return Number.isFinite(n) ? n : null;
 };
 
-const withTimeout = (promise, ms = 5000) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
-  ]);
-
-const resolvePublicIp = async () => {
-  try {
-    const r = await withTimeout(fetch('https://api.ipify.org?format=json'), 4500);
-    const j = await r.json();
-    if (j?.ip) return String(j.ip);
-  } catch (_) {
-    // fallback below
-  }
-  try {
-    const r = await withTimeout(fetch('https://ifconfig.me/all.json'), 4500);
-    const j = await r.json();
-    if (j?.ip_addr) return String(j.ip_addr);
-  } catch (_) {
-    return '';
-  }
-  return '';
-};
-
 const ToggleGroup = ({values, selected, onSelect}) => (
   <View style={styles.toggleRow}>
     {values.map(v => (
@@ -177,6 +156,7 @@ export const OrdersScreen = ({route, navigation}) => {
   const [target1, setTarget1] = useState('');
   const [target2, setTarget2] = useState('');
   const [mobileIp, setMobileIp] = useState('');
+  const [ipEnableStatus, setIpEnableStatus] = useState('');
   const [brokerRows, setBrokerRows] = useState([]);
   const [algoGate, setAlgoGate] = useState(null);
   const [symbolOptions, setSymbolOptions] = useState([]);
@@ -188,31 +168,46 @@ export const OrdersScreen = ({route, navigation}) => {
   const requirePreflight = Boolean(routeParams.requirePreflight || fromAlert);
   const mergedSymbolOptions = useMemo(() => mergeSymbolOptions(symbolOptions), [symbolOptions]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const fetchOrdersPayload = useCallback(async () => {
+    const [resp, setup] = await Promise.all([ordersService.fetchOrders(), brokersService.fetchBrokerSetup()]);
+    const orderRows = extractApiRows(resp);
+    const rows = extractApiRows(setup);
+    const connected = rows.find(row => row?.broker && brokerRowHasLiveTradingSession(row));
+    let nextBroker = broker;
+    if (connected?.broker) nextBroker = String(connected.broker).toLowerCase();
+    else if (routeParams.broker) nextBroker = String(routeParams.broker).toLowerCase();
+    let gate = {algo_ready: false, reason: 'Could not verify algo-ready gate from server.'};
     try {
-      const [resp, setup] = await Promise.all([ordersService.fetchOrders(), brokersService.fetchBrokerSetup()]);
-      setOrders(extractApiRows(resp));
-      const rows = extractApiRows(setup);
-      setBrokerRows(rows);
-      const connected = rows.find(row => row?.broker && brokerRowHasLiveTradingSession(row));
-      if (connected?.broker) {
-        setBroker(String(connected.broker).toLowerCase());
-      } else if (routeParams.broker) {
-        setBroker(String(routeParams.broker).toLowerCase());
-      }
-      try {
-        const gate = await dashboardService.fetchAlgoReadyGate();
-        setAlgoGate(gate);
-      } catch (_) {
-        setAlgoGate({algo_ready: false, reason: 'Could not verify algo-ready gate from server.'});
-      }
-    } catch (error) {
-      Alert.alert('Orders', String(error?.message || error));
-    } finally {
-      setLoading(false);
+      gate = await dashboardService.fetchAlgoReadyGate();
+    } catch (_) {
+      /* keep fallback gate */
     }
-  }, [routeParams.broker]);
+    return {orders: orderRows, brokerRows: rows, broker: nextBroker, algoGate: gate};
+  }, [broker, routeParams.broker]);
+
+  const applyOrdersPayload = useCallback(payload => {
+    setOrders(payload.orders || []);
+    setBrokerRows(payload.brokerRows || []);
+    if (payload.broker) setBroker(String(payload.broker).toLowerCase());
+    if (payload.algoGate) setAlgoGate(payload.algoGate);
+  }, []);
+
+  const load = useCallback(
+    async ({forceRefresh = false} = {}) => {
+      await runScreenPayloadFetch({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.orders,
+        fetcher: fetchOrdersPayload,
+        applyPayload: applyOrdersPayload,
+        setLoading,
+        setError: msg => {
+          if (msg) Alert.alert('Orders', String(msg));
+        },
+        forceNetwork: forceRefresh,
+        hasUsable: data => Array.isArray(data?.orders),
+      });
+    },
+    [applyOrdersPayload, fetchOrdersPayload],
+  );
 
   const selectedBrokerRow = useMemo(
     () => brokerRows.find(row => String(row?.broker || '').toLowerCase() === String(broker || '').toLowerCase()),
@@ -306,6 +301,15 @@ export const OrdersScreen = ({route, navigation}) => {
         throw new Error(`Algo trade gate is blocked: ${algoGate?.reason || 'system not ready'}`);
       }
 
+      if (mobileIp) {
+        try {
+          const en = await enableBrokerIpsForMobile(mobileIp, broker);
+          if (en?.summary) setIpEnableStatus(en.summary);
+        } catch (ipErr) {
+          setIpEnableStatus(String(ipErr?.message || 'IP enablement failed — order may still proceed'));
+        }
+      }
+
       const preflight = await runPreflight();
       if (!preflight.sessionOk) {
         Alert.alert('Broker session required', sessionSummary.detail, [
@@ -366,11 +370,39 @@ export const OrdersScreen = ({route, navigation}) => {
   };
 
   useEffect(() => {
-    load();
+    let pollId;
+    (async () => {
+      pollId = await runScreenTableFetchWithLivePoll({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.orders,
+        fetcher: async () => {
+          const payload = await fetchOrdersPayload();
+          applyOrdersPayload(payload);
+          return payload.orders || [];
+        },
+        setRows: () => {},
+        setLoading,
+        setError: () => {},
+        liveIntervalMs: SCREEN_LIVE_POLL_MS,
+      });
+    })();
+    registerMobileClientIp({appVersion: '1.0.0'}).then(res => {
+      setMobileIp(res.ip || '');
+      if (res.enablements?.length) {
+        setIpEnableStatus(summarizeBrokerEnablements(res.enablements));
+        return;
+      }
+      const en = res.enablement;
+      if (en?.status === 'ok') setIpEnableStatus(summarizeBrokerEnablements([en]));
+      else if (en?.status === 'error') setIpEnableStatus(String(en.detail || 'IP enablement pending'));
+      else if (res.ip) setIpEnableStatus('IP registered — enablement runs on server');
+    });
     dashboardService.fetchAvailableSymbols()
       .then(res => setSymbolOptions(extractApiRows(res)))
       .catch(() => setSymbolOptions([]));
-  }, [load]);
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [applyOrdersPayload, fetchOrdersPayload]);
 
   useEffect(() => {
     if (routeParams.symbol) {
@@ -424,10 +456,6 @@ export const OrdersScreen = ({route, navigation}) => {
       setSide(String(fromAlert.side).toUpperCase());
     }
   }, [fromAlert]);
-
-  useEffect(() => {
-    resolvePublicIp().then(ip => setMobileIp(ip || ''));
-  }, []);
 
   if (loading) {
     return (
@@ -522,7 +550,8 @@ export const OrdersScreen = ({route, navigation}) => {
         <TextInput value={stopLoss} onChangeText={setStopLoss} placeholder="Stop Loss" keyboardType="decimal-pad" style={styles.input} />
         <TextInput value={target1} onChangeText={setTarget1} placeholder="Target 1" keyboardType="decimal-pad" style={styles.input} />
         <TextInput value={target2} onChangeText={setTarget2} placeholder="Target 2" keyboardType="decimal-pad" style={styles.input} />
-        <Text style={styles.meta}>Mobile IP for enablement: {mobileIp || 'Resolving...'}</Text>
+        <Text style={styles.meta}>Device IP for broker enablement: {mobileIp || 'Resolving...'}</Text>
+        {ipEnableStatus ? <Text style={styles.meta}>{ipEnableStatus}</Text> : null}
 
         <Pressable
           style={[styles.submitBtn, !canPlaceOrder ? styles.submitBtnDisabled : null]}
@@ -530,7 +559,7 @@ export const OrdersScreen = ({route, navigation}) => {
           disabled={!canPlaceOrder}>
           <Text style={styles.submitBtnText}>Place live order</Text>
         </Pressable>
-        <Pressable style={styles.refreshBtn} onPress={load}>
+        <Pressable style={styles.refreshBtn} onPress={() => load({forceRefresh: true})}>
           <Text style={styles.refreshBtnText}>Refresh orders</Text>
         </Pressable>
       </View>

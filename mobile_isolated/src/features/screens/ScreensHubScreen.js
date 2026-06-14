@@ -18,6 +18,8 @@ import {formatMarketCap, formatINR} from '@core/utils/formatMarket';
 import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 
 const MAIN_TABS = [
   {id: 'ai', label: 'AI picks'},
@@ -84,58 +86,74 @@ export function ScreensHubScreen({navigation}) {
     setTrendPage(1);
   }, [main, resetSort]);
 
-  const load = useCallback(async () => {
-    setErr('');
-    setLoading(true);
-    try {
-      if (main === 'ai') {
-        const picks = await dashboardService.fetchWeeklyPicks();
-        const bull = Array.isArray(picks?.bullish) ? picks.bullish : [];
-        const bear = Array.isArray(picks?.bearish) ? picks.bearish : [];
-        setWeeklyMeta({
-          pickDate: picks?.pick_date || null,
-          subtitle: 'Weekly AI picks — swing trade setup',
-        });
-        const rows = [
-          {_hdr: true, _title: 'Bullish swing picks', _tone: 'bull'},
-          ...bull.map((r, i) => ({...r, _n: i + 1, _side: 'bull'})),
-          {_hdr: true, _title: 'Bearish swing picks', _tone: 'bear'},
-          ...bear.map((r, i) => ({...r, _n: i + 1, _side: 'bear'})),
-        ];
-        setList(rows);
-      } else if (main === 'trending') {
-        const res = await dashboardService.fetchTrending(120);
-        setWeeklyMeta({pickDate: null, subtitle: 'Trending stocks'});
-        setList(parseStockListResponse(res));
-      } else if (main === 'movers') {
-        const res = await dashboardService.fetchPriceShockers({type: gl, period: perM});
-        setWeeklyMeta({pickDate: null, subtitle: `${gl} · ${perM}`});
-        setList(parseStockListResponse(res));
-      } else if (main === 'volume') {
-        const res = await dashboardService.fetchVolumeShockers({limit: 80, period: perV});
-        setWeeklyMeta({pickDate: null, subtitle: `Volume movers · ${perV}`});
-        setList(parseStockListResponse(res));
-      } else if (main === 'alpha') {
-        const period = alphaHor === 'long' ? '1y' : '1w';
-        const res = await dashboardService.fetchRelativePerformance({period, limit: 60});
-        setWeeklyMeta({
-          pickDate: null,
-          subtitle: `RS% vs NIFTY (${period.toUpperCase()})`,
-        });
-        setList(parseStockListResponse(res));
-      } else {
+  const load = useCallback(async ({forceRefresh = false} = {}) => {
+    const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter);
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher: async () => {
+        if (main === 'ai') {
+          const picks = await dashboardService.fetchWeeklyPicks();
+          const bull = Array.isArray(picks?.bullish) ? picks.bullish : [];
+          const bear = Array.isArray(picks?.bearish) ? picks.bearish : [];
+          return {
+            weeklyMeta: {
+              pickDate: picks?.pick_date || null,
+              subtitle: 'Weekly AI picks — swing trade setup',
+            },
+            list: [
+              {_hdr: true, _title: 'Bullish swing picks', _tone: 'bull'},
+              ...bull.map((r, i) => ({...r, _n: i + 1, _side: 'bull'})),
+              {_hdr: true, _title: 'Bearish swing picks', _tone: 'bear'},
+              ...bear.map((r, i) => ({...r, _n: i + 1, _side: 'bear'})),
+            ],
+          };
+        }
+        if (main === 'trending') {
+          const res = await dashboardService.fetchTrending(120);
+          return {
+            weeklyMeta: {pickDate: null, subtitle: 'Trending stocks'},
+            list: parseStockListResponse(res),
+          };
+        }
+        if (main === 'movers') {
+          const res = await dashboardService.fetchPriceShockers({type: gl, period: perM});
+          return {
+            weeklyMeta: {pickDate: null, subtitle: `${gl} · ${perM}`},
+            list: parseStockListResponse(res),
+          };
+        }
+        if (main === 'volume') {
+          const res = await dashboardService.fetchVolumeShockers({limit: 80, period: perV});
+          return {
+            weeklyMeta: {pickDate: null, subtitle: `Volume movers · ${perV}`},
+            list: parseStockListResponse(res),
+          };
+        }
+        if (main === 'alpha') {
+          const period = alphaHor === 'long' ? '1y' : '1w';
+          const res = await dashboardService.fetchRelativePerformance({period, limit: 60});
+          return {
+            weeklyMeta: {pickDate: null, subtitle: `RS% vs NIFTY (${period.toUpperCase()})`},
+            list: parseStockListResponse(res),
+          };
+        }
         const res = await dashboardService.fetchIpos({status: ipoFilter || undefined, limit: 120});
         const rows = Array.isArray(res?.data) ? res.data : [];
-        setWeeklyMeta({pickDate: null, subtitle: `IPOs (${rows.length})`});
-        setList(rows);
-      }
-    } catch (e) {
-      setList([]);
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  }, [main, gl, perM, perV, alphaHor, ipoFilter]);
+        return {
+          weeklyMeta: {pickDate: null, subtitle: `IPOs (${rows.length})`},
+          list: rows,
+        };
+      },
+      applyPayload: payload => {
+        setWeeklyMeta(payload.weeklyMeta || {pickDate: null, subtitle: ''});
+        setList(Array.isArray(payload.list) ? payload.list : []);
+      },
+      setLoading,
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+      hasUsable: data => Array.isArray(data?.list) && data.list.length > 0,
+    });
+  }, [alphaHor, gl, ipoFilter, main, perM, perV]);
 
   useEffect(() => {
     load();

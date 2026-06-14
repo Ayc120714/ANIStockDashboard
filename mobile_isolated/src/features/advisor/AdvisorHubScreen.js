@@ -17,7 +17,8 @@ import {SortableTableHeader} from '@components/SortableTableHeader';
 import {mobilePad, mobileStyles, AYC} from '@core/theme/mobileStyles';
 import {signalsService} from '@core/api/services/signalsService';
 import {advisorService} from '@core/api/services/advisorService';
-import {readAdvisorSignalsCache, writeAdvisorSignalsCache} from '@core/storage/advisorSignalsCache';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {
   EXTRA_SETUPS,
@@ -202,74 +203,78 @@ export function AdvisorHubScreen({navigation}) {
     return active;
   }, [extraGrouped, tierGrouped]);
 
-  const loadSignals = useCallback(async ({silent = false} = {}) => {
-    if (!silent) setLoading(true);
-    setErr('');
-    const cached = await readAdvisorSignalsCache();
-    if (cached.length) {
-      setSigRows(cached);
-      if (!silent) setLoading(false);
-    }
-    try {
-      const [latestRes, monthlyRes, customRes, mondayRes] = await Promise.all([
-        signalsService.fetchLatestSignals({limit: 200}),
-        advisorService.fetchMonthlyMacdSetup(300).catch(() => null),
-        advisorService.fetchCustomRsMacdSetup({limit: 400, setup_mode: 'or_signal'}).catch(() => null),
-        advisorService.fetchMondayPrevWeekHighCross({limit: 500}).catch(() => null),
-      ]);
-      const rows = extractApiRows(latestRes);
-      setSigRows(rows);
-      await writeAdvisorSignalsCache(rows);
-      setMonthlyRows(extractApiRows(monthlyRes));
-      setCustomRows(extractApiRows(customRes));
-      setMondayRows(extractApiRows(mondayRes));
-    } catch (e) {
-      if (!cached.length) {
-        setErr(String(e?.message || e));
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const loadSignals = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
+    if (forceRefresh) setRefreshing(true);
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubSignals,
+      fetcher: async () => {
+        const [latestRes, monthlyRes, customRes, mondayRes] = await Promise.all([
+          signalsService.fetchLatestSignals({limit: 200}),
+          advisorService.fetchMonthlyMacdSetup(300).catch(() => null),
+          advisorService.fetchCustomRsMacdSetup({limit: 400, setup_mode: 'or_signal'}).catch(() => null),
+          advisorService.fetchMondayPrevWeekHighCross({limit: 500}).catch(() => null),
+        ]);
+        return {
+          sigRows: extractApiRows(latestRes),
+          monthlyRows: extractApiRows(monthlyRes),
+          customRows: extractApiRows(customRes),
+          mondayRows: extractApiRows(mondayRes),
+        };
+      },
+      applyPayload: payload => {
+        setSigRows(payload.sigRows || []);
+        setMonthlyRows(payload.monthlyRows || []);
+        setCustomRows(payload.customRows || []);
+        setMondayRows(payload.mondayRows || []);
+      },
+      setLoading: silent && !forceRefresh ? () => {} : setLoading,
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+    });
+    setRefreshing(false);
   }, []);
 
-  const loadTrend = useCallback(async () => {
-    setErr('');
-    setLoading(true);
-    try {
-      const res = await advisorService.fetchIndicatorScreener({
-        timeframe: 'weekly',
-        indicator: 'rsi',
-        condition: 'cross_above',
-        universe: 'all',
-        limit: 120,
-      });
-      setIndRows(extractApiRows(res));
-    } catch (e) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const loadTrend = useCallback(async ({forceRefresh = false} = {}) => {
+    if (forceRefresh) setRefreshing(true);
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
+      fetcher: async () => {
+        const res = await advisorService.fetchIndicatorScreener({
+          timeframe: 'weekly',
+          indicator: 'rsi',
+          condition: 'cross_above',
+          universe: 'all',
+          limit: 120,
+        });
+        return {indRows: extractApiRows(res)};
+      },
+      applyPayload: payload => setIndRows(payload.indRows || []),
+      setLoading,
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+    });
+    setRefreshing(false);
   }, []);
 
-  const loadChart = useCallback(async ({silent = false} = {}) => {
-    if (!silent) setLoading(true);
-    setErr('');
-    try {
-      const [customRes, latestRes] = await Promise.all([
-        advisorService.fetchCustomRsMacdSetup({limit: 800, setup_mode: 'or_signal'}).catch(() => null),
-        signalsService.fetchLatestSignals({limit: 200, timeoutMs: 20_000}).catch(() => null),
-      ]);
-      const customSetupRows = extractApiRows(customRes);
-      const signals = extractApiRows(latestRes);
-      setChartBlocks(buildChartFundamentalBlocks(customSetupRows, signals));
-    } catch (e) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const loadChart = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
+    if (forceRefresh) setRefreshing(true);
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubChart,
+      fetcher: async () => {
+        const [customRes, latestRes] = await Promise.all([
+          advisorService.fetchCustomRsMacdSetup({limit: 800, setup_mode: 'or_signal'}).catch(() => null),
+          signalsService.fetchLatestSignals({limit: 200, timeoutMs: 20_000}).catch(() => null),
+        ]);
+        const customSetupRows = extractApiRows(customRes);
+        const signals = extractApiRows(latestRes);
+        return {chartBlocks: buildChartFundamentalBlocks(customSetupRows, signals)};
+      },
+      applyPayload: payload => setChartBlocks(payload.chartBlocks || []),
+      setLoading: silent && !forceRefresh ? () => {} : setLoading,
+      setError: msg => setErr(msg || ''),
+      forceNetwork: forceRefresh,
+    });
+    setRefreshing(false);
   }, []);
 
   useFocusEffect(
@@ -394,10 +399,7 @@ export function AdvisorHubScreen({navigation}) {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                loadSignals({silent: true});
-              }}
+              onRefresh={() => loadSignals({silent: true, forceRefresh: true})}
             />
           }>
           {head}
@@ -504,10 +506,7 @@ export function AdvisorHubScreen({navigation}) {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                loadChart({silent: true});
-              }}
+              onRefresh={() => loadChart({silent: true, forceRefresh: true})}
             />
           }>
           {head}

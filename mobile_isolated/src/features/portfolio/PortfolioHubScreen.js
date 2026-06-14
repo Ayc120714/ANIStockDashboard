@@ -3,6 +3,9 @@ import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from '
 import {ScreenScaffold} from '@components/ScreenScaffold';
 import {ordersService} from '@core/api/services/ordersService';
 import {extractApiRows} from '@core/utils/apiPayload';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
+import {ensureMarketSession, shouldPollLiveMarket} from '@core/utils/marketSession';
 import {useFocusEffect} from '@react-navigation/native';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 
@@ -15,23 +18,36 @@ export function PortfolioHubScreen({navigation}) {
   const [orders, setOrders] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [o, p] = await Promise.all([
-        ordersService.fetchOrders().catch(() => ({data: []})),
-        ordersService.fetchPortfolioPositions().catch(() => ({data: []})),
-      ]);
-      setOrders(extractApiRows(o));
-      setPositions(extractApiRows(p));
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback(async ({forceRefresh = false} = {}) => {
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.portfolio,
+      fetcher: async () => {
+        const [o, p] = await Promise.all([
+          ordersService.fetchOrders().catch(() => ({data: []})),
+          ordersService.fetchPortfolioPositions().catch(() => ({data: []})),
+        ]);
+        return {
+          orders: extractApiRows(o),
+          positions: extractApiRows(p),
+        };
+      },
+      applyPayload: payload => {
+        setOrders(payload.orders || []);
+        setPositions(payload.positions || []);
+      },
+      setLoading,
+      forceNetwork: forceRefresh,
+      hasUsable: data => (data?.orders?.length > 0) || (data?.positions?.length > 0),
+    });
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      (async () => {
+        await ensureMarketSession();
+        const session = await ensureMarketSession();
+        await load({forceRefresh: shouldPollLiveMarket(session)});
+      })();
     }, [load]),
   );
 

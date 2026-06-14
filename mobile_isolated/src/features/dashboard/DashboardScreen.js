@@ -1,11 +1,19 @@
 ﻿import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {MarketIndexCardsRow} from '@components/MarketIndexCardsRow';
 import {brokersService} from '@core/api/services/brokersService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {useAuth} from '@core/auth/AuthContext';
+import {clearPageCache, readPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
+import {isDashboardCacheIncomplete, MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {
+  ensureMarketSession,
+  isPageCacheStale,
+  shouldPollLiveMarket,
+  shouldSkipNetworkForClosedMarket,
+} from '@core/utils/marketSession';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {parsePercentLike} from '@core/utils/outlookPayload';
@@ -13,6 +21,7 @@ import {safeFetch} from '@core/utils/safeFetch';
 import {navigateToMainTab} from '@nav/navigationHelpers';
 
 const API_MS = 8000;
+const DASHBOARD_CACHE_KEY = MOBILE_PAGE_CACHE_KEYS.dashboard;
 
 function parseStockList(res) {
   return extractApiRows(res, ['stocks']);
@@ -40,6 +49,12 @@ function applyBrokerSetup(brokersSetup) {
   return brokerRows.some(b => b && b.live_enabled === true);
 }
 
+function applyDashboardState(setData, setBrokerConnected, cached) {
+  if (!cached) return;
+  setData(cached.data || cached);
+  setBrokerConnected(Boolean(cached.brokerConnected ?? cached.data?.brokerConnected));
+}
+
 export const DashboardScreen = ({navigation}) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,21 +64,53 @@ export const DashboardScreen = ({navigation}) => {
   const cacheHydrated = useRef(false);
   const {logout, user} = useAuth();
 
-  const loadData = useCallback(async ({silent = false} = {}) => {
+  const loadData = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     if (!silent && !cacheHydrated.current) {
       setLoading(true);
-    } else {
+    } else if (forceRefresh) {
       setRefreshing(true);
     }
     setError('');
-    const apiOpts = {timeoutMs: API_MS};
 
     try {
+      const session = await ensureMarketSession();
+      const liveSession = shouldPollLiveMarket(session);
+      const cachedWrap = await readPageCache(DASHBOARD_CACHE_KEY);
+      const cached = cachedWrap?.data || null;
+      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session);
+      const cacheIncomplete = isDashboardCacheIncomplete(cached);
+
+      if (cached && !forceRefresh) {
+        applyDashboardState(setData, setBrokerConnected, cached);
+        cacheHydrated.current = true;
+        setLoading(false);
+      }
+
+      if (liveSession || cacheStale || cacheIncomplete) {
+        if (cacheStale || cacheIncomplete) {
+          await clearPageCache(DASHBOARD_CACHE_KEY);
+        }
+      }
+
+      const skipNetwork =
+        !forceRefresh
+        && !liveSession
+        && !cacheStale
+        && !cacheIncomplete
+        && cached
+        && shouldSkipNetworkForClosedMarket(cachedWrap?.updatedAt, true);
+      if (skipNetwork) {
+        return;
+      }
+
+      const apiOpts = {timeoutMs: API_MS};
       const [indices, watchlist] = await Promise.all([
         safeFetch(() => dashboardService.fetchMarketIndices(apiOpts), {timeoutMs: API_MS, label: 'Indices'}),
         safeFetch(() => dashboardService.fetchWatchlist(apiOpts), {timeoutMs: API_MS, label: 'Watchlist'}),
       ]);
-      setData(prev => ({...prev, indices, watchlist}));
+
+      const partial = {indices, watchlist};
+      setData(prev => ({...prev, ...partial}));
       setLoading(false);
 
       const [alerts, gainers, losers, signals, brokersSetup] = await Promise.all([
@@ -85,9 +132,11 @@ export const DashboardScreen = ({navigation}) => {
       setData(nextData);
       setBrokerConnected(nextBroker);
       await writeDashboardCache({data: nextData, brokerConnected: nextBroker});
+      cacheHydrated.current = true;
     } catch (e) {
-      setError(String(e?.message || e || 'Dashboard data load failed'));
-      setLoading(false);
+      if (!cacheHydrated.current) {
+        setError(String(e?.message || e || 'Dashboard data load failed'));
+      }
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -165,10 +214,16 @@ export const DashboardScreen = ({navigation}) => {
 
   return (
     <MobileChrome navigation={navigation}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.pad}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadData({silent: true, forceRefresh: true})} />
+        }>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Dashboard</Text>
-          <Pressable onPress={() => loadData()} disabled={refreshing}>
+          <Pressable onPress={() => loadData({silent: true, forceRefresh: true})} disabled={refreshing}>
             <Text style={styles.refreshText}>{refreshing ? 'Updating…' : 'Refresh'}</Text>
           </Pressable>
         </View>
