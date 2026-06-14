@@ -1,13 +1,16 @@
 import {useEffect, useMemo, useState} from 'react';
 
-export function usePagedList(items, {pageSize = 10, resetDeps = []} = {}) {
+const EMPTY_RESET_DEPS = [];
+
+export function usePagedList(items, {pageSize = 10, resetDeps} = {}) {
   const [page, setPage] = useState(1);
   const list = useMemo(() => (Array.isArray(items) ? items : []), [items]);
-  const resetKey = useMemo(() => resetDeps.map(String).join('\0'), [resetDeps]);
+  const deps = resetDeps ?? EMPTY_RESET_DEPS;
+  const resetSignature = `${pageSize}|${deps.map(String).join('\x00')}`;
 
   useEffect(() => {
     setPage(1);
-  }, [pageSize, resetKey]);
+  }, [resetSignature]);
 
   const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
 

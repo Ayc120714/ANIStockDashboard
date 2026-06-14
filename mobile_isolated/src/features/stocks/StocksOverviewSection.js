@@ -30,10 +30,18 @@ import {AlertsScreen} from '@features/alerts/AlertsScreen';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {useFocusEffect} from '@react-navigation/native';
+import {
+  ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  shouldPollLiveMarket,
+} from '@core/utils/marketSession';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {normalizeMarketIndicesCards} from '@core/utils/marketIndicesCards';
 import {resolveSectorSubsectorMapping} from '@core/utils/sectorSubsectorMap';
 import {getTradingViewChartSymbol} from '@core/utils/tradingViewOutlookSymbols';
+
+const OUTLOOK_LIVE_POLL_MS = 30_000;
 
 const OUTLOOK_TABS = [
   {id: 'market', label: 'Market'},
@@ -191,6 +199,24 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
       })();
     }, [load, tab]),
   );
+
+  useEffect(() => {
+    if (!isStockOutlookTab(tab)) return undefined;
+    let pollId;
+    (async () => {
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(OUTLOOK_LIVE_POLL_MS, 0);
+      if (pollMs <= 0) return;
+      pollId = setInterval(async () => {
+        await ensureMarketSession();
+        if (!shouldPollLiveMarket(getCachedMarketSession())) return;
+        await load({forceRefresh: true});
+      }, pollMs);
+    })();
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [load, tab]);
 
   useEffect(() => {
     if (isStockTabId(initialTab)) {

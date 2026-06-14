@@ -22,9 +22,21 @@ import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
+import {
+  runScreenPayloadFetch,
+  SCREEN_LIVE_POLL_MS,
+  shouldRefreshPageCache,
+} from '@core/utils/screenPageLoader';
+import {
+  ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  shouldPollLiveMarket,
+} from '@core/utils/marketSession';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {safeFetch} from '@core/utils/safeFetch';
+
+const LIVE_SCREEN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
 
 const MAIN_TABS = [
   {id: 'ai', label: 'AI picks'},
@@ -270,6 +282,24 @@ export function ScreensHubScreen({navigation}) {
       })();
     }, [alphaHor, gl, ipoFilter, load, main, perM, perV, screenDate]),
   );
+
+  useEffect(() => {
+    if (!LIVE_SCREEN_TABS.has(main) || screenDate) return undefined;
+    let pollId;
+    (async () => {
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(SCREEN_LIVE_POLL_MS, 0);
+      if (pollMs <= 0) return;
+      pollId = setInterval(async () => {
+        await ensureMarketSession();
+        if (!shouldPollLiveMarket(getCachedMarketSession())) return;
+        await load({forceRefresh: true});
+      }, pollMs);
+    })();
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [alphaHor, gl, load, main, perM, perV, screenDate]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

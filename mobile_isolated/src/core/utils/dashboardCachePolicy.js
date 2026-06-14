@@ -1,5 +1,5 @@
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v13',
+  dashboard: '@ani/mobile/page-cache/dashboard-v14',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v3',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v4-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
@@ -7,7 +7,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v4-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v2',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v4',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v5',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v3',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',

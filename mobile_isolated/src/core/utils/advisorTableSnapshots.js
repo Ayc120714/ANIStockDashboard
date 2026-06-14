@@ -2,7 +2,7 @@ import {advisorService} from '@core/api/services/advisorService';
 import {signalsService} from '@core/api/services/signalsService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {extractTrendGrid} from '@core/utils/advisorHubCache';
+import {normalizeTrendGrid} from '@core/utils/advisorHubCache';
 import {buildChartAgentBlocks} from '@core/utils/chartFundamentalAgent';
 import {groupBuyTierGridSetupRows, groupTrendReversalGridRows} from '@core/utils/buyTierGrid';
 import {groupLatestSignalsByTier, mapSetupRows} from '@core/utils/advisorSetupTables';
@@ -172,7 +172,7 @@ export async function fetchAdvisorTableSnapshots() {
   const monthly = monthlyRes.status === 'fulfilled' ? asRows(monthlyRes.value) : [];
   const custom = customRes.status === 'fulfilled' ? asRows(customRes.value) : [];
   const monday = mondayRes.status === 'fulfilled' ? asRows(mondayRes.value) : [];
-  const trendGrid = trendRes.status === 'fulfilled' ? extractTrendGrid(trendRes.value) : null;
+  const trendGrid = trendRes.status === 'fulfilled' ? normalizeTrendGrid(trendRes.value) : null;
   const chartPayload = chartRes.status === 'fulfilled' ? chartRes.value : null;
   const chartBlocks = chartPayload ? buildChartAgentBlocks(chartPayload) : [];
   const priceMovers = priceRes.status === 'fulfilled' ? asStockRows(priceRes.value) : [];

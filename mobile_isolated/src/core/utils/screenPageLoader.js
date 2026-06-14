@@ -173,3 +173,42 @@ export async function runScreenTableFetchWithLivePoll({
     });
   }, pollMs);
 }
+
+export async function runScreenPayloadFetchWithLivePoll({
+  cacheKey,
+  fetcher,
+  applyPayload,
+  setLoading,
+  setError,
+  hasUsable = cacheHasUsableData,
+  liveIntervalMs = SCREEN_LIVE_POLL_MS,
+}) {
+  await ensureMarketSession();
+  const session = getCachedMarketSession();
+
+  await runScreenPayloadFetch({
+    cacheKey,
+    fetcher,
+    applyPayload,
+    setLoading,
+    setError,
+    forceNetwork: shouldPollLiveMarket(session),
+    hasUsable,
+  });
+
+  await ensureMarketSession();
+  const pollMs = getMarketPollingIntervalMs(liveIntervalMs, 0);
+  if (pollMs <= 0) return undefined;
+
+  return setInterval(() => {
+    runScreenPayloadFetch({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setLoading: () => {},
+      setError,
+      forceNetwork: true,
+      hasUsable,
+    });
+  }, pollMs);
+}

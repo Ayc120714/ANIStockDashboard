@@ -36,34 +36,49 @@ export function hasUsableAdvisorSignalsPayload(data) {
   );
 }
 
-/** Accept wrapped `{ trendGrid }`, API `{ data }`, or raw `{ daily, weekly, monthly }` caches. */
-export function extractTrendGrid(data) {
-  if (!data || typeof data !== 'object') return null;
+function isTrendGridObject(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (value.daily || value.weekly || value.monthly),
+  );
+}
 
-  const candidates = [data.trendGrid, data.data, data];
-  for (const candidate of candidates) {
+/** Recursively unwrap API/cache envelopes to the raw `{ daily, weekly, monthly }` grid. */
+export function normalizeTrendGrid(data, depth = 0) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || depth > 4) return null;
+  if (isTrendGridObject(data)) return data;
+
+  const nested = [data.trendGrid, data.data, data.grid, data.payload, data.result];
+  for (const candidate of nested) {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
-    if (candidate.daily || candidate.weekly || candidate.monthly) {
-      return candidate;
-    }
-    // API envelope stored inside cache: `{ screen, data: grid }`
-    const nested = candidate.data;
-    if (nested && typeof nested === 'object' && (nested.daily || nested.weekly || nested.monthly)) {
-      return nested;
-    }
+    if (isTrendGridObject(candidate)) return candidate;
+    const deeper = normalizeTrendGrid(candidate, depth + 1);
+    if (deeper) return deeper;
   }
   return null;
 }
 
+/** Accept wrapped `{ trendGrid }`, API `{ data }`, or raw `{ daily, weekly, monthly }` caches. */
+export function extractTrendGrid(data) {
+  return normalizeTrendGrid(data);
+}
+
 export function countTrendGridRows(grid) {
-  const root = extractTrendGrid(grid);
+  const root = normalizeTrendGrid(grid);
   if (!root) return 0;
   let n = 0;
   for (const tf of ['daily', 'weekly', 'monthly']) {
     const block = root[tf];
     if (!block || typeof block !== 'object') continue;
     for (const tier of ['B1', 'B2', 'B3', 'S1', 'S2', 'S3']) {
-      const items = block[tier]?.items;
+      const tierData = block[tier];
+      if (Array.isArray(tierData)) {
+        n += tierData.length;
+        continue;
+      }
+      const items = tierData?.items;
       if (Array.isArray(items)) n += items.length;
     }
   }
@@ -152,7 +167,11 @@ export async function fetchAdvisorTrendPayload({forceRefresh = false} = {}) {
       }),
     {label: 'Trend reversal', ...ADVISOR_FETCH},
   );
-  return {trendGrid: extractTrendGrid(res)};
+  const grid = normalizeTrendGrid(res);
+  if (!grid) {
+    throw new Error('Trend reversal grid missing from API response');
+  }
+  return {trendGrid: grid};
 }
 
 export async function fetchAdvisorChartPayload({forceRefresh = false} = {}) {

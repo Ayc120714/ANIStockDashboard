@@ -1,15 +1,19 @@
 import {compactSetupRow} from '@core/utils/advisorSetupTables';
-import {extractTrendGrid} from '@core/utils/advisorHubCache';
+import {normalizeTrendGrid} from '@core/utils/advisorHubCache';
 
 const ALL_TIERS = ['B1', 'B2', 'B3', 'S1', 'S2', 'S3'];
 
 function resolveGrid(grid) {
-  return extractTrendGrid(grid) || grid;
+  return normalizeTrendGrid(grid) || grid;
 }
 
 function tierBlock(grid, timeframe, tier) {
   const root = resolveGrid(grid);
-  return root?.[timeframe]?.[tier] || {count: 0, items: []};
+  const block = root?.[timeframe]?.[tier];
+  if (Array.isArray(block)) {
+    return {count: block.length, items: block};
+  }
+  return block || {count: 0, items: []};
 }
 
 /** Flatten web buy-tier-card grid into table rows (same source as TrendReversalTab). */

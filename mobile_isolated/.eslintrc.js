@@ -11,4 +11,10 @@ module.exports = {
     'react-native/no-inline-styles': 'off',
     'no-bitwise': 'off',
   },
+  overrides: [
+    {
+      files: ['**/__tests__/**/*.js', 'jest.setup.js', 'jest.config.js'],
+      env: {jest: true},
+    },
+  ],
 };

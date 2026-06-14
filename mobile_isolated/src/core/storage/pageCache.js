@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ALWAYS_FETCH_FROM_DB} from '@core/config/dataRefreshPolicy';
+import {countTrendGridRows} from '@core/utils/advisorHubCache';
 import {ensureMarketSession, shouldSkipNetworkForClosedMarket} from '@core/utils/marketSession';
 
 export function cacheHasUsableData(data) {
@@ -21,7 +22,12 @@ export function cacheHasUsableData(data) {
   if (Array.isArray(data.losers) && data.losers.length > 0) return true;
   if (data.indexCards || data.smallcapCards || data.tableData) return true;
   if (data.watchlist && Array.isArray(data.watchlist)) return data.watchlist.length > 0;
-  if (data.daily || data.weekly || data.monthly) return true;
+  if (data.trendGrid != null) {
+    return countTrendGridRows(data) > 0;
+  }
+  if (data.daily || data.weekly || data.monthly) {
+    return countTrendGridRows(data) > 0;
+  }
   if (data.rows && Array.isArray(data.rows)) return data.rows.length > 0;
   if (data.fii != null || data.grouped != null) return true;
   if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {

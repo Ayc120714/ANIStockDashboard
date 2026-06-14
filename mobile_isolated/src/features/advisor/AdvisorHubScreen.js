@@ -22,7 +22,7 @@ import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenP
 import {readPageCache} from '@core/storage/pageCache';
 import {
   extractChartBlocks,
-  extractTrendGrid,
+  normalizeTrendGrid,
   countTrendGridRows,
   fetchAdvisorChartPayload,
   fetchAdvisorSignalsPayload,
@@ -284,7 +284,7 @@ export function AdvisorHubScreen({navigation}) {
         applySignalsPayload(signals);
       }
       if (hasUsableAdvisorTrendPayload(trendCache?.data)) {
-        setTrendGrid(extractTrendGrid(trendCache.data));
+        setTrendGrid(normalizeTrendGrid(trendCache.data));
       }
       const hydratedChart = extractChartBlocks(chartCache?.data);
       if (hasUsableAdvisorChartPayload(chartCache?.data)) {
@@ -410,7 +410,7 @@ export function AdvisorHubScreen({navigation}) {
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
       fetcher: () => fetchAdvisorTrendPayload({forceRefresh}),
       applyPayload: payload => {
-        const grid = extractTrendGrid(payload);
+        const grid = normalizeTrendGrid(payload);
         if (grid) setTrendGrid(grid);
       },
       setLoading: silent && !forceRefresh ? () => {} : setLoading,

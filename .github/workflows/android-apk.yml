@@ -47,6 +47,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm run test:ci
+
       - name: Build release APK
         run: npm run android:apk:release
 

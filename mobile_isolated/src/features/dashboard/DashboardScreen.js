@@ -15,6 +15,8 @@ import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
 import {dedupeWatchlistBySymbol} from '@core/utils/watchlistPayload';
 import {
   ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
   isPageCacheStale,
   shouldPollLiveMarket,
 } from '@core/utils/marketSession';
@@ -29,6 +31,7 @@ import {fetchWithRetry} from '@core/utils/fetchWithRetry';
 
 const DASHBOARD_CACHE_KEY = MOBILE_PAGE_CACHE_KEYS.dashboard;
 const DASH_MS = API_TIMEOUT_MS.dashboardParallel;
+const DASHBOARD_LIVE_POLL_MS = 30_000;
 
 function fetchSection(shouldFetch, fetcher, fallback) {
   if (!shouldFetch) return Promise.resolve(fallback);
@@ -191,6 +194,12 @@ export const DashboardScreen = ({navigation}) => {
       }
 
       const need = dashboardSectionsToRefresh(cachedPayload);
+      if (liveSession) {
+        need.indices = true;
+        need.movers = true;
+        need.watchlist = true;
+        need.signals = true;
+      }
       const mergePartial = partial => {
         setData(prev => ({...prev, ...partial}));
         cacheHydrated.current = true;
@@ -384,6 +393,24 @@ export const DashboardScreen = ({navigation}) => {
       })();
     }, [loadData, refreshBrokerHoldings]),
   );
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let pollId;
+    (async () => {
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(DASHBOARD_LIVE_POLL_MS, 0);
+      if (pollMs <= 0) return;
+      pollId = setInterval(async () => {
+        await ensureMarketSession();
+        if (!shouldPollLiveMarket(getCachedMarketSession())) return;
+        await loadData({silent: true});
+      }, pollMs);
+    })();
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [isAuthenticated, loadData]);
 
   const indices = useMemo(() => {
     const raw = data.indices;
