@@ -168,10 +168,10 @@ export async function fetchAdvisorTrendPayload({forceRefresh = false} = {}) {
     {label: 'Trend reversal', ...ADVISOR_FETCH},
   );
   const grid = normalizeTrendGrid(res);
-  if (!grid) {
-    throw new Error('Trend reversal grid missing from API response');
+  if (!grid || countTrendGridRows(grid) === 0) {
+    throw new Error('No trend reversal matches available right now.');
   }
-  return {trendGrid: grid};
+  return grid;
 }
 
 export async function fetchAdvisorChartPayload({forceRefresh = false} = {}) {

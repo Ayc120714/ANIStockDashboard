@@ -9,7 +9,7 @@ describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
     expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v14');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
-      '@ani/mobile/page-cache/advisor-hub-trend-v5',
+      '@ani/mobile/page-cache/advisor-hub-trend-v6',
     );
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(

@@ -19,7 +19,7 @@ import {mobilePad, mobileStyles, AYC} from '@core/theme/mobileStyles';
 import {advisorService} from '@core/api/services/advisorService';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
-import {readPageCache} from '@core/storage/pageCache';
+import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {
   extractChartBlocks,
   normalizeTrendGrid,
@@ -259,6 +259,7 @@ export function AdvisorHubScreen({navigation}) {
   const [healthResult, setHealthResult] = useState(null);
   const [chartBlocks, setChartBlocks] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [trendLoading, setTrendLoading] = useState(false);
   const [cacheHydrated, setCacheHydrated] = useState(false);
   const {sortConfig, onSort, resetSort} = useTableSort();
 
@@ -405,20 +406,25 @@ export function AdvisorHubScreen({navigation}) {
   }, [applySignalsPayload]);
 
   const loadTrend = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
-    if (forceRefresh) setRefreshing(true);
+    if (forceRefresh) {
+      await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
+      setRefreshing(true);
+    }
     await runScreenPayloadFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
       fetcher: () => fetchAdvisorTrendPayload({forceRefresh}),
       applyPayload: payload => {
-        const grid = normalizeTrendGrid(payload);
-        if (grid) setTrendGrid(grid);
+        const grid = normalizeTrendGrid(payload) || payload;
+        if (grid && countTrendGridRows(grid) > 0) {
+          setTrendGrid(grid);
+        }
       },
-      setLoading: silent && !forceRefresh ? () => {} : setLoading,
+      setLoading: silent && !forceRefresh ? () => {} : setTrendLoading,
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
       hasUsable: hasUsableAdvisorTrendPayload,
     });
-    setRefreshing(false);
+    if (forceRefresh) setRefreshing(false);
   }, []);
 
   const loadChart = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
@@ -452,10 +458,10 @@ export function AdvisorHubScreen({navigation}) {
           }
         } else if (tab === 'trend') {
           const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-          if (stale || !trendHasData || trendVisibleRows === 0) {
+          if (stale || !trendHasData) {
             await loadTrend({
-              silent: trendHasData && trendVisibleRows > 0,
-              forceRefresh: !trendHasData || trendVisibleRows === 0,
+              silent: trendHasData,
+              forceRefresh: !trendHasData || stale,
             });
           }
         } else if (tab === 'chart') {
@@ -465,8 +471,13 @@ export function AdvisorHubScreen({navigation}) {
           }
         }
       })();
-    }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData, trendVisibleRows]),
+    }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData]),
   );
+
+  useEffect(() => {
+    if (tab !== 'trend' || !cacheHydrated || trendHasData) return;
+    loadTrend({forceRefresh: true});
+  }, [cacheHydrated, loadTrend, tab, trendHasData]);
 
   const loadAi = useCallback(async () => {
     if (!aiSym.trim()) {
@@ -564,10 +575,9 @@ export function AdvisorHubScreen({navigation}) {
         </View>
       ) : null}
       {((!cacheHydrated && (tab === 'sig' || tab === 'trend' || tab === 'chart')) ||
-        (loading &&
-          ((tab === 'sig' && !signalsHasData) ||
-            (tab === 'trend' && !trendHasData) ||
-            (tab === 'chart' && !chartHasData)))) ? (
+        (tab === 'sig' && loading && !signalsHasData) ||
+        (tab === 'trend' && trendLoading && !trendHasData) ||
+        (tab === 'chart' && loading && !chartHasData)) ? (
         <ActivityIndicator color={AYC.accent} />
       ) : null}
     </View>
@@ -611,7 +621,7 @@ export function AdvisorHubScreen({navigation}) {
           style={{flex: 1}}
           contentContainerStyle={styles.pad}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => loadTrend({silent: true, forceRefresh: true})} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadTrend({forceRefresh: true})} />
           }>
           {head}
           <Text style={mobileStyles.subtitle}>
@@ -640,7 +650,7 @@ export function AdvisorHubScreen({navigation}) {
             />
           ))}
 
-          {cacheHydrated && !loading && !trendHasData ? (
+          {cacheHydrated && !trendLoading && !trendHasData ? (
             <Text style={styles.empty}>No trend reversal matches for this timeframe. Pull down to refresh.</Text>
           ) : null}
         </ScrollView>

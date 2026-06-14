@@ -124,7 +124,9 @@ export async function runScreenPayloadFetch({
 
   try {
     const fresh = await fetchWithRetry(fetcher, {retries: 1});
-    await writePageCache(cacheKey, fresh);
+    if (hasUsable(fresh)) {
+      await writePageCache(cacheKey, fresh);
+    }
     applyPayload(fresh);
     if (setError) setError(null);
   } catch (e) {
