@@ -1,0 +1,21 @@
+---
+description: Require regression tests and CI gates for every bug fix so fixes are not lost on later changes
+alwaysApply: true
+---
+
+# Fix Regression Guard
+
+Read and follow the project skill: [.cursor/skills/fix-regression-guard/SKILL.md](.cursor/skills/fix-regression-guard/SKILL.md)
+
+## Non-negotiable
+
+> when ever a fix is done please make sure its corresponding test is enabled and so that next time if any fix is done those fixes are not lost
+
+Before finishing any bug fix in this repo:
+
+1. Add or update a regression test in the right `__tests__/` (or backend test) folder
+2. Run `npm run test:ci` in `mobile_isolated/` when touching mobile code
+3. Confirm Android CI runs tests before APK/AAB build (`.github/workflows/android-apk.yml`, `android-aab.yml`)
+4. Bump versioned cache keys when stale on-device cache can hide the fix
+
+Do not mark the task complete without passing tests and naming which test file guards the fix.

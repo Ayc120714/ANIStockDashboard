@@ -71,3 +71,12 @@ export function dashboardSectionsToRefresh(cached) {
     optional: !Array.isArray(payload.sectorOutlook) || !Array.isArray(payload.orderBlocks),
   };
 }
+
+/** Trend tab: refresh only when cache is stale or grid has zero rows (not per-timeframe visible count). */
+export function shouldRefreshAdvisorTrendCache({stale = false, trendHasData = false} = {}) {
+  return Boolean(stale || !trendHasData);
+}
+
+export function shouldForceAdvisorTrendNetwork({stale = false, trendHasData = false} = {}) {
+  return !trendHasData || stale;
+}

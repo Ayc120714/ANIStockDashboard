@@ -3,6 +3,8 @@ import {
   dashboardSectionsToRefresh,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
+  shouldForceAdvisorTrendNetwork,
+  shouldRefreshAdvisorTrendCache,
 } from '@core/utils/dashboardCachePolicy';
 
 describe('dashboard cache policy fixes', () => {
@@ -83,5 +85,17 @@ describe('dashboard cache policy fixes', () => {
     expect(need.indices).toBe(true);
     expect(need.watchlist).toBe(true);
     expect(need.signals).toBe(true);
+  });
+
+  it('does not refetch trend tab when grid has data but daily timeframe is empty (v1.2.43)', () => {
+    expect(shouldRefreshAdvisorTrendCache({stale: false, trendHasData: true})).toBe(false);
+  });
+
+  it('refetches trend tab when grid is missing or cache is stale', () => {
+    expect(shouldRefreshAdvisorTrendCache({stale: false, trendHasData: false})).toBe(true);
+    expect(shouldRefreshAdvisorTrendCache({stale: true, trendHasData: true})).toBe(true);
+    expect(shouldForceAdvisorTrendNetwork({stale: false, trendHasData: false})).toBe(true);
+    expect(shouldForceAdvisorTrendNetwork({stale: true, trendHasData: true})).toBe(true);
+    expect(shouldForceAdvisorTrendNetwork({stale: false, trendHasData: true})).toBe(false);
   });
 });

@@ -17,7 +17,14 @@ import {TradingViewLink} from '@components/TradingViewLink';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {mobilePad, mobileStyles, AYC} from '@core/theme/mobileStyles';
 import {advisorService} from '@core/api/services/advisorService';
-import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {
+  MOBILE_PAGE_CACHE_KEYS,
+  dashboardSectionsToRefresh,
+  hasDashboardMovers,
+  isDashboardCacheIncomplete,
+  shouldForceAdvisorTrendNetwork,
+  shouldRefreshAdvisorTrendCache,
+} from '@core/utils/dashboardCachePolicy';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {
@@ -458,10 +465,10 @@ export function AdvisorHubScreen({navigation}) {
           }
         } else if (tab === 'trend') {
           const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-          if (stale || !trendHasData) {
+          if (shouldRefreshAdvisorTrendCache({stale, trendHasData})) {
             await loadTrend({
               silent: trendHasData,
-              forceRefresh: !trendHasData || stale,
+              forceRefresh: shouldForceAdvisorTrendNetwork({stale, trendHasData}),
             });
           }
         } else if (tab === 'chart') {

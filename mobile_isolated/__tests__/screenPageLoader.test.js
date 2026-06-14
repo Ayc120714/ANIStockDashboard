@@ -3,7 +3,9 @@ import {
   runScreenPayloadFetch,
   shouldRefreshPageCache,
 } from '@core/utils/screenPageLoader';
+import * as pageCache from '@core/storage/pageCache';
 import {writePageCache} from '@core/storage/pageCache';
+import {hasUsableAdvisorTrendPayload} from '@core/utils/advisorHubCache';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {
   buildTrendGrid,
@@ -65,5 +67,27 @@ describe('screenPageLoader live polling fixes', () => {
 
     const stale = await shouldRefreshPageCache(cacheKey);
     expect(stale).toBe(true);
+  });
+
+  it('does not write cache when fresh payload is not usable (v1.2.43)', async () => {
+    const cacheKey = '@ani/test/trend-skip-write';
+    const writeSpy = jest.spyOn(pageCache, 'writePageCache').mockResolvedValue(undefined);
+    const fetcher = jest.fn(async () => buildTrendGrid());
+    const applyPayload = jest.fn();
+
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      forceNetwork: true,
+      hasUsable: hasUsableAdvisorTrendPayload,
+    });
+
+    expect(fetcher).toHaveBeenCalled();
+    expect(applyPayload).toHaveBeenCalled();
+    expect(writeSpy).not.toHaveBeenCalled();
+    writeSpy.mockRestore();
   });
 });
