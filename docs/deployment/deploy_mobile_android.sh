@@ -43,36 +43,28 @@ if [[ ! -f "$APK" || ! -f "$AAB" ]]; then
   exit 1
 fi
 
-echo "[6/6] Publish artifacts to $ARTIFACT_DIR ..."
+echo "[6/7] Publish artifacts to $ARTIFACT_DIR ..."
 mkdir -p "$ARTIFACT_DIR"
+VERSION_NAME=$(node -p "require('$MOBILE_DIR/package.json').version")
+VERSIONED_APK_DIR="$MOBILE_DIR/mobile"
+mkdir -p "$VERSIONED_APK_DIR"
 cp -f "$APK" "$ARTIFACT_DIR/ani-stock-release.apk"
+cp -f "$APK" "$VERSIONED_APK_DIR/ani-stock-release-v${VERSION_NAME}.apk"
 cp -f "$AAB" "$ARTIFACT_DIR/ani-stock-release.aab"
 sha256sum "$ARTIFACT_DIR/ani-stock-release.apk" "$ARTIFACT_DIR/ani-stock-release.aab" > "$ARTIFACT_DIR/SHA256SUMS"
 APK_SHA=$(sha256sum "$ARTIFACT_DIR/ani-stock-release.apk" | awk '{print $1}')
 APK_SIZE=$(stat -c '%s' "$ARTIFACT_DIR/ani-stock-release.apk")
-VERSION_NAME=$(node -p "require('$MOBILE_DIR/package.json').version")
 VERSION_CODE=$(grep -m1 'versionCode' "$MOBILE_DIR/android/app/build.gradle" | grep -oE '[0-9]+')
-cat > "$ARTIFACT_DIR/DOWNLOAD.json" <<EOF
-{
-  "app": "ANI Stock Mobile",
-  "version": "$VERSION_NAME",
-  "versionCode": $VERSION_CODE,
-  "builtAt": "$(date -Iseconds)",
-  "apkUrl": "https://www.aycindustries.com/mobile/ani-stock-release.apk",
-  "sha256": "$APK_SHA",
-  "sizeBytes": $APK_SIZE
-}
-EOF
+"$MOBILE_DIR/scripts/sync-download-manifest.sh" "${RELEASE_NOTES:-}"
 
 echo "Done."
 echo "  APK (side-load): $ARTIFACT_DIR/ani-stock-release.apk"
+echo "  Versioned copy:  $VERSIONED_APK_DIR/ani-stock-release-v${VERSION_NAME}.apk"
 echo "  Download URL:    https://www.aycindustries.com/mobile/ani-stock-release.apk"
 echo "  Metadata:        https://www.aycindustries.com/mobile/DOWNLOAD.json"
 echo "  SHA256:          $APK_SHA"
+echo "  Size (bytes):    $APK_SIZE"
 echo "  AAB (Play Store): $ARTIFACT_DIR/ani-stock-release.aab"
-
-echo "[7/7] Bump source version for next release cycle..."
-node "$MOBILE_DIR/scripts/bump-mobile-version.js"
 
 if grep -q "ANI_UPLOAD_STORE_FILE" "$GRADLE_PROPS" 2>/dev/null; then
   echo "  Signing: release upload keystore configured in $GRADLE_PROPS"

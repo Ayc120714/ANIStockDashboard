@@ -17,6 +17,7 @@ import {WatchlistScreen} from '@features/stocks/WatchlistScreen';
 import {PortfolioHubScreen} from '@features/portfolio/PortfolioHubScreen';
 import {MutualFundsScreen} from '@features/markets/MutualFundsScreen';
 import {useAppUpdatePrompt} from '@hooks/useAppUpdatePrompt';
+import {SetupAlertsProvider} from '@core/context/SetupAlertsContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -41,7 +42,8 @@ export const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer key={isAuthenticated ? 'app' : 'login'}>
+    <SetupAlertsProvider enabled={isAuthenticated && appDataReady}>
+      <NavigationContainer key={isAuthenticated ? 'app' : 'login'}>
       {!isAuthenticated ? (
         <Stack.Navigator screenOptions={{headerShown: false}}>
           <Stack.Screen name="Login" component={LoginScreen} />
@@ -72,6 +74,7 @@ export const AppNavigator = () => {
           {user?.is_super_admin ? <Stack.Screen name="Admin" component={AdminScreen} options={{title: 'Admin'}} /> : null}
         </Stack.Navigator>
       )}
-    </NavigationContainer>
+      </NavigationContainer>
+    </SetupAlertsProvider>
   );
 };

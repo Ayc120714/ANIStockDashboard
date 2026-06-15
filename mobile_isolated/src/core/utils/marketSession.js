@@ -188,6 +188,23 @@ export function getCachedMarketSession() {
   return memory;
 }
 
+/** In-memory session when still within refresh window; avoids blocking on /system/status. */
+export function getFreshCachedMarketSession() {
+  const now = Date.now();
+  if (!memory) return null;
+  const maxAge = memory.isLiveMarket ? LIVE_STATUS_REFRESH_MS : CLOSED_STATUS_REFRESH_MS;
+  if (now - memory.fetchedAt >= maxAge) return null;
+  return memory;
+}
+
+export async function resolveMarketSession({force = false} = {}) {
+  if (!force) {
+    const fresh = getFreshCachedMarketSession();
+    if (fresh) return fresh;
+  }
+  return ensureMarketSession({force});
+}
+
 export function getMarketPollingIntervalMs(liveMs, closedMs = 0) {
   const session = getCachedMarketSession();
   if (shouldPollLiveMarket(session)) return liveMs;

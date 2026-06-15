@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,6 +22,7 @@ import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {
   runScreenPayloadFetch,
   SCREEN_LIVE_POLL_MS,
@@ -95,13 +96,14 @@ export function ScreensHubScreen({navigation}) {
   const [ipoFilter, setIpoFilter] = useState('');
   const [search, setSearch] = useState('');
   const [listPage, setListPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [list, setList] = useState([]);
   const [weeklyMeta, setWeeklyMeta] = useState({pickDate: null, subtitle: ''});
   const [screenDates, setScreenDates] = useState([]);
   const [screenDate, setScreenDate] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const initialLoadDone = useRef(false);
   const screenDefaultSortKey = useMemo(() => {
     if (main === 'alpha') return 'rs';
     if (main === 'movers') return perM === 'week' ? 'week1w' : perM === 'month' ? 'month1m' : 'day1d';
@@ -116,9 +118,17 @@ export function ScreensHubScreen({navigation}) {
 
   const resetTabState = useCallback(() => {
     setErr('');
-    setList([]);
-    setWeeklyMeta({pickDate: null, subtitle: ''});
   }, []);
+
+  const applyScreensPayload = useCallback(payload => {
+    setWeeklyMeta(payload.weeklyMeta || {pickDate: null, subtitle: ''});
+    setList(Array.isArray(payload.list) ? payload.list : []);
+  }, []);
+
+  const screensHasUsable = useCallback(
+    data => Array.isArray(data?.list) && data.list.length > 0,
+    [],
+  );
 
   const selectMainTab = useCallback(
     tabId => {
@@ -152,7 +162,7 @@ export function ScreensHubScreen({navigation}) {
     })();
   }, []);
 
-  const load = useCallback(async ({forceRefresh = false} = {}) => {
+  const load = useCallback(async ({forceRefresh = false, silent = false} = {}) => {
     const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
     await runScreenPayloadFetch({
       cacheKey,
@@ -256,31 +266,45 @@ export function ScreensHubScreen({navigation}) {
           list: rows,
         };
       },
-      applyPayload: payload => {
-        setWeeklyMeta(payload.weeklyMeta || {pickDate: null, subtitle: ''});
-        setList(Array.isArray(payload.list) ? payload.list : []);
-      },
+      applyPayload: applyScreensPayload,
       setLoading,
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
-      hasUsable: data => Array.isArray(data?.list) && data.list.length > 0,
+      hasUsable: screensHasUsable,
+      silent: silent && !forceRefresh,
     });
-  }, [alphaHor, gl, ipoFilter, main, perM, perV, screenDate]);
+  }, [alphaHor, applyScreensPayload, gl, ipoFilter, main, perM, perV, screenDate, screensHasUsable]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    initialLoadDone.current = false;
+    (async () => {
+      const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
+      const hadCache = await hydrateFromPageCache(cacheKey, {
+        apply: applyScreensPayload,
+        hasUsable: screensHasUsable,
+      });
+      if (cancelled) return;
+      await load({silent: hadCache});
+      initialLoadDone.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [alphaHor, applyScreensPayload, gl, ipoFilter, load, main, perM, perV, screenDate, screensHasUsable]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!initialLoadDone.current) return undefined;
       (async () => {
         const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
         const stale = await shouldRefreshPageCache(cacheKey);
         if (stale) {
-          await load();
+          await load({silent: list.length > 0});
         }
       })();
-    }, [alphaHor, gl, ipoFilter, load, main, perM, perV, screenDate]),
+      return undefined;
+    }, [alphaHor, gl, ipoFilter, list.length, load, main, perM, perV, screenDate]),
   );
 
   useEffect(() => {
@@ -293,7 +317,7 @@ export function ScreensHubScreen({navigation}) {
       pollId = setInterval(async () => {
         await ensureMarketSession();
         if (!shouldPollLiveMarket(getCachedMarketSession())) return;
-        await load({forceRefresh: true});
+        await load({silent: true, forceRefresh: true});
       }, pollMs);
     })();
     return () => {
@@ -434,12 +458,12 @@ export function ScreensHubScreen({navigation}) {
         <Text style={styles.meta}>Generated: {weeklyMeta.pickDate}</Text>
       ) : null}
       {err ? <Text style={styles.err}>{err}</Text> : null}
-      {loading ? (
+      {loading && !list.length ? (
         <View style={styles.loader}>
           <ActivityIndicator color={AYC.accent} />
         </View>
       ) : null}
-      {!loading && main !== 'ai' ? (
+      {main !== 'ai' ? (
         <View style={styles.tableHead}>
           {main === 'trending' ? (
             <>

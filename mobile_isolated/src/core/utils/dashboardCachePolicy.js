@@ -7,7 +7,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v4-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v2',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v6',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v8',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v3',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
@@ -72,6 +72,17 @@ export function dashboardSectionsToRefresh(cached) {
   };
 }
 
+/** During NSE session, refresh volatile dashboard sections on each poll (incl. alerts). */
+export function applyLiveSessionRefreshPolicy(need, liveSession) {
+  if (!need || !liveSession) return need;
+  need.indices = true;
+  need.movers = true;
+  need.watchlist = true;
+  need.signals = true;
+  need.extras = true;
+  return need;
+}
+
 /** Trend tab: refresh only when cache is stale or grid has zero rows (not per-timeframe visible count). */
 export function shouldRefreshAdvisorTrendCache({stale = false, trendHasData = false} = {}) {
   return Boolean(stale || !trendHasData);
@@ -80,3 +91,11 @@ export function shouldRefreshAdvisorTrendCache({stale = false, trendHasData = fa
 export function shouldForceAdvisorTrendNetwork({stale = false, trendHasData = false} = {}) {
   return !trendHasData || stale;
 }
+
+/** Prior cache keys — cleared on upgrade so empty/stale shells are not reused. */
+export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [
+  '@ani/mobile/page-cache/advisor-hub-trend-v4',
+  '@ani/mobile/page-cache/advisor-hub-trend-v5',
+  '@ani/mobile/page-cache/advisor-hub-trend-v6',
+  '@ani/mobile/page-cache/advisor-hub-trend-v7',
+];

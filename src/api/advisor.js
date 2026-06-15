@@ -412,7 +412,7 @@ export const fetchAlerts = async (filters = {}) => {
   if (filters.symbol) params.set('symbol', filters.symbol);
   if (filters.limit) params.set('limit', filters.limit);
   const qs = params.toString();
-  const data = await apiGet(`/advisor/alerts${qs ? '?' + qs : ''}`, { cache: 'no-store' });
+  const data = await apiGet(`/advisor/alerts${qs ? '?' + qs : ''}`, { cache: 'no-store', skipCache: true });
   return data?.data ?? [];
 };
 
@@ -427,7 +427,7 @@ export const fetchSpecialAlerts = async ({
   params.set('current_day_only', currentDayOnly ? 'true' : 'false');
   params.set('include_history', includeHistory ? 'true' : 'false');
   if (symbol && String(symbol).trim()) params.set('symbol', String(symbol).trim());
-  const data = await apiGet(`/advisor/alerts/special?${params.toString()}`, { cache: 'no-store' });
+  const data = await apiGet(`/advisor/alerts/special?${params.toString()}`, { cache: 'no-store', skipCache: true });
   return data?.data ?? [];
 };
 

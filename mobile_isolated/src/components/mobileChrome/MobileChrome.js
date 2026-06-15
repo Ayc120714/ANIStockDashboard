@@ -4,7 +4,7 @@ import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAuth} from '@core/auth/AuthContext';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {resolveTopInset} from '@core/utils/safeAreaTop';
-import {useAdvisorTableChangeAlerts} from '@hooks/useAdvisorTableChangeAlerts';
+import {useSetupAlerts} from '@core/context/SetupAlertsContext';
 import {useNotificationInbox} from '@hooks/useNotificationInbox';
 import {AppHeaderBar} from './AppHeaderBar';
 import {HamburgerMenu} from './HamburgerMenu';
@@ -30,11 +30,11 @@ export function MobileChrome({navigation, children}) {
     isSuperAdmin,
   });
 
-  const {pollTableAlerts} = useAdvisorTableChangeAlerts({enabled: isAuthenticated});
+  const {refreshSetupAlerts} = useSetupAlerts();
 
   const openInbox = () => {
     setInboxOpen(true);
-    pollTableAlerts().finally(() => load());
+    refreshSetupAlerts().finally(() => load());
   };
 
   return (
@@ -66,7 +66,7 @@ export function MobileChrome({navigation, children}) {
         loading={loading}
         error={error}
         onRefresh={() => {
-          pollTableAlerts().finally(() => load());
+          refreshSetupAlerts().finally(() => load());
         }}
         onMarkItemRead={markItemRead}
         onMarkAllRead={markAllRead}

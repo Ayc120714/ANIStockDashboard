@@ -194,7 +194,6 @@ export async function prefetchAppShellData() {
       () => prefetchWatchlist('short_term'),
       () => prefetchWatchlist('long_term'),
       () => prefetchAdvisorSignals(),
-      () => prefetchAdvisorTrend(),
       () => prefetchAdvisorChart(),
       () => prefetchSignalsTab(),
       () => prefetchScreensHub('volume', 'gainers', 'day', 'day'),

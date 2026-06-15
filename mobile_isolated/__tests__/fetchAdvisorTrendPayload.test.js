@@ -6,14 +6,10 @@ jest.mock('@core/api/services/advisorService', () => ({
   },
 }));
 
-jest.mock('@core/utils/safeFetch', () => ({
-  safeFetch: jest.fn(async fn => fn()),
-}));
-
 import {fetchAdvisorTrendPayload, hasUsableAdvisorTrendPayload} from '@core/utils/advisorHubCache';
 import {apiTrendEnvelope, buildTrendGrid, sampleTrendRow} from './fixtures/trendGridFixtures';
 
-describe('fetchAdvisorTrendPayload v1.2.43', () => {
+describe('fetchAdvisorTrendPayload', () => {
   beforeEach(() => {
     mockFetchBuyTier.mockReset();
   });
@@ -29,6 +25,9 @@ describe('fetchAdvisorTrendPayload v1.2.43', () => {
     expect(result.daily.B1.count).toBe(1);
     expect(result.trendGrid).toBeUndefined();
     expect(hasUsableAdvisorTrendPayload(result)).toBe(true);
+    expect(mockFetchBuyTier).toHaveBeenCalledWith(
+      expect.objectContaining({symbol_limit: 400, timeoutMs: 120_000}),
+    );
   });
 
   it('throws when API returns empty tier grid so empty shells are not cached', async () => {

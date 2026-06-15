@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {v4 as uuidv4} from 'uuid';
 import {env, buildUrl} from '@core/config/env';
 import {STORAGE_KEYS} from '@core/storage/keys';
-import {decodeObfuscatedPayload} from '@core/utils/obfuscation';
+import {decodeObfuscatedPayload, isObfuscatedEnvelope} from '@core/utils/obfuscation';
 import {formatHttpStatusMessage, isRetryableGatewayStatus, sanitizeApiErrorText} from '@core/utils/apiHttpErrors';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {withRequestGate} from '@core/api/requestGate';
@@ -170,7 +170,11 @@ export const apiRequest = async (endpoint, options = {}) =>
     const contentType = intercepted.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const parsed = await intercepted.json();
-      return await decodeObfuscatedPayload(parsed, bearerToken);
+      const decoded = await decodeObfuscatedPayload(parsed, bearerToken);
+      if (isObfuscatedEnvelope(decoded)) {
+        throw new Error('Unable to decode API response. Pull down to refresh or sign in again.');
+      }
+      return decoded;
     }
     return intercepted.text();
   }

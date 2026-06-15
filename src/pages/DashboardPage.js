@@ -17,6 +17,7 @@ import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs, isPageCacheStale, shouldPollLiveMarket } from '../utils/marketSession';
+import { applyLiveSessionRefreshPolicy, dashboardSectionsToRefresh } from '../utils/dashboardCachePolicy';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 
@@ -50,22 +51,6 @@ function isDashboardCacheIncomplete(cached) {
     return false;
   }
   return !Array.isArray(cached.watchlist);
-}
-
-function dashboardSectionsToRefresh(cached) {
-  const payload = cached || {};
-  return {
-    indices: !payload.indices,
-    movers: !Array.isArray(payload.gainers) || !Array.isArray(payload.losers),
-    watchlist: !Array.isArray(payload.watchlist),
-    signals: !Array.isArray(payload.signals),
-    weekly: !Array.isArray(payload.weeklyData),
-    extras:
-      !Array.isArray(payload.alerts)
-      || !Array.isArray(payload.ratings)
-      || !Array.isArray(payload.trendingStocks),
-    optional: !Array.isArray(payload.sectors) || !Array.isArray(payload.obData),
-  };
 }
 
 const settledValue = (result, fallback) => (result?.status === 'fulfilled' ? result.value : fallback);
@@ -1406,6 +1391,7 @@ function DashboardPage() {
       }
 
       const need = dashboardSectionsToRefresh(cached);
+      applyLiveSessionRefreshPolicy(need, liveSession);
       const partial = {};
 
       const phase1 = await Promise.allSettled([
@@ -1507,10 +1493,7 @@ function DashboardPage() {
       await loadAll({ forceSpinner: true });
       if (cancelled) return;
       const session = await ensureMarketSession();
-      const pollMs = getMarketPollingIntervalMs(
-        session.isWebSocketStreaming ? 45_000 : 90_000,
-        0,
-      );
+      const pollMs = getMarketPollingIntervalMs(30_000, 0);
       if (pollMs > 0 && session.isLiveMarket) {
         timer = setInterval(() => loadAll({ forceSpinner: false }), pollMs);
       }

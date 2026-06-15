@@ -159,14 +159,11 @@ export async function fetchAdvisorSignalsPayload({forceRefresh = false} = {}) {
 }
 
 export async function fetchAdvisorTrendPayload({forceRefresh = false} = {}) {
-  const res = await safeFetch(
-    () =>
-      advisorService.fetchBuyTierCardGrid({
-        symbol_limit: ADVISOR_WEB_LIMITS.buyTierSymbolLimit,
-        refresh: forceRefresh,
-      }),
-    {label: 'Trend reversal', ...ADVISOR_FETCH},
-  );
+  const res = await advisorService.fetchBuyTierCardGrid({
+    symbol_limit: ADVISOR_WEB_LIMITS.buyTierSymbolLimit,
+    refresh: forceRefresh,
+    timeoutMs: API_TIMEOUT_MS.advisor,
+  });
   const grid = normalizeTrendGrid(res);
   if (!grid || countTrendGridRows(grid) === 0) {
     throw new Error('No trend reversal matches available right now.');

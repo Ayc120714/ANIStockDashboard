@@ -8,9 +8,14 @@ import {brokersService} from '@core/api/services/brokersService';
 import {advisorService} from '@core/api/services/advisorService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {useAuth} from '@core/auth/AuthContext';
-import {readPageCache, clearPageCache} from '@core/storage/pageCache';
+import {readPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
-import {hasDashboardMovers, isDashboardCacheIncomplete, MOBILE_PAGE_CACHE_KEYS, dashboardSectionsToRefresh} from '@core/utils/dashboardCachePolicy';
+import {
+  applyLiveSessionRefreshPolicy,
+  hasDashboardMovers,
+  MOBILE_PAGE_CACHE_KEYS,
+  dashboardSectionsToRefresh,
+} from '@core/utils/dashboardCachePolicy';
 import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
 import {dedupeWatchlistBySymbol} from '@core/utils/watchlistPayload';
 import {
@@ -120,7 +125,7 @@ function applyDashboardState(setData, setBrokerConnected, setHoldings, cached) {
 }
 
 export const DashboardScreen = ({navigation}) => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState({});
   const [holdings, setHoldings] = useState([]);
@@ -157,48 +162,41 @@ export const DashboardScreen = ({navigation}) => {
       setLoading(false);
       return;
     }
-    if (!silent && !cacheHydrated.current) {
-      setLoading(true);
-    } else if (forceRefresh) {
-      setRefreshing(true);
-    }
     setError('');
 
     let cachedPayload = {};
     let liveSession = false;
 
     try {
-      const [cachedWrap, session] = await Promise.all([
-        readPageCache(DASHBOARD_CACHE_KEY),
-        ensureMarketSession(),
-      ]);
+      const cachedWrap = await readPageCache(DASHBOARD_CACHE_KEY);
       const cached = cachedWrap?.data || null;
       cachedPayload = cached && typeof cached === 'object' ? cached : {};
-      liveSession = shouldPollLiveMarket(session);
-      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session);
-      const cacheIncomplete = isDashboardCacheIncomplete(cached);
 
       if (cached && !forceRefresh && hasDashboardContent(cachedPayload)) {
         applyDashboardState(setData, setBrokerConnected, setHoldings, cached);
         cacheHydrated.current = true;
         setLoading(false);
+      } else if (!silent && !cacheHydrated.current) {
+        setLoading(true);
+      } else if (forceRefresh) {
+        setRefreshing(true);
       }
 
-      if (liveSession || cacheStale || cacheIncomplete) {
-        if (cacheStale || cacheIncomplete) {
-          await clearPageCache(DASHBOARD_CACHE_KEY);
-          if (!hasDashboardContent(cachedPayload)) {
-            cachedPayload = {};
-          }
-        }
+      const session = getCachedMarketSession() || (await ensureMarketSession());
+      liveSession = shouldPollLiveMarket(session);
+      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session);
+
+      if (!forceRefresh && cacheHydrated.current && !liveSession && !cacheStale) {
+        refreshBrokerHoldings({silent: true});
+        return;
       }
 
       const need = dashboardSectionsToRefresh(cachedPayload);
-      if (liveSession) {
-        need.indices = true;
-        need.movers = true;
-        need.watchlist = true;
-        need.signals = true;
+      applyLiveSessionRefreshPolicy(need, liveSession);
+      if (!liveSession && cacheHydrated.current && !forceRefresh) {
+        need.weekly = false;
+        need.extras = false;
+        need.optional = false;
       }
       const mergePartial = partial => {
         setData(prev => ({...prev, ...partial}));
@@ -359,18 +357,25 @@ export const DashboardScreen = ({navigation}) => {
     }
   }, [isAuthenticated, refreshBrokerHoldings, userId]);
 
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
     if (!isAuthenticated) return undefined;
     let mounted = true;
     (async () => {
-      const cached = await readDashboardCache();
+      const [pageCached, legacyCached] = await Promise.all([
+        readPageCache(DASHBOARD_CACHE_KEY),
+        readDashboardCache(),
+      ]);
       if (!mounted) return;
-      if (cached?.data && hasDashboardContent(cached.data)) {
+      const payload = pageCached?.data || legacyCached?.data;
+      if (payload && hasDashboardContent(payload)) {
         cacheHydrated.current = true;
-        applyDashboardState(setData, setBrokerConnected, setHoldings, cached);
+        applyDashboardState(setData, setBrokerConnected, setHoldings, legacyCached || {data: payload});
         setLoading(false);
       }
-      loadData({silent: cacheHydrated.current});
+      await loadData({silent: cacheHydrated.current});
+      initialLoadDone.current = true;
     })();
     return () => {
       mounted = false;
@@ -379,8 +384,9 @@ export const DashboardScreen = ({navigation}) => {
 
   useFocusEffect(
     useCallback(() => {
+      if (!initialLoadDone.current) return undefined;
       (async () => {
-        const session = await ensureMarketSession();
+        const session = getCachedMarketSession() || (await ensureMarketSession());
         const cachedWrap = await readPageCache(DASHBOARD_CACHE_KEY);
         const stale = isPageCacheStale(cachedWrap?.updatedAt, session);
         const cachedPayload = cachedWrap?.data || {};
@@ -391,6 +397,7 @@ export const DashboardScreen = ({navigation}) => {
           refreshBrokerHoldings({forceLive: shouldPollLiveMarket(session), silent: true});
         }
       })();
+      return undefined;
     }, [loadData, refreshBrokerHoldings]),
   );
 

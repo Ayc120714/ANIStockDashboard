@@ -87,8 +87,8 @@ android {
         applicationId "com.anistockmobiletemplate"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 31
-        versionName "1.2.43"
+        versionCode 36
+        versionName "1.2.51"
     }
     signingConfigs {
         debug {

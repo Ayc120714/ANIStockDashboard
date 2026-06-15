@@ -65,7 +65,7 @@ function ChipPicker({options, value, onSelect}) {
 
 export function WatchlistSection({navigation, listType = 'long_term', embedded = false}) {
   const horizon = listType === 'short_term' ? 'short_term' : 'long_term';
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState([]);
   const [loadError, setLoadError] = useState('');
@@ -115,10 +115,22 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       if (hasCached) {
         setRows(cachedRows);
         setLoading(false);
-      } else {
-        setLoading(true);
+        void (async () => {
+          try {
+            const wl = await fetchWatchlistRows();
+            if (cancelled) return;
+            const baseRows = Array.isArray(wl) ? wl : [];
+            setRows(baseRows);
+            await writePageCache(cacheKey, baseRows);
+            mergeSignalsIntoRows(baseRows);
+          } catch {
+            /* keep cached rows */
+          }
+        })();
+        return;
       }
 
+      setLoading(true);
       try {
         const wl = await fetchWatchlistRows();
         if (cancelled) return;
@@ -130,10 +142,8 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
         mergeSignalsIntoRows(baseRows);
       } catch (e) {
         if (cancelled) return;
-        if (!hasCached) {
-          setRows([]);
-          setLoadError(e?.message || 'Failed to load watchlist.');
-        }
+        setRows([]);
+        setLoadError(e?.message || 'Failed to load watchlist.');
         setLoading(false);
       }
     })();

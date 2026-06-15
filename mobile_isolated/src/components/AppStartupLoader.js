@@ -2,44 +2,45 @@ import React, {useEffect, useRef} from 'react';
 import {
   bootstrapCriticalDashboard,
   startAppShellAutoRefresh,
-  startSignalsWarm,
   stopAppShellAutoRefresh,
-  warmAppShellInBackground,
 } from '@core/bootstrap/bootstrapAppShellData';
 import {registerMobileInstall} from '@core/api/services/mobileService';
+import {readPageCache} from '@core/storage/pageCache';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {readDashboardCache} from '@core/storage/dashboardCache';
 import {AycSplashScreen} from '@components/AycSplashScreen';
 
-const RETRY_MS = 3000;
-
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
 /**
- * Blocks the main app until dashboard-critical data is ready.
- * Shows only the AYC blue brand splash — no status text or partial UI.
+ * Opens the main app as soon as cached shell data exists.
+ * Network bootstrap runs in the background — never blocks the UI on API latency.
  */
 export function AppStartupLoader({onReady}) {
   const refreshStartedRef = useRef(false);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
+    const finishStartup = () => {
+      if (cancelled || readyRef.current) return;
+      readyRef.current = true;
+      registerMobileInstall().catch(() => {});
+      // Tab screens load on demand from cache — avoid startup warm stampeding the API gate.
+      startAppShellAutoRefresh();
+      refreshStartedRef.current = true;
+      onReady?.();
+    };
+
     (async () => {
-      while (!cancelled) {
-        try {
-          startSignalsWarm().catch(() => {});
-          await bootstrapCriticalDashboard();
-          if (cancelled) return;
-          registerMobileInstall().catch(() => {});
-          warmAppShellInBackground().catch(() => {});
-          startAppShellAutoRefresh();
-          refreshStartedRef.current = true;
-          onReady?.();
-          return;
-        } catch {
-          if (cancelled) return;
-          await sleep(RETRY_MS);
-        }
-      }
+      await Promise.all([
+        readPageCache(MOBILE_PAGE_CACHE_KEYS.dashboard),
+        readDashboardCache(),
+      ]);
+      if (cancelled) return;
+
+      // Never block the UI on network — tabs hydrate from cache and refresh in background.
+      finishStartup();
+      bootstrapCriticalDashboard().catch(() => {});
     })();
 
     return () => {

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ALWAYS_FETCH_FROM_DB} from '@core/config/dataRefreshPolicy';
 import {countTrendGridRows} from '@core/utils/advisorHubCache';
-import {ensureMarketSession, shouldSkipNetworkForClosedMarket} from '@core/utils/marketSession';
+import {ensureMarketSession, getCachedMarketSession, getFreshCachedMarketSession, shouldSkipNetworkForClosedMarket} from '@core/utils/marketSession';
 
 export function cacheHasUsableData(data) {
   if (data == null) return false;
@@ -79,7 +79,7 @@ export async function clearPageCache(key) {
 /** True when off-market and an existing cache is fresh enough to avoid refetch. */
 export async function shouldUseCachedPageDataOnly(cacheKey) {
   if (ALWAYS_FETCH_FROM_DB) return false;
-  await ensureMarketSession();
+  const session = getFreshCachedMarketSession() || getCachedMarketSession() || (await ensureMarketSession());
   const cached = await readPageCache(cacheKey);
   if (!cached || cached.data == null || !cacheHasUsableData(cached.data)) {
     return false;

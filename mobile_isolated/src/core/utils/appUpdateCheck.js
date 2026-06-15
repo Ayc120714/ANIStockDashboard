@@ -66,12 +66,47 @@ export async function fetchAppUpdateManifest({timeoutMs = 8000} = {}) {
       version: String(data.version || '').trim(),
       versionCode: Number(data.versionCode) || 0,
       apkUrl: String(data.apkUrl || APP_UPDATE_APK_URL).trim(),
-      releaseNotes: String(data.releaseNotes || '').trim(),
-      builtAt: String(data.builtAt || '').trim(),
+      releaseNotes: String(data.releaseNotes || data.release_notes || '').trim(),
+      builtAt: String(data.builtAt || data.built_at || '').trim(),
     };
   } catch {
     return null;
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Diagnostics for auto-update connectivity (Admin / support).
+ * Returns whether DOWNLOAD.json is reachable and if a newer APK is published.
+ */
+export async function checkAppUpdateConnectivity({timeoutMs = 8000} = {}) {
+  const started = Date.now();
+  const manifest = await fetchAppUpdateManifest({timeoutMs});
+  const latencyMs = Date.now() - started;
+
+  if (!manifest) {
+    return {
+      ok: false,
+      latencyMs,
+      manifestUrl: APP_UPDATE_MANIFEST_URL,
+      installed: {version: APP_VERSION_NAME, versionCode: APP_VERSION_CODE},
+      updateAvailable: false,
+      error: 'Could not reach update manifest (network, DNS, or server).',
+    };
+  }
+
+  return {
+    ok: true,
+    latencyMs,
+    manifestUrl: APP_UPDATE_MANIFEST_URL,
+    installed: {version: APP_VERSION_NAME, versionCode: APP_VERSION_CODE},
+    published: {
+      version: manifest.version,
+      versionCode: manifest.versionCode,
+      builtAt: manifest.builtAt,
+      apkUrl: manifest.apkUrl,
+    },
+    updateAvailable: isAppUpdateAvailable(manifest),
+  };
 }

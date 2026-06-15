@@ -23,15 +23,18 @@ export const alertsService = {
   updatePriceAlert: (id, payload) => apiPost(`/price-alerts/${encodeURIComponent(String(id))}`, payload),
   deletePriceAlert: id => apiRequest(`/price-alerts/${encodeURIComponent(String(id))}`, {method: 'DELETE'}),
   fetchAdvisorAlerts: async (opts = {}) =>
-    parseAlertsResponse(await apiGet('/advisor/alerts', {timeoutMs: opts.timeoutMs ?? T.screen})),
+    parseAlertsResponse(await apiGet('/advisor/alerts', {timeoutMs: opts.timeoutMs ?? T.screen, cache: 'no-store'})),
   fetchLiveAdvisorAlerts: async ({source, severity, symbol, limit = 80, timeoutMs} = {}) =>
     parseAlertsResponse(
       await apiGet(`/advisor/alerts${toQuery({source, severity, symbol, limit})}`, {
         timeoutMs: timeoutMs ?? T.screen,
+        cache: 'no-store',
       }),
     ),
   createDummyDemoAlert: (opts = {}) =>
     apiPost('/advisor/alerts/dummy-demo', {}, {timeoutMs: opts.timeoutMs ?? T.screen}),
+  markAlertRead: alertId =>
+    apiRequest(`/advisor/alerts/${encodeURIComponent(String(alertId))}/read`, {method: 'PUT'}),
   fetchSpecialAlerts: ({
     symbol,
     limit = 200,
@@ -41,7 +44,7 @@ export const alertsService = {
   } = {}) =>
     apiGet(
       `/advisor/alerts/special${toQuery({symbol, limit, current_day_only: currentDayOnly, include_history: includeHistory})}`,
-      {timeoutMs: timeoutMs ?? T.screen},
+      {timeoutMs: timeoutMs ?? T.screen, cache: 'no-store'},
     ).then(res => extractApiRows(res, ['data', 'alerts'])),
   fetchPriceAlertTriggers: async ({userId, limit = 200, timeoutMs} = {}) => {
     if (!userId) return [];

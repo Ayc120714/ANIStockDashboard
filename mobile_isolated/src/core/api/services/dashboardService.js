@@ -77,7 +77,9 @@ export const dashboardService = {
   },
   fetchAdvisorAlerts: async ({limit, timeoutMs, ...opts} = {}) => {
     const q = limit != null ? `?limit=${encodeURIComponent(String(limit))}` : '';
-    return parseAlertsResponse(await apiGet(`/advisor/alerts${q}`, {...opts, timeoutMs: timeoutMs ?? T.screen}));
+    return parseAlertsResponse(
+      await apiGet(`/advisor/alerts${q}`, {...opts, timeoutMs: timeoutMs ?? T.screen, cache: 'no-store'}),
+    );
   },
   fetchAdvisorRatings: async ({limit, recommendation, horizon, timeoutMs, ...opts} = {}) => {
     const params = new URLSearchParams();

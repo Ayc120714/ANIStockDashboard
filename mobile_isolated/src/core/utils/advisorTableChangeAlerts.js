@@ -45,6 +45,31 @@ export async function saveAdvisorTableChangeEvents(events) {
   await AsyncStorage.setItem(STORAGE_KEYS.advisorTableChangeEvents, JSON.stringify(trimmed));
 }
 
+/** Persist read state for a stored table-change event so polls do not resurrect it as unread. */
+export async function markTableChangeEventRead(eventId) {
+  const id = String(eventId || '').trim();
+  if (!id) return;
+  const events = await loadAdvisorTableChangeEvents();
+  let changed = false;
+  const updated = events.map(event => {
+    if (String(event?.id || '') !== id) return event;
+    if (event.isRead) return event;
+    changed = true;
+    return {...event, isRead: true};
+  });
+  if (changed) {
+    await saveAdvisorTableChangeEvents(updated);
+  }
+}
+
+export async function markAllTableChangeEventsRead() {
+  const events = await loadAdvisorTableChangeEvents();
+  if (!events.length) return;
+  const allRead = events.every(event => event.isRead);
+  if (allRead) return;
+  await saveAdvisorTableChangeEvents(events.map(event => ({...event, isRead: true})));
+}
+
 export function buildTableChangeEvent(tableKey, symbol, detectedAt = nowIso()) {
   const meta = ADVISOR_TABLE_META[tableKey] || {};
   const ts = detectedAt || nowIso();

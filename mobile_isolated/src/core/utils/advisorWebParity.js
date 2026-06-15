@@ -7,7 +7,7 @@ export const ADVISOR_WEB_LIMITS = {
   monthlyMacd: 300,
   customRs: 500,
   mondayPwh: 300,
-  buyTierSymbolLimit: 800,
+  buyTierSymbolLimit: 400,
   chartSymbolLimit: 800,
   chartRowLimit: 300,
 };

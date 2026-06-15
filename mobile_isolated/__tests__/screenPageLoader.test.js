@@ -16,6 +16,8 @@ import {
 jest.mock('@core/utils/marketSession', () => ({
   ensureMarketSession: jest.fn(async () => ({isLiveMarket: true, isTradingDay: true})),
   getCachedMarketSession: jest.fn(() => ({isLiveMarket: true, isTradingDay: true})),
+  getFreshCachedMarketSession: jest.fn(() => ({isLiveMarket: true, isTradingDay: true})),
+  resolveMarketSession: jest.fn(async () => ({isLiveMarket: true, isTradingDay: true})),
   getMarketPollingIntervalMs: jest.fn((liveMs, closedMs) => liveMs),
   isPageCacheStale: jest.fn(() => true),
   shouldPollLiveMarket: jest.fn(session => Boolean(session?.isLiveMarket)),

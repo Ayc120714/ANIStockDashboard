@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -36,6 +36,7 @@ import {
   getMarketPollingIntervalMs,
   shouldPollLiveMarket,
 } from '@core/utils/marketSession';
+import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {normalizeMarketIndicesCards} from '@core/utils/marketIndicesCards';
 import {resolveSectorSubsectorMapping} from '@core/utils/sectorSubsectorMap';
@@ -96,12 +97,13 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
   const [stocksModal, setStocksModal] = useState({visible: false, subsector: '', sector: ''});
   const [err, setErr] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const initialLoadDone = useRef(false);
   const outlookSortKey = tab === 'sub' ? 'all' : tab === 'sector' ? 'day1d' : null;
   const {sortConfig, onSort, resetSort} = useTableSort(outlookSortKey, false);
 
   const pageSize = 5;
 
-  const load = useCallback(async ({forceRefresh = false} = {}) => {
+  const load = useCallback(async ({forceRefresh = false, silent = false} = {}) => {
     if (!isStockOutlookTab(tab)) return;
     const cacheKey = MOBILE_PAGE_CACHE_KEYS.stocksOutlook(tab);
     await runScreenPayloadFetch({
@@ -134,8 +136,33 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
       hasUsable: data => outlookHasUsable(tab, data),
+      silent: silent && !forceRefresh,
     });
   }, [tab]);
+
+  useEffect(() => {
+    if (!isStockOutlookTab(tab)) return undefined;
+    let cancelled = false;
+    initialLoadDone.current = false;
+    (async () => {
+      const cacheKey = MOBILE_PAGE_CACHE_KEYS.stocksOutlook(tab);
+      const hadCache = await hydrateFromPageCache(cacheKey, {
+        apply: payload => {
+          setIndices(payload.indices || []);
+          setFii(payload.fii ?? null);
+          setSectorRows(payload.sectorRows || []);
+          setGrouped(payload.grouped ?? null);
+        },
+        hasUsable: data => outlookHasUsable(tab, data),
+      });
+      if (cancelled) return;
+      await load({silent: hadCache});
+      initialLoadDone.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load, tab]);
 
   const selectTab = useCallback(
     nextTab => {
@@ -182,22 +209,18 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
     }
   }, [load]);
 
-  useEffect(() => {
-    if (!isStockOutlookTab(tab)) return;
-    load();
-  }, [load, tab]);
-
   useFocusEffect(
     useCallback(() => {
-      if (!isStockOutlookTab(tab)) return;
+      if (!isStockOutlookTab(tab) || !initialLoadDone.current) return undefined;
       (async () => {
         const cacheKey = MOBILE_PAGE_CACHE_KEYS.stocksOutlook(tab);
         const stale = await shouldRefreshPageCache(cacheKey);
         if (stale) {
-          await load({forceRefresh: false});
+          await load({silent: indices.length > 0 || sectorRows.length > 0 || grouped != null});
         }
       })();
-    }, [load, tab]),
+      return undefined;
+    }, [grouped, indices.length, load, sectorRows.length, tab]),
   );
 
   useEffect(() => {
@@ -210,7 +233,7 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
       pollId = setInterval(async () => {
         await ensureMarketSession();
         if (!shouldPollLiveMarket(getCachedMarketSession())) return;
-        await load({forceRefresh: true});
+        await load({silent: true, forceRefresh: true});
       }, pollMs);
     })();
     return () => {
@@ -531,7 +554,9 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
         onChangeText={t => { setSearch(t); setPage(1); }}
       />
       {err ? <Text style={styles.err}>{err}</Text> : null}
-      {busy ? <ActivityIndicator color={AYC.accent} style={{marginVertical: 12}} /> : null}
+      {busy && !indices.length && !sectorRows.length && !grouped?.data?.length ? (
+        <ActivityIndicator color={AYC.accent} style={{marginVertical: 12}} />
+      ) : null}
       {!busy && tab === 'market' ? renderMarket() : null}
       {!busy && tab === 'sector' ? renderSector() : null}
       {!busy && tab === 'sub' ? renderSub() : null}

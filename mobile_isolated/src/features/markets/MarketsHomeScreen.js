@@ -14,6 +14,7 @@ import {useTableSort} from '@hooks/useTableSort';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {navigateToMainTab} from '@nav/navigationHelpers';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 
 const TABS = [
@@ -24,7 +25,7 @@ const TABS = [
 
 export function MarketsHomeScreen({navigation}) {
   const [tab, setTab] = useState('market');
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState([]);
   const [sectorRows, setSectorRows] = useState([]);
@@ -34,7 +35,7 @@ export function MarketsHomeScreen({navigation}) {
   const tabSortKey = tab === 'subsector' ? 'all' : 'day1d';
   const {sortConfig, onSort, resetSort} = useTableSort(tabSortKey, false);
 
-  const load = useCallback(async ({forceRefresh = false} = {}) => {
+  const load = useCallback(async ({forceRefresh = false, silent = false} = {}) => {
     const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
     await runScreenPayloadFetch({
       cacheKey,
@@ -67,8 +68,34 @@ export function MarketsHomeScreen({navigation}) {
         if (tab === 'sector') return data?.sectorRows?.length > 0;
         return data?.subRows?.length > 0;
       },
+      silent: silent && !forceRefresh,
     });
   }, [tab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
+      const hadCache = await hydrateFromPageCache(cacheKey, {
+        apply: payload => {
+          setRows(payload.rows || []);
+          setFii(payload.fii ?? null);
+          setSectorRows(payload.sectorRows || []);
+          setSubRows(payload.subRows || []);
+        },
+        hasUsable: data => {
+          if (tab === 'market') return (data?.rows?.length > 0) || data?.fii != null;
+          if (tab === 'sector') return data?.sectorRows?.length > 0;
+          return data?.subRows?.length > 0;
+        },
+      });
+      if (cancelled) return;
+      await load({silent: hadCache});
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load, tab]);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,7 +103,7 @@ export function MarketsHomeScreen({navigation}) {
         const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
         const stale = await shouldRefreshPageCache(cacheKey);
         if (stale) {
-          await load();
+          await load({silent: list.length > 0 || fii != null});
         }
       })();
     }, [load, tab]),
@@ -141,7 +168,7 @@ export function MarketsHomeScreen({navigation}) {
           ))}
         </View>
 
-        {busy ? <ActivityIndicator color={AYC.accent} /> : null}
+        {busy && !list.length && !fii ? <ActivityIndicator color={AYC.accent} /> : null}
         {error ? <Text style={styles.err}>{error}</Text> : null}
 
         {tab === 'market' ? (

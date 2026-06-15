@@ -16,6 +16,10 @@ if [[ ! -f "$APK" ]]; then
   exit 1
 fi
 
+VERSIONED_APK_DIR="$ROOT/mobile"
+mkdir -p "$VERSIONED_APK_DIR"
+cp -f "$APK" "$VERSIONED_APK_DIR/ani-stock-release-v${VERSION_NAME}.apk"
+
 SHA=$(sha256sum "$APK" | awk '{print $1}')
 SIZE=$(stat -c '%s' "$APK")
 BUILT_AT=$(date -Iseconds)

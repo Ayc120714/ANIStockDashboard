@@ -20,12 +20,13 @@ import {normalizeMarketIndicesCards} from '@core/utils/marketIndicesCards';
 import {parseStockListResponse} from '@core/utils/stockListPayload';
 import {
   hasDashboardMovers,
+  hasDashboardUsableContent,
   MOBILE_PAGE_CACHE_KEYS,
 } from '@core/utils/dashboardCachePolicy';
 import {readPageCache, writePageCache} from '@core/storage/pageCache';
 import {fetchWithRetry} from '@core/utils/fetchWithRetry';
 import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
-import {writeDashboardCache} from '@core/storage/dashboardCache';
+import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
 
 const T = API_TIMEOUT_MS.screen;
 const HEAVY = API_TIMEOUT_MS.screenHeavy;
@@ -58,8 +59,13 @@ export async function bootstrapCriticalDashboard({onProgress} = {}) {
   onProgress?.('Loading indices & market movers…');
 
   const cached = await readPageCache(MOBILE_PAGE_CACHE_KEYS.dashboard);
-  if (hasDashboardMovers(cached?.data)) {
+  if (hasDashboardUsableContent(cached?.data)) {
     return cached.data;
+  }
+
+  const legacy = await readDashboardCache();
+  if (hasDashboardUsableContent(legacy?.data)) {
+    return legacy.data;
   }
 
   const [indicesRaw, gainersRaw, losersRaw] = await Promise.all([
@@ -218,10 +224,28 @@ async function warmSignalsBundle({onProgress}) {
 
 async function warmAdvisorHubBundle({onProgress}) {
   onProgress?.('Advisor tables…');
+  const [sigCached, trendCached, chartCached] = await Promise.all([
+    readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals),
+    readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend),
+    readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubChart),
+  ]);
+
+  const needSignals = !hasUsableAdvisorSignalsPayload(sigCached?.data);
+  const needTrend = !hasUsableAdvisorTrendPayload(trendCached?.data);
+  const needChart = !hasUsableAdvisorChartPayload(chartCached?.data);
+
+  if (!needSignals && !needTrend && !needChart) {
+    return {
+      signals: sigCached.data,
+      trend: trendCached.data,
+      chart: chartCached.data,
+    };
+  }
+
   const [signals, trend, chart] = await Promise.allSettled([
-    fetchAdvisorSignalsPayload(),
-    fetchAdvisorTrendPayload(),
-    fetchAdvisorChartPayload(),
+    needSignals ? fetchAdvisorSignalsPayload() : Promise.resolve(sigCached?.data),
+    needTrend ? fetchAdvisorTrendPayload({forceRefresh: false}) : Promise.resolve(trendCached?.data),
+    needChart ? fetchAdvisorChartPayload({forceRefresh: false}) : Promise.resolve(chartCached?.data),
   ]);
 
   if (signals.status === 'fulfilled') {
@@ -318,15 +342,6 @@ export async function warmAppShellInBackground({onProgress} = {}) {
     } catch {
       /* advisor warm is best-effort */
     }
-    for (const batch of PARALLEL_WARM_BATCHES) {
-      await Promise.all(
-        batch.map(step =>
-          step({onProgress}).catch(() => {
-            /* per-step best-effort */
-          }),
-        ),
-      );
-    }
     return {ok: true};
   })().finally(() => {
     inflightWarm = null;
@@ -340,7 +355,6 @@ export function startAppShellAutoRefresh() {
   const tick = async () => {
     try {
       await bootstrapCriticalDashboard();
-      await warmAppShellInBackground();
     } catch {
       /* next tick retries */
     }

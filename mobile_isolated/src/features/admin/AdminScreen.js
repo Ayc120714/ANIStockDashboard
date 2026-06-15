@@ -14,6 +14,8 @@ import {useAuth} from '@core/auth/AuthContext';
 import {isAppAdmin} from '@core/auth/adminAccess';
 import {authService} from '@core/api/services/authService';
 import {fetchMobileInstallStats} from '@core/api/services/mobileService';
+import {checkAppUpdateConnectivity} from '@core/utils/appUpdateCheck';
+import {APP_VERSION_NAME} from '@core/config/appVersion';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
@@ -119,6 +121,8 @@ export const AdminScreen = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [installStats, setInstallStats] = useState(null);
+  const [updateCheck, setUpdateCheck] = useState(null);
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,6 +146,26 @@ export const AdminScreen = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const runUpdateCheck = useCallback(async () => {
+    setUpdateCheckBusy(true);
+    try {
+      const result = await checkAppUpdateConnectivity();
+      setUpdateCheck(result);
+      const lines = [
+        result.ok ? 'Manifest reachable' : result.error,
+        `Installed: v${result.installed.version} (${result.installed.versionCode})`,
+        result.published
+          ? `Published: v${result.published.version} (${result.published.versionCode})`
+          : null,
+        `Latency: ${result.latencyMs} ms`,
+        result.updateAvailable ? 'Update available on server' : 'App is up to date with server',
+      ].filter(Boolean);
+      Alert.alert('Auto-update check', lines.join('\n'));
+    } finally {
+      setUpdateCheckBusy(false);
+    }
+  }, []);
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -272,6 +296,24 @@ export const AdminScreen = () => {
               </View>
             ))}
           </View>
+        ) : null}
+        <Pressable
+          disabled={updateCheckBusy}
+          style={[styles.actionBtn, styles.actionBtnPrimary, updateCheckBusy ? styles.actionBtnDisabled : null]}
+          onPress={runUpdateCheck}>
+          {updateCheckBusy ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.actionBtnPrimaryText}>
+              Check auto-update (v{APP_VERSION_NAME})
+            </Text>
+          )}
+        </Pressable>
+        {updateCheck?.published ? (
+          <Text style={styles.placeholder}>
+            Server v{updateCheck.published.version} · {updateCheck.latencyMs} ms
+            {updateCheck.updateAvailable ? ' · update available' : ''}
+          </Text>
         ) : null}
       </View>
       ) : null}

@@ -1,5 +1,5 @@
 /** Limit concurrent mobile API calls so one uvicorn worker is not stampeded. */
-const MAX_INFLIGHT = 8;
+const MAX_INFLIGHT = 24;
 let inflight = 0;
 const waiters = [];
 

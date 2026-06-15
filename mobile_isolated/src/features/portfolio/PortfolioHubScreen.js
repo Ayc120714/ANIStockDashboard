@@ -7,8 +7,9 @@ import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
+import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
-import {ensureMarketSession, shouldPollLiveMarket} from '@core/utils/marketSession';
+import {ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket} from '@core/utils/marketSession';
 import {useFocusEffect} from '@react-navigation/native';
 import {navigateToStocksOrders} from '@nav/navigationHelpers';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
@@ -51,26 +52,34 @@ async function loadPortfolioPayload(userId) {
 export function PortfolioHubScreen({navigation}) {
   const {user} = useAuth();
   const userId = resolveUserId(user);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState([]);
   const [positions, setPositions] = useState([]);
 
+  const applyPortfolioPayload = useCallback(payload => {
+    setOrders(payload.orders || []);
+    setPositions(payload.positions || []);
+  }, []);
+
+  const portfolioHasUsable = useCallback(
+    data => (data?.orders?.length > 0) || (data?.positions?.length > 0),
+    [],
+  );
+
   const load = useCallback(
-    async ({forceRefresh = false} = {}) => {
+    async ({forceRefresh = false, silent = false} = {}) => {
       await runScreenPayloadFetch({
         cacheKey: MOBILE_PAGE_CACHE_KEYS.portfolio,
         fetcher: () => loadPortfolioPayload(userId),
-        applyPayload: payload => {
-          setOrders(payload.orders || []);
-          setPositions(payload.positions || []);
-        },
+        applyPayload: applyPortfolioPayload,
         setLoading,
         forceNetwork: forceRefresh,
-        hasUsable: data => (data?.orders?.length > 0) || (data?.positions?.length > 0),
+        hasUsable: portfolioHasUsable,
+        silent: silent && !forceRefresh,
       });
     },
-    [userId],
+    [applyPortfolioPayload, portfolioHasUsable, userId],
   );
 
   const onRefresh = useCallback(async () => {
@@ -85,11 +94,18 @@ export function PortfolioHubScreen({navigation}) {
   useFocusEffect(
     useCallback(() => {
       (async () => {
+        const hadCache = await hydrateFromPageCache(MOBILE_PAGE_CACHE_KEYS.portfolio, {
+          apply: applyPortfolioPayload,
+          hasUsable: portfolioHasUsable,
+        });
         await ensureMarketSession();
-        const session = await ensureMarketSession();
-        await load({forceRefresh: shouldPollLiveMarket(session)});
+        const session = getCachedMarketSession();
+        await load({
+          forceRefresh: shouldPollLiveMarket(session),
+          silent: hadCache,
+        });
       })();
-    }, [load]),
+    }, [applyPortfolioPayload, load, portfolioHasUsable]),
   );
 
   const openPos = positions.filter(x => String(x.state || '').toLowerCase() === 'open' || Number(x.net_qty));
@@ -101,7 +117,9 @@ export function PortfolioHubScreen({navigation}) {
         contentContainerStyle={styles.pad}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <Text style={styles.pageTitle}>Portfolio</Text>
-        {loading ? <ActivityIndicator style={{marginVertical: 16}} /> : null}
+        {loading && !orders.length && !positions.length ? (
+          <ActivityIndicator style={{marginVertical: 16}} />
+        ) : null}
 
       <View style={styles.card}>
           <Text style={styles.cardTitle}>Open positions</Text>

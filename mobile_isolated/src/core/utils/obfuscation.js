@@ -68,4 +68,9 @@ export const decodeObfuscatedPayload = async (payload, token) => {
     // Never crash startup if obfuscated payload decode fails on device.
     return payload;
   }
-};
+}
+
+/** True when the payload is still an undecoded obfuscation envelope. */
+export function isObfuscatedEnvelope(payload) {
+  return Boolean(payload && payload.alg === 'xor-b64-v1' && typeof payload.obf === 'string');
+}

@@ -13,6 +13,7 @@ import {
 } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
+import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '../utils/marketSession';
 
 const fmtRupee = (v) => {
   if (v == null || v === '' || isNaN(v)) return '—';
@@ -173,6 +174,23 @@ function StockAlertsPage() {
   }, [userId, deferredSymbolFilter, accessToken]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let timer;
+    let cancelled = false;
+    (async () => {
+      await ensureMarketSession();
+      if (cancelled) return;
+      const pollMs = shouldPollLiveMarket(getCachedMarketSession()) ? 30_000 : 120_000;
+      timer = setInterval(() => {
+        if (!cancelled) load();
+      }, pollMs);
+    })();
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [load]);
 
   const handleSort = (col) => {
     if (sortCol === col) {

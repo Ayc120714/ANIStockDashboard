@@ -3,10 +3,10 @@ import { HeaderContainer } from './Header.styles';
 import { Box, Button, IconButton } from '@mui/material';
 import { MdMenu } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
-import AdminNotificationBell from './AdminNotificationBell';
+import UserNotificationBell from './UserNotificationBell';
 
 function Header({ showMenuButton, onMenuOpen }) {
-  const { user, logout, outlookPremium, isSuperAdmin } = useAuth();
+  const { user, logout, outlookPremium } = useAuth();
 
   const planLabel = useMemo(() => {
     if (user?.premium_lifetime === true) return 'Lifetime';
@@ -98,7 +98,7 @@ function Header({ showMenuButton, onMenuOpen }) {
             {planLabel}
           </Box>
         </Box>
-        {isSuperAdmin ? <AdminNotificationBell /> : null}
+        <UserNotificationBell />
         <Button size="small" variant="outlined" onClick={logout}>
           Logout
         </Button>

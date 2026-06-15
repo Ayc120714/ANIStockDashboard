@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -19,14 +19,12 @@ import {mobilePad, mobileStyles, AYC} from '@core/theme/mobileStyles';
 import {advisorService} from '@core/api/services/advisorService';
 import {
   MOBILE_PAGE_CACHE_KEYS,
-  dashboardSectionsToRefresh,
-  hasDashboardMovers,
-  isDashboardCacheIncomplete,
+  LEGACY_ADVISOR_TREND_CACHE_KEYS,
   shouldForceAdvisorTrendNetwork,
   shouldRefreshAdvisorTrendCache,
 } from '@core/utils/dashboardCachePolicy';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
-import {readPageCache, clearPageCache} from '@core/storage/pageCache';
+import {readPageCache, clearPageCache, writePageCache} from '@core/storage/pageCache';
 import {
   extractChartBlocks,
   normalizeTrendGrid,
@@ -250,6 +248,7 @@ export function AdvisorHubScreen({navigation}) {
   const [tab, setTab] = useState('sig');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [trendErr, setTrendErr] = useState('');
   const [sigRows, setSigRows] = useState([]);
   const [monthlyRows, setMonthlyRows] = useState([]);
   const [customRows, setCustomRows] = useState([]);
@@ -268,6 +267,11 @@ export function AdvisorHubScreen({navigation}) {
   const [refreshing, setRefreshing] = useState(false);
   const [trendLoading, setTrendLoading] = useState(false);
   const [cacheHydrated, setCacheHydrated] = useState(false);
+  const trendInflightRef = useRef(false);
+  const signalsHasDataRef = useRef(false);
+  const chartHasDataRef = useRef(false);
+  const trendHasDataRef = useRef(false);
+  const focusLoadReadyRef = useRef(false);
   const {sortConfig, onSort, resetSort} = useTableSort();
 
   const applySignalsPayload = useCallback(payload => {
@@ -280,6 +284,7 @@ export function AdvisorHubScreen({navigation}) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      await Promise.all(LEGACY_ADVISOR_TREND_CACHE_KEYS.map(key => clearPageCache(key)));
       const [sigCache, trendCache, chartCache] = await Promise.all([
         readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals),
         readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend),
@@ -292,13 +297,19 @@ export function AdvisorHubScreen({navigation}) {
         applySignalsPayload(signals);
       }
       if (hasUsableAdvisorTrendPayload(trendCache?.data)) {
-        setTrendGrid(normalizeTrendGrid(trendCache.data));
+        const grid = normalizeTrendGrid(trendCache.data) || trendCache.data;
+        if (countTrendGridRows(grid) > 0) {
+          setTrendGrid(grid);
+        }
+      } else if (trendCache?.data != null) {
+        await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
       }
       const hydratedChart = extractChartBlocks(chartCache?.data);
       if (hasUsableAdvisorChartPayload(chartCache?.data)) {
         setChartBlocks(hydratedChart);
       }
       setCacheHydrated(true);
+      focusLoadReadyRef.current = true;
     })();
     return () => {
       cancelled = true;
@@ -313,6 +324,7 @@ export function AdvisorHubScreen({navigation}) {
     nextTab => {
       if (nextTab === tab) return;
       setErr('');
+      if (nextTab !== 'trend') setTrendErr('');
       setTab(nextTab);
       resetSort();
     },
@@ -398,6 +410,10 @@ export function AdvisorHubScreen({navigation}) {
     mondayRows,
   });
 
+  signalsHasDataRef.current = signalsHasData;
+  chartHasDataRef.current = chartHasData;
+  trendHasDataRef.current = trendHasData;
+
   const loadSignals = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     if (forceRefresh) setRefreshing(true);
     await runScreenPayloadFetch({
@@ -408,31 +424,10 @@ export function AdvisorHubScreen({navigation}) {
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
       hasUsable: hasUsableAdvisorSignalsPayload,
+      silent: silent && !forceRefresh,
     });
     setRefreshing(false);
   }, [applySignalsPayload]);
-
-  const loadTrend = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
-    if (forceRefresh) {
-      await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-      setRefreshing(true);
-    }
-    await runScreenPayloadFetch({
-      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
-      fetcher: () => fetchAdvisorTrendPayload({forceRefresh}),
-      applyPayload: payload => {
-        const grid = normalizeTrendGrid(payload) || payload;
-        if (grid && countTrendGridRows(grid) > 0) {
-          setTrendGrid(grid);
-        }
-      },
-      setLoading: silent && !forceRefresh ? () => {} : setTrendLoading,
-      setError: msg => setErr(msg || ''),
-      forceNetwork: forceRefresh,
-      hasUsable: hasUsableAdvisorTrendPayload,
-    });
-    if (forceRefresh) setRefreshing(false);
-  }, []);
 
   const loadChart = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     if (forceRefresh) setRefreshing(true);
@@ -444,19 +439,73 @@ export function AdvisorHubScreen({navigation}) {
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
       hasUsable: hasUsableAdvisorChartPayload,
+      silent: silent && !forceRefresh,
     });
     setRefreshing(false);
   }, []);
 
+  const loadTrend = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
+    if (trendInflightRef.current) {
+      if (!forceRefresh) return;
+    }
+    trendInflightRef.current = true;
+    const showSpinner = (!silent || forceRefresh) && !trendHasDataRef.current;
+    let hydrated = false;
+    if (forceRefresh) {
+      await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
+      setRefreshing(true);
+    }
+    if (showSpinner) setTrendLoading(true);
+    try {
+      if (!forceRefresh) {
+        const cached = await readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
+        if (cached?.data && hasUsableAdvisorTrendPayload(cached.data)) {
+          const grid = normalizeTrendGrid(cached.data) || cached.data;
+          setTrendGrid(grid);
+          setTrendErr('');
+          hydrated = true;
+          if (showSpinner) setTrendLoading(false);
+          void fetchAdvisorTrendPayload({forceRefresh: false})
+            .then(gridFresh => {
+              setTrendGrid(gridFresh);
+              setTrendErr('');
+              return writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend, gridFresh);
+            })
+            .catch(() => {});
+          return;
+        }
+      }
+      if (!hydrated || forceRefresh) {
+        const grid = await fetchAdvisorTrendPayload({forceRefresh});
+        setTrendGrid(grid);
+        setTrendErr('');
+        await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend, grid);
+      }
+    } catch (e) {
+      if (!hydrated) {
+        setTrendErr(String(e?.message || e || 'Failed to load trend reversal.'));
+      }
+    } finally {
+      trendInflightRef.current = false;
+      if (showSpinner) setTrendLoading(false);
+      if (forceRefresh) setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!cacheHydrated) return;
-    loadSignals({silent: true});
-    loadTrend({silent: true});
-    loadChart({silent: true});
-  }, [cacheHydrated, loadChart, loadSignals, loadTrend]);
+    if (tab === 'sig') {
+      loadSignals({silent: signalsHasDataRef.current});
+    } else if (tab === 'chart') {
+      loadChart({silent: chartHasDataRef.current});
+    } else if (tab === 'trend') {
+      loadTrend({silent: trendHasDataRef.current, forceRefresh: false});
+    }
+  }, [cacheHydrated, loadChart, loadSignals, loadTrend, tab]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!focusLoadReadyRef.current) return undefined;
       (async () => {
         if (tab === 'sig') {
           const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals);
@@ -478,13 +527,9 @@ export function AdvisorHubScreen({navigation}) {
           }
         }
       })();
+      return undefined;
     }, [chartHasData, loadChart, loadSignals, loadTrend, signalsHasData, tab, trendHasData]),
   );
-
-  useEffect(() => {
-    if (tab !== 'trend' || !cacheHydrated || trendHasData) return;
-    loadTrend({forceRefresh: true});
-  }, [cacheHydrated, loadTrend, tab, trendHasData]);
 
   const loadAi = useCallback(async () => {
     if (!aiSym.trim()) {
@@ -563,15 +608,18 @@ export function AdvisorHubScreen({navigation}) {
           </Pressable>
         ))}
       </ScrollView>
-      {err ? (
+      {tab === 'trend' && trendErr ? (
+        <View style={styles.errRow}>
+          <Text style={styles.err}>{trendErr}</Text>
+          <Pressable onPress={() => loadTrend({forceRefresh: true})} style={styles.retryBtn}>
+            <Text style={styles.retryTxt}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : err ? (
         <View style={styles.errRow}>
           <Text style={styles.err}>{err}</Text>
           {tab === 'sig' ? (
             <Pressable onPress={() => loadSignals()} style={styles.retryBtn}>
-              <Text style={styles.retryTxt}>Retry</Text>
-            </Pressable>
-          ) : tab === 'trend' ? (
-            <Pressable onPress={() => loadTrend()} style={styles.retryBtn}>
               <Text style={styles.retryTxt}>Retry</Text>
             </Pressable>
           ) : tab === 'chart' ? (
@@ -581,8 +629,7 @@ export function AdvisorHubScreen({navigation}) {
           ) : null}
         </View>
       ) : null}
-      {((!cacheHydrated && (tab === 'sig' || tab === 'trend' || tab === 'chart')) ||
-        (tab === 'sig' && loading && !signalsHasData) ||
+      {((tab === 'sig' && loading && !signalsHasData) ||
         (tab === 'trend' && trendLoading && !trendHasData) ||
         (tab === 'chart' && loading && !chartHasData)) ? (
         <ActivityIndicator color={AYC.accent} />
@@ -634,6 +681,11 @@ export function AdvisorHubScreen({navigation}) {
           <Text style={mobileStyles.subtitle}>
             Trend reversal · B1–S3 buy / sell tiers · {trendVisibleRows} matches · {trendTf}
           </Text>
+          {trendLoading && !trendHasData ? (
+            <Text style={styles.trendLoadingHint}>
+              Loading trend reversal data… This can take up to 2 minutes on first load.
+            </Text>
+          ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {TREND_TFS.map(tf => (
               <Pressable
@@ -869,6 +921,13 @@ const styles = StyleSheet.create({
   },
   retryTxt: {color: AYC.negative, fontWeight: '800', fontSize: AYC.type.caption},
   empty: {paddingVertical: 16, color: AYC.textMuted, textAlign: 'center', fontSize: AYC.type.body},
+  trendLoadingHint: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    color: AYC.textMuted,
+    fontSize: AYC.type.cardLabel,
+    textAlign: 'center',
+  },
   tierEmpty: {paddingVertical: 10, paddingHorizontal: 12, color: AYC.textMuted, fontSize: AYC.type.cardLabel},
   chartHint: {fontSize: AYC.type.caption, color: AYC.textMuted, paddingHorizontal: 4, marginBottom: 4},
   setupBlock: {marginTop: 12},

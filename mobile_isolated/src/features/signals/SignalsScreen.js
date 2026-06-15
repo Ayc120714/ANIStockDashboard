@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import {signalsService} from '@core/api/services/signalsService';
 import {alertsService} from '@core/api/services/alertsService';
 import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
@@ -123,19 +124,18 @@ function SignalCard({item, onTrade}) {
 export function SignalsScreen({navigation}) {
   const {user} = useAuth();
   const userId = String(user?.id || user?.user_id || '');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [rows, setRows] = useState([]);
   const [tradePickerSignal, setTradePickerSignal] = useState(null);
   const [demoBusy, setDemoBusy] = useState(false);
+  const initialLoadDone = useRef(false);
 
   const load = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
     setError('');
     if (forceRefresh) {
       setRefreshing(true);
-    } else if (!silent) {
-      setLoading(true);
     }
 
     await runScreenTableFetch({
@@ -148,23 +148,38 @@ export function SignalsScreen({navigation}) {
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setError(msg || ''),
       forceNetwork: forceRefresh,
+      silent: silent && !forceRefresh,
     });
 
     setRefreshing(false);
   }, []);
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    (async () => {
+      const hadCache = await hydrateFromPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals, {
+        apply: data => setRows(Array.isArray(data) ? data : extractApiRows(data)),
+        hasUsable: data => Array.isArray(data) && data.length > 0,
+      });
+      if (cancelled) return;
+      await load({silent: hadCache});
+      initialLoadDone.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!initialLoadDone.current) return undefined;
       (async () => {
         const stale = await shouldRefreshPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
         if (stale || !rows.length) {
           await load({silent: rows.length > 0});
         }
       })();
+      return undefined;
     }, [load, rows.length]),
   );
 
