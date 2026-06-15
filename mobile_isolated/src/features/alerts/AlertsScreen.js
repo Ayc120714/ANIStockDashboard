@@ -7,6 +7,8 @@ import {alertsService} from '@core/api/services/alertsService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {safeFetch} from '@core/utils/safeFetch';
 import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
+import {formatAlertTimeIST} from '@core/utils/alertInboxUtils';
+import {formatNowTimeIST} from '@core/utils/istTime';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
@@ -163,7 +165,7 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
         <Text style={styles.metaText}>Alerts: {items.length}</Text>
         <Text style={styles.metaText}>New since last sync: {newCount}</Text>
         <Text style={styles.metaSub}>
-          Last sync: {lastSyncAt ? lastSyncAt.toLocaleTimeString() : 'Not synced yet'}
+          Last sync: {lastSyncAt ? `${formatNowTimeIST(lastSyncAt)} IST` : 'Not synced yet'}
         </Text>
       </View>
 
@@ -175,7 +177,7 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
           </View>
           <Text style={styles.message}>{item?.message || item?.alert_type || 'Alert'}</Text>
           <Text style={styles.signalLine}>{renderSignalLine(item)}</Text>
-          <Text style={styles.time}>{item?.timestamp ? String(item.timestamp) : '-'}</Text>
+          <Text style={styles.time}>{formatAlertTimeIST(item?.timestamp)}</Text>
           <Pressable
             style={styles.tradeBtn}
             onPress={() => setTradePickerAlert(item)}>

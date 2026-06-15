@@ -1,5 +1,7 @@
 /** Web FinancialAdvisorPage signals filtering (strategy + reco + conviction). */
 
+import {parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
+
 function parseMaybeNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -151,8 +153,8 @@ export function dedupeAlertsBySymbol(rows) {
       bySymbol.set(symbol, row);
       continue;
     }
-    const prevTs = Date.parse(prev.timestamp || prev.created_at || '') || 0;
-    const curTs = Date.parse(row.timestamp || row.created_at || '') || 0;
+    const prevTs = parseAdvisorAlertMs(prev.timestamp || prev.created_at);
+    const curTs = parseAdvisorAlertMs(row.timestamp || row.created_at);
     if (curTs > prevTs) {
       bySymbol.set(symbol, row);
       continue;
@@ -164,8 +166,8 @@ export function dedupeAlertsBySymbol(rows) {
     }
   }
   return Array.from(bySymbol.values()).sort((a, b) => {
-    const ta = Date.parse(a.timestamp || a.created_at || '') || 0;
-    const tb = Date.parse(b.timestamp || b.created_at || '') || 0;
+    const ta = parseAdvisorAlertMs(a.timestamp || a.created_at);
+    const tb = parseAdvisorAlertMs(b.timestamp || b.created_at);
     return tb - ta;
   });
 }

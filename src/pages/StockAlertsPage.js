@@ -14,6 +14,11 @@ import {
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '../utils/marketSession';
+import {
+  formatAlertTimeIST,
+  isTodayInIST,
+  parseAdvisorAlertMs,
+} from '../utils/alertInboxUtils';
 
 const fmtRupee = (v) => {
   if (v == null || v === '' || isNaN(v)) return '—';
@@ -33,55 +38,6 @@ const compactWrap = {
 const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
-};
-/** NSE calendar day in IST — matches how the backend thinks about "today" for market alerts. */
-const dateKeyIST = (d) =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
-
-/** Parse API timestamps (naive ``YYYY-MM-DD HH:mm:ss``, ISO, etc.) safely.
- * Backend often emits UTC-like naive strings; treat naive values as UTC for consistent IST conversion.
- */
-const parseAdvisorAlertMs = (ts) => {
-  if (ts == null || ts === '') return 0;
-  const s = String(ts).trim();
-  const isoLike = s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
-  const hasZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(isoLike);
-  const normalized = hasZone ? isoLike : `${isoLike}Z`;
-  const ms = Date.parse(normalized);
-  return Number.isFinite(ms) ? ms : 0;
-};
-
-const isTodayInIST = (value) => {
-  const ms = parseAdvisorAlertMs(value);
-  if (!ms) return false;
-  return dateKeyIST(new Date(ms)) === dateKeyIST(new Date());
-};
-
-/** Show alert time in IST (matches NSE session context). */
-const formatAlertTimeIST = (ts) => {
-  const ms = parseAdvisorAlertMs(ts);
-  if (!ms) return ts ? String(ts).replace('T', ' ').slice(0, 19) : '—';
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-      .format(new Date(ms))
-      .replace(', ', ' ');
-  } catch (_) {
-    return String(ts).slice(0, 19);
-  }
 };
 
 /**

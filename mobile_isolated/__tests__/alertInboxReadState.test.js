@@ -7,6 +7,7 @@ import {
   isTableChangeInboxItem,
   mergeInboxReadKeys,
   normalizeLiveAdvisorRows,
+  parseAdvisorAlertMs,
   parseInboxReadKeys,
 } from '@core/utils/alertInboxUtils';
 
@@ -58,5 +59,16 @@ describe('notification inbox read state', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].source).toBe(INBOX_SOURCES.LIVE);
     expect(rows[0].id).toBe('2');
+  });
+
+  it('parses naive alert timestamps as IST wall clock', () => {
+    const ms = parseAdvisorAlertMs('2026-06-15 15:30:00');
+    const ist = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(ms));
+    expect(ist.replace(', ', ' ')).toContain('15:30');
   });
 });

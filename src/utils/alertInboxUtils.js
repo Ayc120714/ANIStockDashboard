@@ -1,5 +1,8 @@
 /** Normalize and group alerts for the mobile notification inbox (web StockAlerts parity). */
 
+export const NOTIFICATION_TIMEZONE = 'Asia/Kolkata';
+export const IST_OFFSET = '+05:30';
+
 export const INBOX_SOURCES = {
   LIVE: 'live',
   WEEKLY: 'weekly_cross',
@@ -87,7 +90,7 @@ export const INBOX_FILTER_CHIPS = [
 
 const dateKeyIST = d =>
   new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
+    timeZone: NOTIFICATION_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -98,7 +101,7 @@ export function parseAdvisorAlertMs(ts) {
   const s = String(ts).trim();
   const isoLike = s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
   const hasZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(isoLike);
-  const normalized = hasZone ? isoLike : `${isoLike}Z`;
+  const normalized = hasZone ? isoLike : `${isoLike}${IST_OFFSET}`;
   const ms = Date.parse(normalized);
   return Number.isFinite(ms) ? ms : 0;
 }
@@ -114,7 +117,7 @@ export function formatAlertTimeIST(ts) {
   if (!ms) return ts ? String(ts).replace('T', ' ').slice(0, 19) : '—';
   try {
     return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
+      timeZone: NOTIFICATION_TIMEZONE,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
