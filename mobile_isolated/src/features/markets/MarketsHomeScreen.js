@@ -1,4 +1,4 @@
-﻿import React, {useCallback, useEffect, useMemo, useState} from 'react';
+﻿import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
@@ -95,18 +95,21 @@ export function MarketsHomeScreen({navigation}) {
   }, [load, tab]);
 
   const list = marketsOutlookListForTab(tab, {rows, sectorRows, subRows});
+  const outlookFocusRef = useRef({listLength: 0, fii: null});
+  outlookFocusRef.current = {listLength: list.length, fii};
 
   useFocusEffect(
     useCallback(() => {
       const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
+      const {listLength, fii: fiiSnap} = outlookFocusRef.current;
       refreshMarketsOutlookOnFocus({
         cacheKey,
-        listLength: list.length,
-        fii,
+        listLength,
+        fii: fiiSnap,
         shouldRefreshPageCache,
         load,
       }).catch(() => {});
-    }, [load, tab, list.length, fii]),
+    }, [load, tab]),
   );
 
   useEffect(() => {
