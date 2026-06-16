@@ -17,6 +17,9 @@ export const signalsService = {
     if (params.monthly_entry_only) {
       q.set('monthly_entry_only', 'true');
     }
+    if (params.mobile_lite || limit <= 25) {
+      q.set('mobile_lite', 'true');
+    }
     const suffix = `?${q.toString()}`;
     const timeoutMs = params.timeoutMs ?? API_TIMEOUT_MS.advisor;
     return parseAdvisorListResponse(await apiGet(`/advisor/signals/latest${suffix}`, {timeoutMs}));

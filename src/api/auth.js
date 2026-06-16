@@ -81,8 +81,8 @@ export const deletePremiumEmail = (entryId) =>
   apiRequest(`/auth/admin/premium-emails/${encodeURIComponent(String(entryId))}`, { method: 'DELETE' });
 
 /** After payment: server grants **one calendar year** in IST; renew with another call each year. */
-export const setUserPaidPremium = (userId) =>
-  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, {});
+export const setUserPaidPremium = (userId, plan = 'yearly') =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, { plan });
 
 export const clearUserPaidPremium = (userId) =>
   apiRequest(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, { method: 'DELETE' });

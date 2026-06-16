@@ -11,13 +11,14 @@ import {
 
 describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
-    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v14');
+    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v15');
+    expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
-      '@ani/mobile/page-cache/advisor-hub-trend-v8',
+      '@ani/mobile/page-cache/advisor-hub-trend-v9',
     );
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
-      'screens-v4',
+      'screens-v5',
     );
   });
 
@@ -27,6 +28,7 @@ describe('dashboard cache policy fixes', () => {
       '@ani/mobile/page-cache/advisor-hub-trend-v5',
       '@ani/mobile/page-cache/advisor-hub-trend-v6',
       '@ani/mobile/page-cache/advisor-hub-trend-v7',
+      '@ani/mobile/page-cache/advisor-hub-trend-v8',
     ]);
     expect(LEGACY_ADVISOR_TREND_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
   });

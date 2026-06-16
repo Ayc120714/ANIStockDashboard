@@ -5,7 +5,12 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'r
 import { useLocation, useNavigate } from 'react-router';
 import { fetchMarketIndices } from '../api/marketIndices';
 import { fetchSectorOutlook } from '../api/sectorOutlook';
-import { fetchPriceShockers, fetchTrending } from '../api/stocks';
+import {
+  fetchPriceShockersRaw,
+  fetchTrendingRaw,
+  mapPriceShockersList,
+  mapStockListToTable,
+} from '../api/stocks';
 import { fetchAlerts, fetchRatings, fetchAdvisorWeeklyEntries, fetchLatestSignalsPayload } from '../api/advisor';
 import { apiGet, clearApiGetCache } from '../api/apiClient';
 import {
@@ -20,6 +25,7 @@ import { ensureMarketSession, getMarketPollingIntervalMs, isPageCacheStale, shou
 import { applyLiveSessionRefreshPolicy, dashboardSectionsToRefresh } from '../utils/dashboardCachePolicy';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { ensureLegacyFormattedScreenCachesPurged } from '../utils/screenStockCache';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -32,7 +38,7 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v4';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v5';
 
 function isDashboardCacheIncomplete(cached) {
   if (!cached) return true;
@@ -1348,6 +1354,7 @@ function DashboardPage() {
         setLoading(true);
       }
       const session = await ensureMarketSession();
+      ensureLegacyFormattedScreenCachesPurged();
       const liveSession = shouldPollLiveMarket(session);
       const cachedWrap = readPageCache(DASHBOARD_CACHE_KEY);
       const cached = cachedWrap?.data || null;
@@ -1396,8 +1403,12 @@ function DashboardPage() {
 
       const phase1 = await Promise.allSettled([
         need.indices || forceRefresh ? fetchMarketIndices() : Promise.resolve(cached?.indices || null),
-        need.movers || forceRefresh ? fetchPriceShockers('gainers', 8, 'day') : Promise.resolve(cached?.gainers ?? []),
-        need.movers || forceRefresh ? fetchPriceShockers('losers', 8, 'day') : Promise.resolve(cached?.losers ?? []),
+        need.movers || forceRefresh
+          ? fetchPriceShockersRaw('gainers', 8, 'day').then((rows) => mapPriceShockersList(rows, 'day'))
+          : Promise.resolve(cached?.gainers ?? []),
+        need.movers || forceRefresh
+          ? fetchPriceShockersRaw('losers', 8, 'day').then((rows) => mapPriceShockersList(rows, 'day'))
+          : Promise.resolve(cached?.losers ?? []),
       ]);
       partial.indices = settledValue(phase1[0], cached?.indices || null);
       partial.gainers = settledValue(phase1[1], cached?.gainers ?? []);
@@ -1413,7 +1424,9 @@ function DashboardPage() {
         need.weekly || forceRefresh ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(cached?.weeklyData ?? []),
         need.extras || forceRefresh ? fetchAlerts({ limit: 25 }) : Promise.resolve(cached?.alerts ?? []),
         need.extras || forceRefresh ? fetchRatings({ limit: 8 }) : Promise.resolve(cached?.ratings ?? []),
-        need.extras || forceRefresh ? fetchTrending(20) : Promise.resolve(cached?.trendingStocks ?? []),
+        need.extras || forceRefresh
+          ? fetchTrendingRaw(20).then((rows) => mapStockListToTable(rows, {}))
+          : Promise.resolve(cached?.trendingStocks ?? []),
       ]);
       partial.watchlist = settledValue(phase2[0], cached?.watchlist ?? []);
       partial.signals = settledValue(phase2[1], cached?.signals ?? []);

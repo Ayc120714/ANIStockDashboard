@@ -8,6 +8,7 @@ import {
   shouldSkipNetworkForClosedMarket,
 } from './marketSession';
 import { cacheHasUsableData, readPageCache, writePageCache } from './pageDataCache';
+import { ensureLegacyFormattedScreenCachesPurged } from './screenStockCache';
 
 /** Default refresh for screen tables while orchestrator is updating live DB rows. */
 export const SCREEN_LIVE_POLL_MS = 30_000;
@@ -38,13 +39,15 @@ export async function runScreenTableFetch({
   setLoading,
   setError,
   forceNetwork = false,
+  mapRows = (rows) => rows,
 }) {
+  ensureLegacyFormattedScreenCachesPurged();
   if (setError) setError(null);
 
   let hydrated = false;
   const cached = readPageCache(cacheKey);
   if (cached?.data != null) {
-    const rows = extractRowArray(cached.data);
+    const rows = mapRows(extractRowArray(cached.data));
     if (rows.length > 0) {
       setRows(rows);
       hydrated = true;
@@ -69,9 +72,9 @@ export async function runScreenTableFetch({
       clearApiGetCache();
     }
     const fresh = await fetcher();
-    const rows = extractRowArray(fresh);
-    writePageCache(cacheKey, Array.isArray(fresh) ? fresh : rows);
-    setRows(rows);
+    const raw = extractRowArray(fresh);
+    writePageCache(cacheKey, Array.isArray(fresh) ? fresh : raw);
+    setRows(mapRows(raw));
     if (setError) setError(null);
   } catch (e) {
     if (!hydrated) {
@@ -143,6 +146,7 @@ export async function runScreenTableFetchWithLivePoll({
   isHistoricalView = false,
   liveIntervalMs = SCREEN_LIVE_POLL_MS,
   onCleanup,
+  mapRows,
 }) {
   await ensureMarketSession();
   const session = getCachedMarketSession();
@@ -153,8 +157,8 @@ export async function runScreenTableFetchWithLivePoll({
     setRows,
     setLoading,
     setError,
-    // During live session, skip yesterday's sessionStorage cache on first load.
     forceNetwork: shouldPollLiveMarket(session),
+    mapRows,
   });
 
   if (isHistoricalView) {
@@ -175,6 +179,7 @@ export async function runScreenTableFetchWithLivePoll({
       setLoading,
       setError,
       forceNetwork: true,
+      mapRows,
     });
   }, pollMs);
 

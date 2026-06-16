@@ -309,7 +309,7 @@ function SignalsAlertsTab() {
   const [earlyDetectionPage, setEarlyDetectionPage] = useState(1);
   const [earlyDetectionTimeframe, setEarlyDetectionTimeframe] = useState('daily');
   const [earlyDetectionSqzFilter, setEarlyDetectionSqzFilter] = useState('all');
-  const [earlyDetectionSortCol, setEarlyDetectionSortCol] = useState('trigger_date');
+  const [earlyDetectionSortCol, setEarlyDetectionSortCol] = useState('wealth_rank');
   const [earlyDetectionSortDir, setEarlyDetectionSortDir] = useState('desc');
   const [earlyDetectionViewMode, setEarlyDetectionViewMode] = useState('recent');
   const [earlyDetectionHistoryFrom, setEarlyDetectionHistoryFrom] = useState('');
@@ -1389,6 +1389,18 @@ function SignalsAlertsTab() {
                       />
                     </th>
                     <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer', width: 36 }}
+                      onClick={() => handleEarlyDetectionSort('rank')}
+                    >
+                      # <EarlyDetectionSortIcon col="rank" />
+                    </th>
+                    <th
+                      style={{ ...compact, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => handleEarlyDetectionSort('wealth_phase')}
+                    >
+                      Phase <EarlyDetectionSortIcon col="wealth_phase" />
+                    </th>
+                    <th
                       style={{ ...compact, color: '#fff', cursor: 'pointer' }}
                       onClick={() => handleEarlyDetectionSort('symbol')}
                     >
@@ -1474,6 +1486,19 @@ function SignalsAlertsTab() {
                             });
                           }}
                         />
+                      </td>
+                      <td style={{ ...compact, fontWeight: 800, textAlign: 'center', color: '#1565c0' }}>
+                        {r.wealth_rank ?? r.rank ?? '—'}
+                      </td>
+                      <td style={{ ...compact, fontSize: 10, fontWeight: 600, maxWidth: 90 }}>
+                        <span title={r.wealth_phase || ''}>
+                          {r.wealth_phase_label || '—'}
+                          {r.buy_tier ? (
+                            <span style={{ marginLeft: 4, color: r.buy_tier === 'A' ? '#2e7d32' : r.buy_tier === 'B' ? '#f57f17' : '#888' }}>
+                              {r.buy_tier}
+                            </span>
+                          ) : null}
+                        </span>
                       </td>
                       <td style={{ ...compact, fontWeight: 700 }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

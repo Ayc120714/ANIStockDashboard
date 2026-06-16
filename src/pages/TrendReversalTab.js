@@ -8,14 +8,10 @@ import {
   Chip,
   CircularProgress,
   IconButton,
-  MenuItem,
   Popover,
   TextField,
   Tooltip,
   Typography,
-  Select,
-  FormControl,
-  InputLabel,
   Snackbar,
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -56,11 +52,7 @@ const BUY_HINT = { B1: 'Early', B2: 'Stronger', B3: 'Strongest' };
 /** Table column id → sort key (matches row fields). */
 const TABLE_COLUMNS = [
   { key: 'symbol', label: 'SYMBOL' },
-  { key: 'company', label: 'COMPANY' },
-  { key: 'reversal_context', label: 'REVERSAL SETUP' },
   { key: 'hold_months', label: 'HOLD' },
-  { key: 'mcap', label: 'MCAP (CR)' },
-  { key: 'sector', label: 'SECTOR' },
   { key: 'close', label: 'CLOSE' },
   { key: 'signal', label: 'SIGNAL' },
   { key: 'chg', label: 'CHG%' },
@@ -145,49 +137,14 @@ function AiContextPopover({ symbol, context, anchorEl, onClose }) {
   );
 }
 
-function fallbackReversalContext(row, timeframe) {
-  const tier = String(row?.buy_sell_tier || '').toUpperCase();
-  const prev = String(row?.prev_buy_sell_tier || '').toUpperCase();
-  const fresh = row?.is_fresh ? 'Fresh ' : '';
-  if (tier === 'B1') {
-    if (prev.startsWith('S') && row?.is_fresh) {
-      return `${fresh}${timeframe} reversal ${prev}→B1: sellers fading, early accumulation (RSI ~45–50, DI+ rising).`;
-    }
-    return `${fresh}${timeframe} B1: early bull reversal — buyers regaining control from weak momentum.`;
-  }
-  if (tier.startsWith('B')) {
-    return `${fresh}${timeframe} ${tier}: bullish reversal setup active on technical tier.`;
-  }
-  if (tier.startsWith('S')) {
-    return `${fresh}${timeframe} ${tier}: bearish reversal / distribution pressure on chart.`;
-  }
-  return '—';
-}
-
 const SIGNAL_SORT_ORDER = { B1: 1, B2: 2, B3: 3, S1: 4, S2: 5, S3: 6 };
-
-function parseMcapSortValue(m) {
-  if (m == null) return null;
-  const match = String(m).replace(/,/g, '').match(/[\d.]+/);
-  if (!match) return null;
-  const n = parseFloat(match[0]);
-  return Number.isNaN(n) ? null : n;
-}
 
 function sortComparable(row, sortKey) {
   switch (sortKey) {
     case 'symbol':
       return String(row.symbol || '').toUpperCase();
-    case 'company':
-      return String(row.company || '').toLowerCase();
-    case 'reversal_context':
-      return String(row.reversal_context || '').toLowerCase();
     case 'hold_months':
       return String(row.hold_months || '').toLowerCase();
-    case 'mcap':
-      return parseMcapSortValue(row.market_cap);
-    case 'sector':
-      return String(row.sector || '').toLowerCase();
     case 'close':
       return row.close != null && !Number.isNaN(Number(row.close)) ? Number(row.close) : null;
     case 'signal':
@@ -226,12 +183,6 @@ function formatClose(x) {
   return `₹${Number(x).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatMcap(m) {
-  if (!m || !String(m).trim()) return '—';
-  const s = String(m).trim();
-  return s.startsWith('₹') ? s : `₹${s}`;
-}
-
 export default function TrendReversalTab() {
   const [grid, setGrid] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -240,7 +191,6 @@ export default function TrendReversalTab() {
   const [tierSignal, setTierSignal] = useState('all');
   const [freshOnly, setFreshOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const [sector, setSector] = useState('__all__');
   const [snack, setSnack] = useState({ open: false, message: '' });
   const [sortKey, setSortKey] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
@@ -248,13 +198,13 @@ export default function TrendReversalTab() {
   const [aiBatchLoading, setAiBatchLoading] = useState(false);
   const [aiPopover, setAiPopover] = useState({ symbol: null, anchorEl: null });
 
-  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v2';
+  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v3';
 
   const load = useCallback(async (refresh = false) => {
     await runScreenPayloadFetch({
       cacheKey: TREND_REVERSAL_CACHE,
       fetcher: async () => {
-        const payload = await fetchBuyTierCardGrid({ refresh, symbol_limit: 800 });
+        const payload = await fetchBuyTierCardGrid({ refresh, symbol_limit: 800, lite: true });
         return payload?.data ?? null;
       },
       applyPayload: (data) => setGrid(data ?? null),
@@ -269,17 +219,6 @@ export default function TrendReversalTab() {
     load(false);
   }, [load]);
 
-  const sectorOptions = useMemo(() => {
-    if (!grid || !grid[timeframe]) return [];
-    const set = new Set();
-    ALL_TIERS.forEach((t) => {
-      (tierBlock(grid, timeframe, t).items || []).forEach((r) => {
-        if (r.sector && String(r.sector).trim()) set.add(String(r.sector).trim());
-      });
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [grid, timeframe]);
-
   const tableRows = useMemo(() => {
     if (!grid || !grid[timeframe]) return [];
     const tiers =
@@ -288,21 +227,14 @@ export default function TrendReversalTab() {
     if (freshOnly) rows = rows.filter((r) => r.is_fresh);
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter(
-        (r) =>
-          String(r.symbol || '')
-            .toLowerCase()
-            .includes(q) ||
-          String(r.company || '')
-            .toLowerCase()
-            .includes(q),
+      rows = rows.filter((r) =>
+        String(r.symbol || '')
+          .toLowerCase()
+          .includes(q),
       );
     }
-    if (sector && sector !== '__all__') {
-      rows = rows.filter((r) => (r.sector || '') === sector);
-    }
     return rows;
-  }, [grid, timeframe, tierSignal, freshOnly, search, sector]);
+  }, [grid, timeframe, tierSignal, freshOnly, search]);
 
   const sortedTableRows = useMemo(() => {
     const rows = [...tableRows];
@@ -589,29 +521,15 @@ export default function TrendReversalTab() {
             </Box>
           </Box>
 
-          {/* Search + sector + TradingView symbol list copy */}
+          {/* Search + TradingView symbol list copy */}
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2, alignItems: 'center' }}>
             <TextField
               size="small"
-              placeholder="Search symbol or company…"
+              placeholder="Search symbol…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               sx={{ minWidth: 220, flex: '1 1 200px' }}
             />
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel>Sector</InputLabel>
-              <Select label="Sector" value={sector} onChange={(e) => setSector(e.target.value)}>
-                <MenuItem value="__all__">All sectors</MenuItem>
-                {sectorOptions.map((s) => (
-                  <MenuItem key={s} value={s}>
-                    {s}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Typography variant="body2" sx={{ alignSelf: 'center', color: 'text.secondary', fontWeight: 600 }}>
-              All MCap
-            </Typography>
             <Button variant="outlined" size="small" onClick={copyCsv} sx={{ textTransform: 'none' }}>
               Copy CSV
             </Button>
@@ -711,7 +629,7 @@ export default function TrendReversalTab() {
               <tbody>
                 {tableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#9e9e9e' }}>
+                    <td colSpan={TABLE_COLUMNS.length} style={{ padding: 24, textAlign: 'center', color: '#9e9e9e' }}>
                       No rows match filters.
                     </td>
                   </tr>
@@ -742,20 +660,9 @@ export default function TrendReversalTab() {
                             ) : null}
                           </span>
                         </td>
-                        <td style={{ ...compact, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.company}>
-                          {r.company || '—'}
-                        </td>
-                        <td
-                          style={{ ...compact, maxWidth: 360, fontSize: 11, color: '#455a64', lineHeight: 1.35, whiteSpace: 'normal' }}
-                          title={r.reversal_context || fallbackReversalContext(r, timeframe)}
-                        >
-                          {r.reversal_context || fallbackReversalContext(r, timeframe)}
-                        </td>
                         <td style={{ ...compact, fontWeight: 700, color: isBuy ? '#1b5e20' : '#b71c1c' }}>
                           {r.hold_months || fallbackHoldMonths(r, timeframe)}
                         </td>
-                        <td style={compact}>{formatMcap(r.market_cap)}</td>
-                        <td style={compact}>{r.sector || '—'}</td>
                         <td style={compact}>{formatClose(r.close)}</td>
                         <td style={compact}>
                           <span

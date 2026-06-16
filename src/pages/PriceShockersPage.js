@@ -6,7 +6,11 @@ import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchPriceShockers, fetchScreenDates } from '../api/stocks';
+import {
+  fetchPriceShockersRaw,
+  fetchScreenDates,
+  mapPriceShockersList,
+} from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
@@ -79,12 +83,12 @@ function PriceShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchQuery = String(debouncedSearch || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
-    const cacheKey = `priceShockersData_v3_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `priceShockersData_v4_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
     const loadRows = async () => {
       if (searchMode) {
         const [gainers, losers] = await Promise.all([
-          fetchPriceShockers('gainers', 200, period, dateStr),
-          fetchPriceShockers('losers', 200, period, dateStr),
+          fetchPriceShockersRaw('gainers', 200, period, dateStr),
+          fetchPriceShockersRaw('losers', 200, period, dateStr),
         ]);
         const bySymbol = new Map();
         [...gainers, ...losers].forEach((row) => {
@@ -93,12 +97,13 @@ function PriceShockersPage() {
         });
         return Array.from(bySymbol.values());
       }
-      return fetchPriceShockers(priceType, 200, period, dateStr);
+      return fetchPriceShockersRaw(priceType, 200, period, dateStr);
     };
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,
       fetcher: loadRows,
+      mapRows: (raw) => mapPriceShockersList(raw, period),
       setRows: setTableData,
       setLoading: setIsLoading,
       setError: setLoadError,

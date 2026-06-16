@@ -4,7 +4,7 @@ import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {buildChartAgentBlocks} from '@core/utils/chartFundamentalAgent';
 import {CHART_FUNDAMENTAL_BLOCKS} from '@core/utils/chartFundamentalTables';
-import {ADVISOR_WEB_LIMITS, ADVISOR_WEB_PARAMS} from '@core/utils/advisorWebParity';
+import {ADVISOR_WEB_PARAMS, MOBILE_ADVISOR_LIMITS, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
 import {dedupeSignalsBySymbol} from '@core/utils/advisorSignalsFilter';
 import {safeFetch} from '@core/utils/safeFetch';
 
@@ -121,20 +121,38 @@ export function hasUsableAdvisorChartPayload(data) {
   return extractChartBlocks(data).some(block => (block?.rows?.length || 0) > 0);
 }
 
+export async function fetchMobileSignalsTabRows() {
+  const latestRes = await safeFetch(
+    () =>
+      signalsService.fetchLatestSignals({
+        limit: MOBILE_SIGNALS_TAB_LIMIT,
+        mobile_lite: true,
+      }),
+    {label: 'Signals tab', ...ADVISOR_FETCH},
+  );
+  return dedupeSignalsBySymbol(Array.isArray(latestRes) ? latestRes : extractApiRows(latestRes));
+}
+
 export async function fetchAdvisorSignalsPayload({forceRefresh = false} = {}) {
   const [latestRes, monthlyRes, customRes, mondayRes] = await Promise.all([
-    safeFetch(() => signalsService.fetchLatestSignals({limit: ADVISOR_WEB_LIMITS.latestSignals}), {
+    safeFetch(
+      () =>
+        signalsService.fetchLatestSignals({
+          limit: MOBILE_ADVISOR_LIMITS.latestSignals,
+          mobile_lite: true,
+        }),
+      {
       label: 'Signals',
       ...ADVISOR_FETCH,
     }),
-    safeFetch(() => advisorService.fetchMonthlyMacdSetup(ADVISOR_WEB_LIMITS.monthlyMacd), {
+    safeFetch(() => advisorService.fetchMonthlyMacdSetup(MOBILE_ADVISOR_LIMITS.monthlyMacd), {
       label: 'Monthly MACD',
       ...ADVISOR_FETCH,
     }).catch(() => null),
     safeFetch(
       () =>
         advisorService.fetchCustomRsMacdSetup({
-          limit: ADVISOR_WEB_LIMITS.customRs,
+          limit: MOBILE_ADVISOR_LIMITS.customRs,
           setup_mode: ADVISOR_WEB_PARAMS.customSetupMode,
           refresh: forceRefresh,
         }),
@@ -143,7 +161,7 @@ export async function fetchAdvisorSignalsPayload({forceRefresh = false} = {}) {
     safeFetch(
       () =>
         advisorService.fetchMondayPrevWeekHighCross({
-          limit: ADVISOR_WEB_LIMITS.mondayPwh,
+          limit: MOBILE_ADVISOR_LIMITS.mondayPwh,
           refresh: forceRefresh,
         }),
       {label: 'Monday PWH', ...ADVISOR_FETCH},
@@ -160,7 +178,8 @@ export async function fetchAdvisorSignalsPayload({forceRefresh = false} = {}) {
 
 export async function fetchAdvisorTrendPayload({forceRefresh = false} = {}) {
   const res = await advisorService.fetchBuyTierCardGrid({
-    symbol_limit: ADVISOR_WEB_LIMITS.buyTierSymbolLimit,
+    symbol_limit: MOBILE_ADVISOR_LIMITS.buyTierSymbolLimit,
+    lite: true,
     refresh: forceRefresh,
     timeoutMs: API_TIMEOUT_MS.advisor,
   });
@@ -176,8 +195,8 @@ export async function fetchAdvisorChartPayload({forceRefresh = false} = {}) {
     () =>
       advisorService.fetchChartFundamentalAgent({
         refresh: forceRefresh,
-        symbol_limit: ADVISOR_WEB_LIMITS.chartSymbolLimit,
-        limit: ADVISOR_WEB_LIMITS.chartRowLimit,
+        symbol_limit: MOBILE_ADVISOR_LIMITS.chartSymbolLimit,
+        limit: MOBILE_ADVISOR_LIMITS.chartRowLimit,
         scan_profile: ADVISOR_WEB_PARAMS.chartScanProfile,
         rvol_min: ADVISOR_WEB_PARAMS.chartRvolMin,
         min_gates: ADVISOR_WEB_PARAMS.chartMinGates,

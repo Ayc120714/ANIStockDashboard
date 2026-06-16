@@ -22,6 +22,7 @@ import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {MOBILE_SCREEN_LIST_LIMIT} from '@core/utils/advisorWebParity';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {
   runScreenPayloadFetch,
@@ -191,7 +192,7 @@ export function ScreensHubScreen({navigation}) {
         }
         if (main === 'trending') {
           const res = await safeFetch(
-            () => dashboardService.fetchTrending(50, {...SCREEN_HEAVY_OPTS, date: screenDate || undefined}),
+            () => dashboardService.fetchTrending(MOBILE_SCREEN_LIST_LIMIT, {...SCREEN_HEAVY_OPTS, date: screenDate || undefined}),
             {
             ...SCREEN_HEAVY_OPTS,
             label: 'Trending',
@@ -224,7 +225,7 @@ export function ScreensHubScreen({navigation}) {
           const res = await safeFetch(
             () =>
               dashboardService.fetchVolumeShockers({
-                limit: 50,
+                limit: MOBILE_SCREEN_LIST_LIMIT,
                 period: perV,
                 date: screenDate || undefined,
                 timeoutMs: API_TIMEOUT_MS.screen,
@@ -243,7 +244,7 @@ export function ScreensHubScreen({navigation}) {
             () =>
               dashboardService.fetchRelativePerformance({
                 period,
-                limit: 50,
+                limit: MOBILE_SCREEN_LIST_LIMIT,
                 date: screenDate || undefined,
                 timeoutMs: API_TIMEOUT_MS.screenHeavy,
               }),

@@ -84,6 +84,15 @@ describe('earlyDetectionTable', () => {
     expect(sorted[0].symbol).toBe('B');
   });
 
+  test('sort wealth_rank descending', () => {
+    const rows = [
+      normalizeEarlyDetectionRow({ symbol: 'X', status: 'confirmed', wealth_rank: 3, sqz_set: 'brown' }),
+      normalizeEarlyDetectionRow({ symbol: 'Y', status: 'confirmed', wealth_rank: 9, sqz_set: 'brown' }),
+    ];
+    const out = sortEarlyDetectionRows(rows, 'wealth_rank', 'desc');
+    expect(out[0].symbol).toBe('Y');
+  });
+
   test('sort trigger_date descending', () => {
     const rows = [
       normalizeEarlyDetectionRow({ symbol: 'X', status: 'confirmed', trigger_date: '2026-05-01', sqz_set: 'brown' }),

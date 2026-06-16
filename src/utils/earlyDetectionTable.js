@@ -54,6 +54,7 @@ export function defaultHistoryDateRange(timeframe) {
 
 const VALID_SQZ_SETS = new Set(['brown', 'lime', 'green']);
 const STATUS_ORDER = { confirmed: 0, active: 1, watch: 2 };
+const WEALTH_PHASE_ORDER = { early_run: 0, ignition: 1, watch_base: 2, parabolic: 3 };
 
 export function sqzColorToSet(color) {
   const c = String(color || '').trim().toLowerCase();
@@ -137,6 +138,12 @@ export function normalizeEarlyDetectionRow(row) {
     ema_ok: emaOk,
     is_complete: isComplete,
     is_legacy: !hasTrigger,
+    rank: parseEdNumber(row?.rank),
+    wealth_rank: parseEdNumber(row?.wealth_rank),
+    wealth_score: parseEdNumber(row?.wealth_score),
+    wealth_phase: row?.wealth_phase ? String(row.wealth_phase) : '',
+    wealth_phase_label: row?.wealth_phase_label ? String(row.wealth_phase_label) : '',
+    buy_tier: row?.buy_tier ? String(row.buy_tier).toUpperCase() : '',
   };
 }
 
@@ -191,13 +198,28 @@ function cmpString(a, b, mul) {
 }
 
 export function sortEarlyDetectionRows(rows, sortCol, sortDir) {
-  const col = String(sortCol || 'trigger_date').toLowerCase();
+  const col = String(sortCol || 'wealth_rank').toLowerCase();
   const mul = String(sortDir || 'desc').toLowerCase() === 'asc' ? 1 : -1;
   const sorted = [...rows];
 
   sorted.sort((a, b) => {
     let c = 0;
     switch (col) {
+      case 'rank':
+      case 'wealth_rank':
+        c = cmpNullable(a.wealth_rank ?? a.rank, b.wealth_rank ?? b.rank, 1);
+        break;
+      case 'wealth_score':
+        c = cmpNullable(a.wealth_score, b.wealth_score, 1);
+        break;
+      case 'wealth_phase':
+        c =
+          (WEALTH_PHASE_ORDER[a.wealth_phase] ?? 9) -
+          (WEALTH_PHASE_ORDER[b.wealth_phase] ?? 9);
+        break;
+      case 'buy_tier':
+        c = cmpString(a.buy_tier, b.buy_tier, 1);
+        break;
       case 'symbol':
         c = cmpString(a.symbol, b.symbol, 1);
         break;
@@ -243,6 +265,10 @@ export function buildEarlyDetectionTableModel(rawRows, { sqzFilter, sortCol, sor
   const normalized = normalizeEarlyDetectionRows(rawRows);
   const counts = countEarlyDetectionBySqzSet(normalized);
   const filtered = filterEarlyDetectionRows(normalized, sqzFilter);
-  const sorted = sortEarlyDetectionRows(filtered, sortCol, sortDir);
+  const sorted = sortEarlyDetectionRows(
+    filtered,
+    sortCol || 'wealth_rank',
+    sortDir || 'desc',
+  );
   return { normalized, counts, filtered, sorted };
 }

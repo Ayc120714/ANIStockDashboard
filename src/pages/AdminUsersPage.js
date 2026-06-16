@@ -29,6 +29,22 @@ import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.s
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
 
+function isMonthlyPremiumUser(row) {
+  if (row.premium_lifetime) return false;
+  if (row.paid_premium_active && row.premium_plan === 'monthly') return true;
+  return Boolean(row.premium_complimentary || row.on_premium_allowlist);
+}
+
+function isYearlyPremiumUser(row) {
+  if (row.premium_lifetime) return false;
+  if (!row.paid_premium_active) return false;
+  return row.premium_plan === 'yearly' || !row.premium_plan;
+}
+
+function isBasicUser(row) {
+  return !row.premium_lifetime && !isMonthlyPremiumUser(row) && !isYearlyPremiumUser(row);
+}
+
 const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('404');
@@ -128,18 +144,16 @@ function AdminUsersPage() {
     () => filteredRows.filter((r) => Boolean(r.premium_lifetime)),
     [filteredRows],
   );
-  const tierYearlyOtherPremiumUsers = useMemo(
-    () => filteredRows.filter((r) => {
-      if (r.premium_lifetime) return false;
-      return Boolean(r.paid_premium_active || r.premium_complimentary || r.on_premium_allowlist);
-    }),
+  const tierMonthlyPremiumUsers = useMemo(
+    () => filteredRows.filter((r) => isMonthlyPremiumUser(r)),
+    [filteredRows],
+  );
+  const tierYearlyPremiumUsers = useMemo(
+    () => filteredRows.filter((r) => isYearlyPremiumUser(r)),
     [filteredRows],
   );
   const tierBasicUsers = useMemo(
-    () =>
-      filteredRows.filter(
-        (r) => !r.premium_lifetime && !r.paid_premium_active && !r.premium_complimentary && !r.on_premium_allowlist,
-      ),
+    () => filteredRows.filter((r) => isBasicUser(r)),
     [filteredRows],
   );
 
@@ -220,9 +234,10 @@ function AdminUsersPage() {
     setError('');
     setMessage('');
     try {
-      const res = await setUserPaidPremium(paidTarget.id);
+      const res = await setUserPaidPremium(paidTarget.id, paidTarget.plan || 'yearly');
+      const planLabel = (paidTarget.plan || 'yearly') === 'monthly' ? 'Monthly' : 'Yearly';
       const ist = res?.paid_premium_until_ist ? ` (through ${res.paid_premium_until_ist})` : '';
-      setMessage(`Paid premium recorded for ${paidTarget.email}${ist}.`);
+      setMessage(`${planLabel} premium recorded for ${paidTarget.email}${ist}.`);
       setPaidTarget(null);
       await loadUsers();
     } catch (err) {
@@ -255,10 +270,10 @@ function AdminUsersPage() {
       <AdminPageVisitStats />
 
       <Box sx={{ fontSize: 13, color: 'text.secondary', mb: 2, lineHeight: 1.5 }}>
-        Creating or approving a user only activates their <strong>basic</strong> workspace (when the paywall is on).
-        Below, users are split into <strong>Lifetime members</strong>, <strong>Yearly &amp; other premium</strong> (explicitly
-        upgraded without lifetime), and <strong>Basic</strong> (not upgraded yet). Use <strong>Record payment</strong> for
-        a one-year paid term (IST), or the email allowlist for overrides.
+        Creating or approving a user grants <strong>one month</strong> of premium on first approval (then basic after expiry).
+        Below, users are split into <strong>Lifetime members</strong>, <strong>Monthly premium</strong> (monthly paid,
+        complimentary, or allowlist), <strong>Yearly premium</strong> (active yearly paid term), and <strong>Basic</strong>.
+        Use <strong>Grant monthly</strong> / <strong>Grant yearly</strong> to extend paid access (IST).
       </Box>
       <Box
         component="ol"
@@ -277,7 +292,7 @@ function AdminUsersPage() {
           The server stores that in one database commit (up to 200 users per action).
         </Box>
         <Box component="li">
-          <strong>Premium → lifetime (multi-select):</strong> open <strong>Yearly &amp; other premium</strong>, select rows,
+          <strong>Premium → lifetime (multi-select):</strong> open <strong>Monthly premium</strong> or <strong>Yearly premium</strong>, select rows,
           then <strong>Lifetime premium for selected</strong>. From <strong>Basic</strong> you can instead choose{' '}
           <strong>Lifetime premium for selected</strong> to grant lifetime in one step. Both use a single DB commit per bulk
           action.
@@ -414,7 +429,8 @@ function AdminUsersPage() {
       ) : (
         <AdminUserDirectoryTables
           tierLifetimeUsers={tierLifetimeUsers}
-          tierYearlyOtherPremiumUsers={tierYearlyOtherPremiumUsers}
+          tierMonthlyPremiumUsers={tierMonthlyPremiumUsers}
+          tierYearlyPremiumUsers={tierYearlyPremiumUsers}
           tierBasicUsers={tierBasicUsers}
           highlightUserId={highlightUserId}
           busy={busy}
@@ -428,21 +444,23 @@ function AdminUsersPage() {
       )}
 
       <Dialog open={Boolean(paidTarget)} onClose={() => !busy && setPaidTarget(null)}>
-        <DialogTitle>Record annual payment (IST)</DialogTitle>
+        <DialogTitle>
+          {paidTarget?.plan === 'monthly' ? 'Grant monthly premium (IST)' : 'Grant yearly premium (IST)'}
+        </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 1 }}>
-            User <strong>{paidTarget?.email || ''}</strong>. This records <strong>one calendar year</strong> of paid
-            premium from the later of <em>now</em> (Asia/Kolkata) and the current subscription end (if still active),
-            so renewals stack correctly. Re-run each year after payment.
+            User <strong>{paidTarget?.email || ''}</strong>. This records{' '}
+            <strong>{paidTarget?.plan === 'monthly' ? 'one calendar month' : 'one calendar year'}</strong> of paid
+            premium from the later of <em>now</em> (Asia/Kolkata) and the current subscription end (if still active).
           </DialogContentText>
           <DialogContentText sx={{ color: 'text.secondary', fontSize: 13 }}>
-            There is no lifetime option; access must be renewed annually.
+            After the term ends, the user automatically returns to <strong>basic</strong> until you grant again.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPaidTarget(null)} disabled={busy}>Cancel</Button>
           <Button variant="contained" onClick={onSubmitPaidPremium} disabled={busy}>
-            Confirm annual premium (IST)
+            Confirm {paidTarget?.plan === 'monthly' ? 'monthly' : 'yearly'} premium
           </Button>
         </DialogActions>
       </Dialog>

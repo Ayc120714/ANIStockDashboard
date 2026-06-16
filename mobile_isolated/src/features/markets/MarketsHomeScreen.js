@@ -15,6 +15,11 @@ import {AYC} from '@core/theme/aycMobileTheme';
 import {navigateToMainTab} from '@nav/navigationHelpers';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
+import {
+  marketsOutlookListForTab,
+  marketsOutlookPayloadUsable,
+  refreshMarketsOutlookOnFocus,
+} from '@core/utils/marketsOutlookScreen';
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 
 const TABS = [
@@ -63,11 +68,7 @@ export function MarketsHomeScreen({navigation}) {
       setLoading: v => setBusy(v),
       setError: msg => setError(msg || ''),
       forceNetwork: forceRefresh,
-      hasUsable: data => {
-        if (tab === 'market') return (data?.rows?.length > 0) || data?.fii != null;
-        if (tab === 'sector') return data?.sectorRows?.length > 0;
-        return data?.subRows?.length > 0;
-      },
+      hasUsable: data => marketsOutlookPayloadUsable(tab, data),
       silent: silent && !forceRefresh,
     });
   }, [tab]);
@@ -83,11 +84,7 @@ export function MarketsHomeScreen({navigation}) {
           setSectorRows(payload.sectorRows || []);
           setSubRows(payload.subRows || []);
         },
-        hasUsable: data => {
-          if (tab === 'market') return (data?.rows?.length > 0) || data?.fii != null;
-          if (tab === 'sector') return data?.sectorRows?.length > 0;
-          return data?.subRows?.length > 0;
-        },
+        hasUsable: data => marketsOutlookPayloadUsable(tab, data),
       });
       if (cancelled) return;
       await load({silent: hadCache});
@@ -97,16 +94,19 @@ export function MarketsHomeScreen({navigation}) {
     };
   }, [load, tab]);
 
+  const list = marketsOutlookListForTab(tab, {rows, sectorRows, subRows});
+
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
-        const stale = await shouldRefreshPageCache(cacheKey);
-        if (stale) {
-          await load({silent: list.length > 0 || fii != null});
-        }
-      })();
-    }, [load, tab]),
+      const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
+      refreshMarketsOutlookOnFocus({
+        cacheKey,
+        listLength: list.length,
+        fii,
+        shouldRefreshPageCache,
+        load,
+      }).catch(() => {});
+    }, [load, tab, list.length, fii]),
   );
 
   useEffect(() => {
@@ -125,7 +125,6 @@ export function MarketsHomeScreen({navigation}) {
     setTab(nextTab);
   }, [tab]);
 
-  const list = tab === 'market' ? rows : tab === 'sector' ? sectorRows : subRows;
   const sortFn =
     tab === 'sector' ? getSectorSortValue : tab === 'subsector' ? getSubsectorSortValue : getMarketIndexSortValue;
   const tableRows = useMemo(() => {

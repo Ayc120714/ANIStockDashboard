@@ -2,6 +2,23 @@
 
 export const MOBILE_TIER_TABLE_PAGE_SIZE = 5;
 
+/** Mobile Signals tab + alerts inbox — keep payloads small for fast first paint. */
+export const MOBILE_SIGNALS_TAB_LIMIT = 10;
+export const MOBILE_ALERTS_LIMIT = 10;
+
+/** Reduced mobile advisor/screens limits (web uses ADVISOR_WEB_LIMITS). */
+export const MOBILE_ADVISOR_LIMITS = {
+  latestSignals: 25,
+  monthlyMacd: 40,
+  customRs: 60,
+  mondayPwh: 40,
+  buyTierSymbolLimit: 400,
+  chartSymbolLimit: 500,
+  chartRowLimit: 60,
+};
+
+export const MOBILE_SCREEN_LIST_LIMIT = 30;
+
 export const ADVISOR_WEB_LIMITS = {
   latestSignals: 250,
   monthlyMacd: 300,

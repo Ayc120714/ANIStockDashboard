@@ -3,10 +3,10 @@
  * (especially off-market / weekend when API data is static EOD snapshots).
  */
 import {dashboardService} from '@core/api/services/dashboardService';
-import {signalsService} from '@core/api/services/signalsService';
 import {advisorService} from '@core/api/services/advisorService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
+import {MOBILE_SCREEN_LIST_LIMIT, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
 import {MIN_FII_DII_DAYS} from '@core/utils/fiiDiiPayload';
 import {normalizeMarketIndicesCards} from '@core/utils/marketIndicesCards';
 import {parseStockListResponse} from '@core/utils/stockListPayload';
@@ -15,6 +15,7 @@ import {
   fetchAdvisorChartPayload,
   fetchAdvisorSignalsPayload,
   fetchAdvisorTrendPayload,
+  fetchMobileSignalsTabRows,
   hasUsableAdvisorChartPayload,
   hasUsableAdvisorSignalsPayload,
   hasUsableAdvisorTrendPayload,
@@ -98,7 +99,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
         };
       }
       if (main === 'trending') {
-        const res = await dashboardService.fetchTrending(50, {timeoutMs: HEAVY});
+        const res = await dashboardService.fetchTrending(MOBILE_SCREEN_LIST_LIMIT, {timeoutMs: HEAVY});
         return {
           weeklyMeta: {pickDate: null, subtitle: 'Trending stocks'},
           list: Array.isArray(res) ? res : parseStockListResponse(res),
@@ -108,7 +109,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
         const res = await dashboardService.fetchPriceShockers({
           type: gl,
           period: perM,
-          limit: 50,
+          limit: MOBILE_SCREEN_LIST_LIMIT,
           timeoutMs: HEAVY,
         });
         return {
@@ -116,7 +117,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
           list: Array.isArray(res) ? res : parseStockListResponse(res),
         };
       }
-      const res = await dashboardService.fetchVolumeShockers({limit: 50, period: perV, timeoutMs: HEAVY});
+      const res = await dashboardService.fetchVolumeShockers({limit: MOBILE_SCREEN_LIST_LIMIT, period: perV, timeoutMs: HEAVY});
       return {
         weeklyMeta: {pickDate: null, subtitle: `Volume · ${perV}`},
         list: Array.isArray(res) ? res : parseStockListResponse(res),
@@ -167,8 +168,8 @@ async function prefetchSignalsTab() {
   return warmCacheIfNeeded(
     cacheKey,
     async () => {
-      const res = await signalsService.fetchLatestSignals({limit: 150, timeoutMs: API_TIMEOUT_MS.advisor});
-      return Array.isArray(res) ? res : extractApiRows(res);
+      const res = await fetchMobileSignalsTabRows();
+      return res;
     },
     data => Array.isArray(data) && data.length > 0,
   );

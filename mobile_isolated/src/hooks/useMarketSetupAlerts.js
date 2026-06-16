@@ -3,6 +3,7 @@ import {AppState} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {alertsService} from '@core/api/services/alertsService';
 import {signalsService} from '@core/api/services/signalsService';
+import {MOBILE_ALERTS_LIMIT, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {extractApiRows} from '@core/utils/apiPayload';
@@ -94,7 +95,7 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
 
   const pollSignals = useCallback(async () => {
     const sigRes = await signalsService
-      .fetchLatestSignals({limit: 60, timeoutMs: API_TIMEOUT_MS.advisor})
+      .fetchLatestSignals({limit: MOBILE_SIGNALS_TAB_LIMIT, mobile_lite: true, timeoutMs: API_TIMEOUT_MS.advisor})
       .catch(() => null);
     if (!sigRes) return;
 
@@ -115,7 +116,7 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
 
   const pollLiveAdvisorAlerts = useCallback(async () => {
     const rows = await alertsService
-      .fetchLiveAdvisorAlerts({limit: 120, timeoutMs: API_TIMEOUT_MS.advisor})
+      .fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT, timeoutMs: API_TIMEOUT_MS.advisor})
       .catch(() => null);
     if (!rows) return;
 

@@ -22,7 +22,9 @@ function accessHints(row) {
   if (row.premium_lifetime) parts.push('Life.');
   if (row.premium_complimentary) parts.push('Compl.');
   if (row.on_premium_allowlist) parts.push('List');
-  if (row.paid_premium_active) parts.push('Paid');
+  if (row.paid_premium_active) {
+    parts.push(row.premium_plan === 'monthly' ? 'Monthly' : 'Yearly');
+  }
   return parts.length ? parts.join(' ') : '—';
 }
 
@@ -172,12 +174,29 @@ function UserRows({
               Unblock
             </Button>
           )}
-          {!row.is_pending_approval && listKind === 'yearly_other' ? (
-            <Button size="small" color="primary" variant="outlined" disabled={busy} onClick={() => setPaidTarget(row)}>
-              Record payment
+          {!row.is_pending_approval && listKind === 'monthly' && row.paid_premium_active && row.premium_plan === 'monthly' ? (
+            <Button
+              size="small"
+              color="primary"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => setPaidTarget({ ...row, plan: 'monthly' })}
+            >
+              Extend monthly
             </Button>
           ) : null}
-          {!row.is_pending_approval && listKind === 'yearly_other' && row.paid_premium_until ? (
+          {!row.is_pending_approval && listKind === 'yearly' ? (
+            <Button
+              size="small"
+              color="primary"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => setPaidTarget({ ...row, plan: 'yearly' })}
+            >
+              Extend yearly
+            </Button>
+          ) : null}
+          {!row.is_pending_approval && (listKind === 'monthly' || listKind === 'yearly') && row.paid_premium_until ? (
             <Button
               size="small"
               variant="outlined"
@@ -193,22 +212,42 @@ function UserRows({
             </Button>
           ) : null}
           {!row.is_pending_approval && listKind === 'basic' ? (
-            <Button
-              size="small"
-              color="secondary"
-              variant="outlined"
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await setUserComplimentaryPremium(row.id, true);
-                  setMessage(`Complimentary premium enabled for ${row.email} (no payment).`);
-                })
-              }
-            >
-              Complimentary premium
-            </Button>
+            <>
+              <Button
+                size="small"
+                color="primary"
+                variant="outlined"
+                disabled={busy}
+                onClick={() => setPaidTarget({ ...row, plan: 'monthly' })}
+              >
+                Grant monthly
+              </Button>
+              <Button
+                size="small"
+                color="primary"
+                variant="outlined"
+                disabled={busy}
+                onClick={() => setPaidTarget({ ...row, plan: 'yearly' })}
+              >
+                Grant yearly
+              </Button>
+              <Button
+                size="small"
+                color="secondary"
+                variant="outlined"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await setUserComplimentaryPremium(row.id, true);
+                    setMessage(`Complimentary premium enabled for ${row.email} (no payment).`);
+                  })
+                }
+              >
+                Complimentary premium
+              </Button>
+            </>
           ) : null}
-          {!row.is_pending_approval && (listKind === 'basic' || listKind === 'yearly_other') && !row.premium_lifetime ? (
+          {!row.is_pending_approval && (listKind === 'basic' || listKind === 'monthly' || listKind === 'yearly') && !row.premium_lifetime ? (
             <Button
               size="small"
               color="info"
@@ -240,7 +279,7 @@ function UserRows({
               Move to complimentary
             </Button>
           ) : null}
-          {!row.is_pending_approval && (listKind === 'lifetime' || listKind === 'yearly_other') && row.premium_lifetime ? (
+          {!row.is_pending_approval && (listKind === 'lifetime' || listKind === 'monthly' || listKind === 'yearly') && row.premium_lifetime ? (
             <Button
               size="small"
               color="info"
@@ -256,7 +295,7 @@ function UserRows({
               Remove lifetime
             </Button>
           ) : null}
-          {!row.is_pending_approval && (listKind === 'lifetime' || listKind === 'yearly_other') && row.premium_complimentary ? (
+          {!row.is_pending_approval && (listKind === 'lifetime' || listKind === 'monthly' || listKind === 'yearly') && row.premium_complimentary ? (
             <Button
               size="small"
               color="secondary"
@@ -308,7 +347,8 @@ function BulkBar({ count, busy, onClear, children }) {
 
 export default function AdminUserDirectoryTables({
   tierLifetimeUsers,
-  tierYearlyOtherPremiumUsers,
+  tierMonthlyPremiumUsers,
+  tierYearlyPremiumUsers,
   tierBasicUsers,
   highlightUserId,
   busy,
@@ -320,17 +360,24 @@ export default function AdminUserDirectoryTables({
   setDeleteTarget,
 }) {
   const [selectedBasic, setSelectedBasic] = useState([]);
+  const [selectedMonthly, setSelectedMonthly] = useState([]);
   const [selectedYearly, setSelectedYearly] = useState([]);
   const [selectedLifetime, setSelectedLifetime] = useState([]);
 
   const basicVisibleIds = useMemo(() => tierBasicUsers.map((r) => r.id), [tierBasicUsers]);
-  const yearlyVisibleIds = useMemo(() => tierYearlyOtherPremiumUsers.map((r) => r.id), [tierYearlyOtherPremiumUsers]);
+  const monthlyVisibleIds = useMemo(() => tierMonthlyPremiumUsers.map((r) => r.id), [tierMonthlyPremiumUsers]);
+  const yearlyVisibleIds = useMemo(() => tierYearlyPremiumUsers.map((r) => r.id), [tierYearlyPremiumUsers]);
   const lifetimeVisibleIds = useMemo(() => tierLifetimeUsers.map((r) => r.id), [tierLifetimeUsers]);
 
   const allBasicHeaderChecked =
     basicVisibleIds.length > 0 && basicVisibleIds.every((id) => selectedBasic.includes(id));
   const basicHeaderIndeterminate =
     basicVisibleIds.some((id) => selectedBasic.includes(id)) && !allBasicHeaderChecked;
+
+  const allMonthlyHeaderChecked =
+    monthlyVisibleIds.length > 0 && monthlyVisibleIds.every((id) => selectedMonthly.includes(id));
+  const monthlyHeaderIndeterminate =
+    monthlyVisibleIds.some((id) => selectedMonthly.includes(id)) && !allMonthlyHeaderChecked;
 
   const allYearlyHeaderChecked =
     yearlyVisibleIds.length > 0 && yearlyVisibleIds.every((id) => selectedYearly.includes(id));
@@ -344,6 +391,10 @@ export default function AdminUserDirectoryTables({
 
   const toggleBasicRow = useCallback((id) => {
     setSelectedBasic((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const toggleMonthlyRow = useCallback((id) => {
+    setSelectedMonthly((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
   const toggleYearlyRow = useCallback((id) => {
@@ -361,6 +412,14 @@ export default function AdminUserDirectoryTables({
       return [...new Set([...prev, ...basicVisibleIds])];
     });
   }, [basicVisibleIds]);
+
+  const toggleMonthlyAll = useCallback(() => {
+    setSelectedMonthly((prev) => {
+      const allOn = monthlyVisibleIds.length > 0 && monthlyVisibleIds.every((id) => prev.includes(id));
+      if (allOn) return prev.filter((id) => !monthlyVisibleIds.includes(id));
+      return [...new Set([...prev, ...monthlyVisibleIds])];
+    });
+  }, [monthlyVisibleIds]);
 
   const toggleYearlyAll = useCallback(() => {
     setSelectedYearly((prev) => {
@@ -412,6 +471,15 @@ export default function AdminUserDirectoryTables({
       setSelectedBasic([]);
     });
   }, [runBulk, selectedBasic, setMessage]);
+
+  const onBulkMonthlyLifetime = useCallback(() => {
+    if (!selectedMonthly.length) return;
+    runBulk(async () => {
+      const res = await bulkSetUserLifetimePremium(selectedMonthly, true);
+      setMessage(`Lifetime premium saved for ${res.updated} user(s) (database updated).`);
+      setSelectedMonthly([]);
+    });
+  }, [runBulk, selectedMonthly, setMessage]);
 
   const onBulkYearlyLifetime = useCallback(() => {
     if (!selectedYearly.length) return;
@@ -500,7 +568,45 @@ export default function AdminUserDirectoryTables({
       </Box>
 
       <Box>
-        <TableTitle>Yearly &amp; other premium ({tierYearlyOtherPremiumUsers.length})</TableTitle>
+        <TableTitle>Monthly premium ({tierMonthlyPremiumUsers.length})</TableTitle>
+        <BulkBar count={selectedMonthly.length} busy={busy} onClear={() => setSelectedMonthly([])}>
+          <Button
+            size="small"
+            color="info"
+            variant="contained"
+            disabled={busy || selectedMonthly.length === 0}
+            onClick={onBulkMonthlyLifetime}
+            title="Move selected users from premium to lifetime (one DB commit)"
+          >
+            Lifetime premium for selected
+          </Button>
+        </BulkBar>
+        <TableWrapper>
+          <Table>
+            {tableHead(true, allMonthlyHeaderChecked, monthlyHeaderIndeterminate, toggleMonthlyAll)}
+            <tbody>
+              <UserRows
+                rows={tierMonthlyPremiumUsers}
+                listKind="monthly"
+                busy={busy}
+                setBusy={setBusy}
+                setError={setError}
+                setMessage={setMessage}
+                loadUsers={loadUsers}
+                setPaidTarget={setPaidTarget}
+                setDeleteTarget={setDeleteTarget}
+                selectable
+                selectedIds={selectedMonthly}
+                onToggleRow={toggleMonthlyRow}
+                highlightUserId={highlightUserId}
+              />
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Box>
+
+      <Box>
+        <TableTitle>Yearly premium ({tierYearlyPremiumUsers.length})</TableTitle>
         <BulkBar count={selectedYearly.length} busy={busy} onClear={() => setSelectedYearly([])}>
           <Button
             size="small"
@@ -518,8 +624,8 @@ export default function AdminUserDirectoryTables({
             {tableHead(true, allYearlyHeaderChecked, yearlyHeaderIndeterminate, toggleYearlyAll)}
             <tbody>
               <UserRows
-                rows={tierYearlyOtherPremiumUsers}
-                listKind="yearly_other"
+                rows={tierYearlyPremiumUsers}
+                listKind="yearly"
                 busy={busy}
                 setBusy={setBusy}
                 setError={setError}

@@ -39,7 +39,9 @@ const accessHints = row => {
   if (row?.premium_lifetime) parts.push('Lifetime');
   if (row?.premium_complimentary) parts.push('Complimentary');
   if (row?.on_premium_allowlist) parts.push('Allowlist');
-  if (row?.paid_premium_active) parts.push('Paid');
+  if (row?.paid_premium_active) {
+    parts.push(row?.premium_plan === 'monthly' ? 'Monthly paid' : 'Yearly paid');
+  }
   return parts.length ? parts.join(' · ') : 'Basic';
 };
 

@@ -5,11 +5,10 @@
  * - Whole-app modules: Screens, Advisor, Portfolio Manager, Alerts, F&O, Commodities, Forex (route + sidebar).
  *
  * Backend: set ``OUTLOOK_PAYWALL_ACTIVE=true``, ``OUTLOOK_PREMIUM_LEGACY_CUTOFF_UTC`` (ISO) for grandfathering
- * older accounts. With the paywall on, new users stay basic until an admin records payment (Admin Users → Record
- * payment sets ``paid_premium_until`` to **one calendar year** later in **IST**, renewable yearly), adds the email
- * to the premium allowlist, ``premium_lifetime`` (permanent admin grant), ``premium_complimentary`` (revocable
- * admin grant without payment), or the account is grandfathered when ``OUTLOOK_PREMIUM_LEGACY_CUTOFF_UTC`` is set
- * on the server and ``created_at`` is strictly before that instant (backend ``outlook_premium_for_user``).
+ * older accounts. With the paywall on, new users get one month on first admin approval, then basic until renewed.
+ * Admins can grant monthly (1 month IST) or yearly (1 year IST) paid terms, add emails to the premium allowlist,
+ * set ``premium_complimentary`` or ``premium_lifetime``, or grandfather when ``created_at`` is before the cutoff
+ * (backend ``outlook_premium_for_user``).
  *
  * Frontend dev override: ``REACT_APP_OUTLOOK_PREMIUM_DEFAULT=false`` treats users as non-premium when
  * ``outlook_premium`` is absent (older cached user JSON). The app also re-fetches ``/auth/me`` periodically and when

@@ -123,12 +123,9 @@ function TrendTierTable({title, rows, enabled, tone, pageSize = TREND_TIER_PAGE_
               <View style={styles.thRow}>
                 <Text style={[styles.th, styles.trSym]}>Symbol</Text>
                 <Text style={[styles.th, styles.trTv]} />
-                <Text style={[styles.th, styles.trCompany]}>Company</Text>
-                <Text style={[styles.th, styles.trSector]}>Sector</Text>
                 <Text style={[styles.th, styles.trNum]}>Close</Text>
                 <Text style={[styles.th, styles.trNum]}>CHG%</Text>
                 <Text style={[styles.th, styles.trTier]}>Tier</Text>
-                <Text style={[styles.th, styles.trContext]}>Setup</Text>
               </View>
               {pagedItems.map((row, index) => (
                 <View
@@ -145,18 +142,9 @@ function TrendTierTable({title, rows, enabled, tone, pageSize = TREND_TIER_PAGE_
                   <View style={[styles.td, styles.trTv]}>
                     <TradingViewLink symbol={row.symbol} />
                   </View>
-                  <Text style={[styles.td, styles.trCompany]} numberOfLines={1}>
-                    {row.company || '—'}
-                  </Text>
-                  <Text style={[styles.td, styles.trSector]} numberOfLines={1}>
-                    {row.sector || '—'}
-                  </Text>
                   <Text style={[styles.td, styles.trNum]}>{row.close != null ? formatINR(row.close) : '—'}</Text>
                   <Text style={[styles.td, styles.trNum]}>{formatChgPct(row.chg_pct)}</Text>
                   <Text style={[styles.td, styles.trTier]}>{row.buy_sell_tier || '—'}</Text>
-                  <Text style={[styles.td, styles.trContext]} numberOfLines={2}>
-                    {row.reversal_context || '—'}
-                  </Text>
                 </View>
               ))}
             </View>
@@ -958,11 +946,8 @@ const styles = StyleSheet.create({
   cfHorizon: {width: 80},
   trSym: {width: 72},
   trTv: {width: 28, alignItems: 'center', justifyContent: 'center'},
-  trCompany: {width: 120},
-  trSector: {width: 88},
   trNum: {width: 72, textAlign: 'right'},
   trTier: {width: 40},
-  trContext: {width: 140},
   trFresh: {borderLeftWidth: 3, borderLeftColor: '#2563eb'},
   trPass: {backgroundColor: '#ecfdf5'},
   rsPos: {color: AYC.positive},

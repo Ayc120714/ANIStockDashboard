@@ -1,13 +1,13 @@
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v14',
-  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v3',
+  dashboard: '@ani/mobile/page-cache/dashboard-v15',
+  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v4',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
-    `@ani/mobile/page-cache/screens-v4-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
+    `@ani/mobile/page-cache/screens-v5-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v2-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v4-${listType}`,
-  advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v2',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v8',
+  advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v9',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v3',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
@@ -98,4 +98,5 @@ export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [
   '@ani/mobile/page-cache/advisor-hub-trend-v5',
   '@ani/mobile/page-cache/advisor-hub-trend-v6',
   '@ani/mobile/page-cache/advisor-hub-trend-v7',
+  '@ani/mobile/page-cache/advisor-hub-trend-v8',
 ];

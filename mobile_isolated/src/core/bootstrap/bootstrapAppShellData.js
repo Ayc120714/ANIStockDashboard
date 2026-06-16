@@ -11,6 +11,7 @@ import {
   fetchAdvisorChartPayload,
   fetchAdvisorSignalsPayload,
   fetchAdvisorTrendPayload,
+  fetchMobileSignalsTabRows,
   hasUsableAdvisorChartPayload,
   hasUsableAdvisorSignalsPayload,
   hasUsableAdvisorTrendPayload,
@@ -214,12 +215,10 @@ async function bootstrapWatchlist(listType, {onProgress}) {
 }
 
 async function warmSignalsBundle({onProgress}) {
-  onProgress?.('Signals & Advisor…');
-  const payload = await fetchAdvisorSignalsPayload();
-  const rows = payload.sigRows || [];
+  onProgress?.('Signals…');
+  const rows = await fetchMobileSignalsTabRows();
   await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals, rows);
-  await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals, payload);
-  return payload;
+  return rows;
 }
 
 async function warmAdvisorHubBundle({onProgress}) {
@@ -249,7 +248,6 @@ async function warmAdvisorHubBundle({onProgress}) {
   ]);
 
   if (signals.status === 'fulfilled') {
-    await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals, signals.value.sigRows || []);
     await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubSignals, signals.value);
   }
   if (trend.status === 'fulfilled' && hasUsableAdvisorTrendPayload(trend.value)) {

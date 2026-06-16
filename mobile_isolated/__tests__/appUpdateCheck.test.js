@@ -6,15 +6,15 @@ import {isAppUpdateAvailable, isRemoteVersionNewer} from '@core/utils/appUpdateC
 
 describe('app update check', () => {
   it('uses synced installed version constants', () => {
-    expect(APP_VERSION_NAME).toBe('1.2.51');
-    expect(APP_VERSION_CODE).toBe(36);
+    expect(APP_VERSION_NAME).toBe('1.2.52');
+    expect(APP_VERSION_CODE).toBe(37);
   });
 
   it('detects newer remote versionCode', () => {
     expect(
       isAppUpdateAvailable({
-        version: '1.2.51',
-        versionCode: 37,
+        version: '1.2.52',
+        versionCode: 38,
       }),
     ).toBe(true);
   });
@@ -29,7 +29,7 @@ describe('app update check', () => {
   });
 
   it('compares semver when versionCode is missing', () => {
-    expect(isRemoteVersionNewer('1.2.51', '1.2.50')).toBe(true);
+    expect(isRemoteVersionNewer('1.2.52', '1.2.51')).toBe(true);
     expect(isRemoteVersionNewer('1.2.49', '1.2.50')).toBe(false);
   });
 });

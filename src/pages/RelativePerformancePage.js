@@ -6,7 +6,11 @@ import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchRelativePerformance, fetchScreenDates } from '../api/stocks';
+import {
+  fetchRelativePerformanceRaw,
+  fetchScreenDates,
+  mapStockListToTable,
+} from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
@@ -78,11 +82,12 @@ function RelativePerformancePage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `relativePerformanceData_v2_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `relativePerformanceData_v3_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,
-      fetcher: () => fetchRelativePerformance(period, fetchLimit, dateStr),
+      fetcher: () => fetchRelativePerformanceRaw(period, fetchLimit, dateStr),
+      mapRows: (raw) => mapStockListToTable(raw, { period }),
       setRows: setTableData,
       setLoading: setIsLoading,
       setError: setLoadError,

@@ -85,14 +85,14 @@ export const fetchEarlyDetectionRecent = async ({
   limit = 300,
   dedupe_symbol = true,
   sqz_set = '',
-  sort_by = 'trigger_date',
+  sort_by = 'wealth_rank',
   sort_dir = 'desc',
 } = {}) => {
   const params = new URLSearchParams();
   params.set('timeframe', String(timeframe || 'daily'));
   params.set('limit', String(limit));
   params.set('dedupe_symbol', dedupe_symbol ? 'true' : 'false');
-  params.set('sort_by', String(sort_by || 'trigger_date'));
+  params.set('sort_by', String(sort_by || 'wealth_rank'));
   params.set('sort_dir', String(sort_dir || 'desc'));
   if (lookback_days != null && lookback_days !== '') {
     params.set('lookback_days', String(lookback_days));
@@ -109,7 +109,7 @@ export const fetchEarlyDetectionHistory = async ({
   timeframe = 'daily',
   limit = 1000,
   sqz_set = '',
-  sort_by = 'trigger_date',
+  sort_by = 'wealth_rank',
   sort_dir = 'desc',
 } = {}) => {
   const params = new URLSearchParams();
@@ -117,7 +117,7 @@ export const fetchEarlyDetectionHistory = async ({
   params.set('from_date', String(from_date || '').slice(0, 10));
   params.set('to_date', String(to_date || '').slice(0, 10));
   params.set('limit', String(limit));
-  params.set('sort_by', String(sort_by || 'trigger_date'));
+  params.set('sort_by', String(sort_by || 'wealth_rank'));
   params.set('sort_dir', String(sort_dir || 'desc'));
   const sqz = String(sqz_set || '').trim().toLowerCase();
   if (sqz && sqz !== 'all') params.set('sqz_set', sqz);
@@ -204,9 +204,10 @@ export const fetchTrendReversal = async ({
 };
 
 /** Daily / weekly / monthly × B1 B2 B3 — latest-bar buy_sell_tier buckets (card grid). */
-export const fetchBuyTierCardGrid = async ({ refresh = false, symbol_limit = 800 } = {}) => {
+export const fetchBuyTierCardGrid = async ({ refresh = false, symbol_limit = 800, lite = true } = {}) => {
   const params = new URLSearchParams();
   params.set('symbol_limit', String(symbol_limit));
+  params.set('lite', lite ? 'true' : 'false');
   if (refresh) params.set('refresh', 'true');
   return apiGet(`/advisor/signals/buy-tier-cards?${params.toString()}`);
 };

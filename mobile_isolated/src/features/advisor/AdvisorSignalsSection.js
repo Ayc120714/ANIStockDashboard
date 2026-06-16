@@ -12,6 +12,7 @@ import {TradingViewLink} from '@components/TradingViewLink';
 import {ListPagePager} from '@components/ListPagePager';
 import {advisorService} from '@core/api/services/advisorService';
 import {alertsService} from '@core/api/services/alertsService';
+import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {
@@ -229,6 +230,8 @@ function EarlyDetectionTable({rows, pageSize = PAGE_SIZE}) {
   return (
     <SectionBlock title="Early detection" count={rows.length}>
       <View style={styles.thRow}>
+        <Text style={[styles.th, styles.edRank]}>#</Text>
+        <Text style={[styles.th, styles.edPhase]}>Phase</Text>
         <Text style={[styles.th, styles.colSym]}>Symbol</Text>
         <Text style={[styles.th, styles.colTv]} />
         <Text style={[styles.th, styles.edSm]}>Sector</Text>
@@ -240,6 +243,11 @@ function EarlyDetectionTable({rows, pageSize = PAGE_SIZE}) {
       </View>
       {pagedItems.map((row, index) => (
         <View key={`ed-${row.symbol}-${index}`} style={[styles.tr, index % 2 === 0 ? styles.trAlt : null]}>
+          <Text style={[styles.td, styles.edRank, styles.symBold]}>{row.wealth_rank ?? row.rank ?? '—'}</Text>
+          <Text style={[styles.td, styles.edPhase]} numberOfLines={1}>
+            {row.wealth_phase_label || '—'}
+            {row.buy_tier ? ` ${row.buy_tier}` : ''}
+          </Text>
           <Text style={[styles.td, styles.colSym, styles.symBold]}>{row.symbol}</Text>
           <View style={[styles.td, styles.colTv]}>
             <TradingViewLink symbol={row.symbol} />
@@ -365,7 +373,11 @@ export function AdvisorSignalsSection({
         {label: 'Early detection', timeoutMs: API_TIMEOUT_MS.advisor, retries: 1},
       );
       const raw = extractApiRows(res, ['data', 'rows']);
-      const model = buildEarlyDetectionTableModel(raw, {sqzFilter: 'all'});
+      const model = buildEarlyDetectionTableModel(raw, {
+        sqzFilter: 'all',
+        sortCol: 'wealth_rank',
+        sortDir: 'desc',
+      });
       setEarlyRows(model.sorted);
     } catch {
       setEarlyRows([]);
@@ -390,7 +402,7 @@ export function AdvisorSignalsSection({
   const loadAlerts = useCallback(async () => {
     setAlertsLoading(true);
     try {
-      const res = await alertsService.fetchLiveAdvisorAlerts({limit: 200});
+      const res = await alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT});
       const raw = Array.isArray(res) ? res : extractApiRows(res);
       setAlertRows(dedupeAlertsBySymbol(raw));
     } catch {
@@ -601,6 +613,8 @@ const styles = StyleSheet.create({
   lsNum: {width: 64, textAlign: 'right'},
   lsSm: {width: 56},
   lsStrat: {width: 120},
+  edRank: {width: 28, textAlign: 'center'},
+  edPhase: {width: 80},
   edSm: {width: 72},
   edNum: {width: 56, textAlign: 'right'},
   edTfRow: {flexDirection: 'row', gap: 8, marginTop: 4},

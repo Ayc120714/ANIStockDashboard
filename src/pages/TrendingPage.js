@@ -6,7 +6,7 @@ import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchTrending, fetchScreenDates } from '../api/stocks';
+import { fetchTrendingRaw, mapStockListToTable, fetchScreenDates } from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
@@ -77,11 +77,12 @@ function TrendingPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 1000 : 50;
-    const cacheKey = `trendingStocksData_v2_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `trendingStocksData_v3_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,
-      fetcher: () => fetchTrending(fetchLimit, dateStr),
+      fetcher: () => fetchTrendingRaw(fetchLimit, dateStr),
+      mapRows: (raw) => mapStockListToTable(raw, {}),
       setRows: setTableData,
       setLoading: setIsLoading,
       setError: setLoadError,

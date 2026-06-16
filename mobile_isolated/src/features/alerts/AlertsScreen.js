@@ -4,6 +4,7 @@ import {ScreenScaffold} from '@components/ScreenScaffold';
 import {TradeProductPicker} from '@components/TradeProductPicker';
 import {useAuth} from '@core/auth/AuthContext';
 import {alertsService} from '@core/api/services/alertsService';
+import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {safeFetch} from '@core/utils/safeFetch';
 import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
@@ -63,7 +64,7 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
       setLoading(true);
     }
     try {
-      const resp = await safeFetch(() => alertsService.fetchLiveAdvisorAlerts({limit: 120}), {
+      const resp = await safeFetch(() => alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT}), {
         timeoutMs: API_TIMEOUT_MS.screen,
         retries: 2,
         label: 'Alerts',

@@ -110,10 +110,11 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
-  fetchBuyTierCardGrid: ({refresh = false, symbol_limit = 800, timeoutMs} = {}) =>
+  fetchBuyTierCardGrid: ({refresh = false, symbol_limit = 800, lite = true, timeoutMs} = {}) =>
     apiGet(
       `/advisor/signals/buy-tier-cards${toQuery({
         symbol_limit,
+        lite: lite ? 'true' : 'false',
         ...(refresh ? {refresh: 'true'} : {}),
       })}`,
       {timeoutMs: timeoutMs ?? T},
@@ -146,7 +147,7 @@ export const advisorService = {
     limit = 300,
     dedupe_symbol = true,
     sqz_set = '',
-    sort_by = 'trigger_date',
+    sort_by = 'wealth_rank',
     sort_dir = 'desc',
     timeoutMs,
   } = {}) =>
@@ -168,7 +169,7 @@ export const advisorService = {
     timeframe = 'daily',
     limit = 1000,
     sqz_set = '',
-    sort_by = 'trigger_date',
+    sort_by = 'wealth_rank',
     sort_dir = 'desc',
     timeoutMs,
   } = {}) =>

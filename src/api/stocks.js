@@ -66,24 +66,17 @@ const mapStockToTable = (s, idx, opts = {}) => {
   };
 };
 
-export const fetchRelativePerformance = async (period = '1d', limit = 50, dateStr = null) => {
-  let url = `/stocks/relative-performance?period=${period}&limit=${limit}`;
-  if (dateStr) url += `&date=${dateStr}`;
-  const data = await apiGet(url);
-  const list = data?.data ?? [];
-  return list.map((s, i) => mapStockToTable(s, i, { period }));
-};
+export const mapStockListToTable = (list, opts = {}) =>
+  (list || []).map((s, i) => mapStockToTable(s, i, opts));
 
-export const fetchVolumeShockers = async (limit = 50, period = 'day', dateStr = null) => {
-  let url = `/stocks/volume-shockers?limit=${limit}&period=${period}`;
-  if (dateStr) url += `&date=${dateStr}`;
-  const data = await apiGet(url);
-  const list = data?.data ?? [];
-  const volChgFieldMap = { day: 'percent_change_volume_1d', week: 'percent_change_volume_1w', month: 'percent_change_volume_1m' };
-  const priceChgFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
+const volChgFieldMap = { day: 'percent_change_volume_1d', week: 'percent_change_volume_1w', month: 'percent_change_volume_1m' };
+const priceChgFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
+const priceShockersChgFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
+
+export const mapVolumeShockersList = (list, period = 'day') => {
   const volChgField = volChgFieldMap[period] || 'percent_change_volume_1d';
   const priceChgField = priceChgFieldMap[period] || 'day1d';
-  return list.map((s, i) => ({
+  return (list || []).map((s, i) => ({
     ...mapStockToTable(s, i, {}),
     volChgPct: s[volChgField] != null ? `${s[volChgField] >= 0 ? '+' : ''}${Number(s[volChgField]).toFixed(1)}%` : '—',
     volChgRaw: s[volChgField],
@@ -92,25 +85,60 @@ export const fetchVolumeShockers = async (limit = 50, period = 'day', dateStr = 
   }));
 };
 
-export const fetchPriceShockers = async (type = 'gainers', limit = 50, period = 'day', dateStr = null) => {
-  let url = `/stocks/price-shockers?type=${type}&limit=${limit}&period=${period}`;
-  if (dateStr) url += `&date=${dateStr}`;
-  const data = await apiGet(url);
-  const list = data?.data ?? [];
-  const periodFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m' };
-  const chgField = periodFieldMap[period] || 'day1d';
-  return list.map((s, i) => ({
+export const mapPriceShockersList = (list, period = 'day') => {
+  const chgField = priceShockersChgFieldMap[period] || 'day1d';
+  return (list || []).map((s, i) => ({
     ...mapStockToTable(s, i, {}),
     chg: formatPercent(s[chgField]),
   }));
 };
 
-export const fetchTrending = async (limit = 50, dateStr = null) => {
+export const fetchRelativePerformanceRaw = async (period = '1d', limit = 50, dateStr = null) => {
+  let url = `/stocks/relative-performance?period=${period}&limit=${limit}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
+  return data?.data ?? [];
+};
+
+export const fetchVolumeShockersRaw = async (limit = 50, period = 'day', dateStr = null) => {
+  let url = `/stocks/volume-shockers?limit=${limit}&period=${period}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
+  return data?.data ?? [];
+};
+
+export const fetchPriceShockersRaw = async (type = 'gainers', limit = 50, period = 'day', dateStr = null) => {
+  let url = `/stocks/price-shockers?type=${type}&limit=${limit}&period=${period}`;
+  if (dateStr) url += `&date=${dateStr}`;
+  const data = await apiGet(url);
+  return data?.data ?? [];
+};
+
+export const fetchRelativePerformance = async (period = '1d', limit = 50, dateStr = null) => {
+  const list = await fetchRelativePerformanceRaw(period, limit, dateStr);
+  return mapStockListToTable(list, { period });
+};
+
+export const fetchVolumeShockers = async (limit = 50, period = 'day', dateStr = null) => {
+  const list = await fetchVolumeShockersRaw(limit, period, dateStr);
+  return mapVolumeShockersList(list, period);
+};
+
+export const fetchPriceShockers = async (type = 'gainers', limit = 50, period = 'day', dateStr = null) => {
+  const list = await fetchPriceShockersRaw(type, limit, period, dateStr);
+  return mapPriceShockersList(list, period);
+};
+
+export const fetchTrendingRaw = async (limit = 50, dateStr = null) => {
   let url = `/stocks/trending?limit=${limit}`;
   if (dateStr) url += `&date=${dateStr}`;
   const data = await apiGet(url);
-  const list = data?.data ?? [];
-  return list.map((s, i) => mapStockToTable(s, i, {}));
+  return data?.data ?? [];
+};
+
+export const fetchTrending = async (limit = 50, dateStr = null) => {
+  const list = await fetchTrendingRaw(limit, dateStr);
+  return mapStockListToTable(list, {});
 };
 
 export const fetchScreenDates = async () => {

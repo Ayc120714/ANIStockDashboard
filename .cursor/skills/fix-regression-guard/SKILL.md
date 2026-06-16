@@ -69,6 +69,11 @@ When a broad change breaks other areas:
 
 ## Project-specific notes
 
+For **ani-stock VPS** (web + API on aycindustries.com):
+
+- After backend or frontend fixes, restart using **`.cursor/skills/vps-restart/SKILL.md`** (exact `npm ci && npm run build`, rsync, nginx reload, `daemon-reload` + `ani-backend` restart).
+- Tell users to hard-refresh screen pages; sessionStorage caches table payloads.
+
 For **ani-stock `mobile_isolated`**:
 
 - Tests live in `mobile_isolated/__tests__/**/*.test.js`

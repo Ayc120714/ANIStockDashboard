@@ -16,10 +16,10 @@ import {TradeProductPicker} from '@components/TradeProductPicker';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {signalsService} from '@core/api/services/signalsService';
 import {alertsService} from '@core/api/services/alertsService';
 import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {fetchMobileSignalsTabRows} from '@core/utils/advisorHubCache';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
@@ -140,10 +140,7 @@ export function SignalsScreen({navigation}) {
 
     await runScreenTableFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
-      fetcher: async () => {
-        const res = await signalsService.fetchLatestSignals({limit: 150});
-        return Array.isArray(res) ? res : extractApiRows(res);
-      },
+      fetcher: () => fetchMobileSignalsTabRows(),
       setRows,
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setError(msg || ''),

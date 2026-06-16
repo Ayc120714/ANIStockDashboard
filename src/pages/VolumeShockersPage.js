@@ -6,7 +6,11 @@ import { CircularProgress } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fetchVolumeShockers, fetchScreenDates } from '../api/stocks';
+import {
+  fetchScreenDates,
+  fetchVolumeShockersRaw,
+  mapVolumeShockersList,
+} from '../api/stocks';
 import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
@@ -90,11 +94,12 @@ function VolumeShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `volumeShockersData_v4_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `volumeShockersData_v5_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,
-      fetcher: () => fetchVolumeShockers(fetchLimit, period, dateStr),
+      fetcher: () => fetchVolumeShockersRaw(fetchLimit, period, dateStr),
+      mapRows: (raw) => mapVolumeShockersList(raw, period),
       setRows: setTableData,
       setLoading: setIsLoading,
       setError: setLoadError,

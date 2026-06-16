@@ -76,7 +76,12 @@ export function isPostMarketPageCacheStale(updatedAt, session) {
 
   const cacheP = istClockParts(new Date(ts));
   const sameIstDay = cacheP.y === nowP.y && cacheP.m === nowP.m && cacheP.d === nowP.d;
+  const openMins = 9 * 60 + 15;
   const closeMins = 15 * 60 + 30;
+
+  if (nowP.mins < openMins) {
+    return true;
+  }
 
   if (nowP.mins <= closeMins) return !sameIstDay;
   if (!sameIstDay) return true;
