@@ -3,6 +3,8 @@ import {
   bumpWatchlistLoadGeneration,
   collectWatchlistMutationSymbols,
   computeOptimisticWatchlistMutation,
+  mergeWatchlistMembershipFromCache,
+  resolveWatchlistRowsAfterFetch,
 } from './watchlistPageMutation';
 
 describe('watchlistPageMutation', () => {
@@ -32,5 +34,29 @@ describe('watchlistPageMutation', () => {
     const loadGenRef = { current: 3 };
     bumpWatchlistLoadGeneration(loadGenRef);
     expect(loadGenRef.current).toBe(4);
+  });
+
+  it('mergeWatchlistMembershipFromCache keeps optimistic deletes when API is stale (LT/ST)', () => {
+    const apiRows = [{ symbol: '360ONE' }, { symbol: 'HAL' }];
+    const cacheRows = [{ symbol: 'HAL' }];
+    const merged = mergeWatchlistMembershipFromCache(apiRows, cacheRows);
+    expect(merged.map((r) => r.symbol)).toEqual(['HAL']);
+  });
+
+  it('resolveWatchlistRowsAfterFetch reconciles membership on forceRefresh', () => {
+    const cacheKey = 'longTermWatchlist_test';
+    sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        data: { watchlist: [{ symbol: 'INFY' }], signals: [] },
+        updatedAt: Date.now(),
+      }),
+    );
+    const resolved = resolveWatchlistRowsAfterFetch(
+      [{ symbol: 'TCS' }, { symbol: 'INFY' }],
+      cacheKey,
+      { forceRefresh: true },
+    );
+    expect(resolved.map((r) => r.symbol)).toEqual(['INFY']);
   });
 });

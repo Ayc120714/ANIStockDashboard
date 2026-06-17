@@ -13,6 +13,7 @@ import {
   collectWatchlistMutationSymbols,
   computeOptimisticWatchlistMutation,
   prepareWatchlistMutationRefresh,
+  resolveWatchlistRowsAfterFetch,
 } from '../utils/watchlistPageMutation';
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
@@ -338,8 +339,9 @@ function ShortTermPage() {
         fetchWatchlistSignals({ timeframe: 'intraday' }),
       ]);
       if (gen !== loadGenRef.current) return;
+      const watchlist = resolveWatchlistRowsAfterFetch(wl, SHORT_TERM_CACHE_KEY, { forceRefresh });
       const payload = {
-        watchlist: Array.isArray(wl) ? wl : [],
+        watchlist,
         signals: Array.isArray(sigs) ? sigs : [],
       };
       writePageCache(SHORT_TERM_CACHE_KEY, payload);
@@ -546,7 +548,7 @@ function ShortTermPage() {
     try {
       await backfillWatchlistMarketData(syms);
       setCheckedSymbols(new Set());
-      await load();
+      await load({ silentPoll: true });
     } catch (e) {
       alert(e?.message || 'Could not load market data for selected symbols');
     }
@@ -559,7 +561,7 @@ function ShortTermPage() {
     setFundRefreshing(true);
     try {
       await refreshWatchlistFundamentals(syms.slice(0, 25));
-      await load();
+      await load({ silentPoll: true });
     } catch (e) {
       alert(e?.message || 'Fundamentals refresh failed');
     }

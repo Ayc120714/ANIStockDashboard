@@ -1,6 +1,6 @@
 import { clearApiGetCache } from '../api/apiClient';
-import { writePageCache } from './pageDataCache';
-import { applyWatchlistRowMutation } from './watchlistLocalMutation';
+import { readPageCache, writePageCache } from './pageDataCache';
+import { applyWatchlistRowMutation, normalizeWatchlistSymbol } from './watchlistLocalMutation';
 
 export function persistWatchlistPagePayload(cacheKey, watchlist, signals) {
   writePageCache(cacheKey, {
@@ -42,4 +42,36 @@ export function computeOptimisticWatchlistMutation(rows, mutation, cacheKey, sig
 export function prepareWatchlistMutationRefresh(loadGenRef) {
   bumpWatchlistLoadGeneration(loadGenRef);
   clearApiGetCache();
+}
+
+/**
+ * After add/delete, optimistic cache is authoritative for membership; enrich rows from API.
+ * Prevents stale API responses from re-adding deleted LT/ST symbols (regression guard).
+ */
+export function mergeWatchlistMembershipFromCache(apiRows, cacheRows) {
+  const apiBySym = new Map();
+  for (const row of apiRows || []) {
+    const sym = normalizeWatchlistSymbol(row?.symbol);
+    if (sym) apiBySym.set(sym, row);
+  }
+  const cacheList = Array.isArray(cacheRows) ? cacheRows : [];
+  const orderedSyms = cacheList
+    .map((row) => normalizeWatchlistSymbol(row?.symbol))
+    .filter(Boolean);
+  const uniqueSyms = [...new Set(orderedSyms)];
+
+  return uniqueSyms.map((sym) => {
+    if (apiBySym.has(sym)) return apiBySym.get(sym);
+    const cachedRow = cacheList.find((row) => normalizeWatchlistSymbol(row?.symbol) === sym);
+    return cachedRow || { symbol: sym };
+  });
+}
+
+/** Resolve watchlist rows after fetch; on mutation refresh, keep optimistic membership. */
+export function resolveWatchlistRowsAfterFetch(apiRows, cacheKey, { forceRefresh = false } = {}) {
+  const apiWl = Array.isArray(apiRows) ? apiRows : [];
+  if (!forceRefresh) return apiWl;
+  const cachedWl = readPageCache(cacheKey)?.data?.watchlist;
+  if (!Array.isArray(cachedWl) || cachedWl.length === 0) return apiWl;
+  return mergeWatchlistMembershipFromCache(apiWl, cachedWl);
 }

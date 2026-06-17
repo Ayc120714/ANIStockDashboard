@@ -14,6 +14,7 @@ import {
   collectWatchlistMutationSymbols,
   computeOptimisticWatchlistMutation,
   prepareWatchlistMutationRefresh,
+  resolveWatchlistRowsAfterFetch,
 } from '../utils/watchlistPageMutation';
 import OrderPanel from '../components/OrderPanel';
 
@@ -256,7 +257,8 @@ function LongTermPage() {
         fetchWatchlistSignals({ timeframe: 'intraday' }),
       ]);
       if (gen !== loadGenRef.current) return;
-      const payload = { watchlist: Array.isArray(wl) ? wl : [], signals: Array.isArray(sigs) ? sigs : [] };
+      const watchlist = resolveWatchlistRowsAfterFetch(wl, LONG_TERM_CACHE_KEY, { forceRefresh });
+      const payload = { watchlist, signals: Array.isArray(sigs) ? sigs : [] };
       writePageCache(LONG_TERM_CACHE_KEY, payload);
       setData(payload.watchlist);
       setSignals(payload.signals);
@@ -494,7 +496,7 @@ function LongTermPage() {
     try {
       await backfillWatchlistMarketData(syms);
       setCheckedSymbols(new Set());
-      await load();
+      await load({ silentPoll: true });
     } catch (e) {
       alert(e?.message || 'Could not load market data for selected symbols');
     }
@@ -507,7 +509,7 @@ function LongTermPage() {
     setFundRefreshing(true);
     try {
       await refreshWatchlistFundamentals(syms.slice(0, 25));
-      await load();
+      await load({ silentPoll: true });
     } catch (e) {
       alert(e?.message || 'Fundamentals refresh failed');
     }
