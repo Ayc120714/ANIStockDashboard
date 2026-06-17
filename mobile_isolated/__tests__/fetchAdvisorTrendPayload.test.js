@@ -26,15 +26,23 @@ describe('fetchAdvisorTrendPayload', () => {
     expect(result.trendGrid).toBeUndefined();
     expect(hasUsableAdvisorTrendPayload(result)).toBe(true);
     expect(mockFetchBuyTier).toHaveBeenCalledWith(
-      expect.objectContaining({symbol_limit: 400, timeoutMs: 120_000}),
+      expect.objectContaining({symbol_limit: 800, timeoutMs: 120_000}),
     );
   });
 
-  it('throws when API returns empty tier grid so empty shells are not cached', async () => {
-    mockFetchBuyTier.mockResolvedValue(apiTrendEnvelope(buildTrendGrid()));
+  it('returns empty grid structure without throwing (web parity)', async () => {
+    const empty = buildTrendGrid();
+    mockFetchBuyTier.mockResolvedValue(apiTrendEnvelope(empty));
 
-    await expect(fetchAdvisorTrendPayload()).rejects.toThrow(
-      /No trend reversal matches available right now/,
-    );
+    const result = await fetchAdvisorTrendPayload();
+
+    expect(result.daily.B1.count).toBe(0);
+    expect(hasUsableAdvisorTrendPayload(result)).toBe(true);
+  });
+
+  it('throws when API envelope cannot be parsed into a grid', async () => {
+    mockFetchBuyTier.mockResolvedValue({screen: 'buy_tier_card_grid', data: null});
+
+    await expect(fetchAdvisorTrendPayload()).rejects.toThrow(/invalid/i);
   });
 });

@@ -12,6 +12,7 @@ import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
 import {
   applyLiveSessionRefreshPolicy,
+  applyPullRefreshPolicy,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
   MOBILE_PAGE_CACHE_KEYS,
@@ -167,6 +168,7 @@ export const DashboardScreen = ({navigation}) => {
 
     let cachedPayload = {};
     let liveSession = false;
+    let refreshEndedEarly = false;
 
     try {
       const cachedWrap = await readPageCache(DASHBOARD_CACHE_KEY);
@@ -206,6 +208,10 @@ export const DashboardScreen = ({navigation}) => {
         need.extras = false;
         need.optional = false;
       }
+      const extrasNeed = {...need};
+      if (forceRefresh) {
+        applyPullRefreshPolicy(need);
+      }
       const mergePartial = partial => {
         setData(prev => ({...prev, ...partial}));
         cacheHydrated.current = true;
@@ -216,7 +222,7 @@ export const DashboardScreen = ({navigation}) => {
 
       let partial = {...cachedPayload};
 
-      const rCritical = await Promise.allSettled([
+      const rCore = await Promise.allSettled([
         fetchSection(
           need.indices || forceRefresh || !cachedPayload.indices?.length,
           () => dashboardService.fetchMarketIndicesCards({timeoutMs: DASH_MS}),
@@ -232,19 +238,6 @@ export const DashboardScreen = ({navigation}) => {
           () => dashboardService.fetchPriceShockers({type: 'losers', period: 'day', limit: 8, timeoutMs: DASH_MS}),
           cachedPayload.losers ?? [],
         ),
-      ]);
-
-      const indicesRaw = settledValue(rCritical[0], cachedPayload.indices ?? []);
-      partial.indices = Array.isArray(indicesRaw) && indicesRaw.length ? indicesRaw : cachedPayload.indices ?? [];
-      partial.gainers = parseStockList(settledValue(rCritical[1], cachedPayload.gainers ?? []));
-      partial.losers = parseStockList(settledValue(rCritical[2], cachedPayload.losers ?? []));
-      mergePartial({
-        indices: partial.indices,
-        gainers: partial.gainers,
-        losers: partial.losers,
-      });
-
-      const rCore = await Promise.allSettled([
         fetchSection(
           need.watchlist || forceRefresh,
           () => dashboardService.fetchWatchlist({timeoutMs: DASH_MS}),
@@ -257,14 +250,21 @@ export const DashboardScreen = ({navigation}) => {
         ),
       ]);
 
-      partial.watchlist = parseWatchlist(settledValue(rCore[0], cachedPayload.watchlist ?? []));
-      partial.signals = parseSignals(settledValue(rCore[1], cachedPayload.signals ?? []));
+      const indicesRaw = settledValue(rCore[0], cachedPayload.indices ?? []);
+      partial.indices = Array.isArray(indicesRaw) && indicesRaw.length ? indicesRaw : cachedPayload.indices ?? [];
+      partial.gainers = parseStockList(settledValue(rCore[1], cachedPayload.gainers ?? []));
+      partial.losers = parseStockList(settledValue(rCore[2], cachedPayload.losers ?? []));
+      partial.watchlist = parseWatchlist(settledValue(rCore[3], cachedPayload.watchlist ?? []));
+      partial.signals = parseSignals(settledValue(rCore[4], cachedPayload.signals ?? []));
       mergePartial({
+        indices: partial.indices,
+        gainers: partial.gainers,
+        losers: partial.losers,
         watchlist: partial.watchlist,
         signals: partial.signals,
       });
 
-      const coreAuthRejected = [...rCritical, ...rCore].every(
+      const coreAuthRejected = rCore.every(
         r => r.status === 'rejected' && isAuthFailureMessage(r.reason?.message),
       );
       if (coreAuthRejected) {
@@ -273,94 +273,113 @@ export const DashboardScreen = ({navigation}) => {
         return;
       }
 
-      const rExtras = await Promise.allSettled([
-        fetchSection(
-          need.weekly || forceRefresh,
-          () => advisorService.fetchAdvisorWeeklyEntries({limit: 25, max_entry_gap_pct: 5, timeoutMs: DASH_MS}),
-          cachedPayload.weeklyData ?? [],
-        ),
-        fetchSection(
-          need.extras || forceRefresh,
-          () => dashboardService.fetchAdvisorAlerts({limit: 25, timeoutMs: DASH_MS}),
-          cachedPayload.alerts ?? [],
-        ),
-        fetchSection(
-          need.extras || forceRefresh,
-          () => dashboardService.fetchAdvisorRatings({limit: 8, timeoutMs: DASH_MS}),
-          cachedPayload.ratings ?? [],
-        ),
-        fetchSection(
-          need.extras || forceRefresh,
-          () => dashboardService.fetchTrending(20, {timeoutMs: DASH_MS}),
-          cachedPayload.trending ?? [],
-        ),
-        fetchSection(
-          need.optional || forceRefresh,
-          () => dashboardService.fetchSectorOutlook({timeoutMs: DASH_MS}),
-          cachedPayload.sectorOutlook ?? [],
-        ),
-        fetchSection(
-          need.optional || forceRefresh,
-          () => dashboardService.fetchWatchlistOrderBlocks({timeoutMs: DASH_MS}),
-          cachedPayload.orderBlocks ?? [],
-        ),
-        fetchSection(
-          true,
-          () => brokersService.fetchBrokerSetup({userId, timeoutMs: DASH_MS}),
-          null,
-        ),
-      ]);
+      const persistDashboard = (nextData, nextBroker) => {
+        setData(nextData);
+        setBrokerConnected(nextBroker);
+        if (!hasDashboardContent(nextData) && !cacheHydrated.current) {
+          setError(prev => prev || 'Dashboard data is unavailable. Pull down to refresh.');
+        }
+        if (hasDashboardContent(nextData)) {
+          return writeDashboardCache({
+            data: nextData,
+            brokerConnected: nextBroker,
+          });
+        }
+        return undefined;
+      };
 
-      partial.weeklyData = parseWeeklyEntries(settledValue(rExtras[0], cachedPayload.weeklyData ?? []));
-      partial.alerts = asRowArray(settledValue(rExtras[1], cachedPayload.alerts ?? []));
-      partial.ratings = asRowArray(settledValue(rExtras[2], cachedPayload.ratings ?? []));
-      partial.trending = parseStockList(settledValue(rExtras[3], cachedPayload.trending ?? []));
-      partial.sectorOutlook = toList(settledValue(rExtras[4], cachedPayload.sectorOutlook ?? [])).slice(0, 6);
-      partial.orderBlocks = asRowArray(settledValue(rExtras[5], cachedPayload.orderBlocks ?? []));
-      const nextBroker = isAnyBrokerConnected(settledValue(rExtras[6], null));
-      mergePartial({
-        weeklyData: partial.weeklyData,
-        alerts: partial.alerts,
-        ratings: partial.ratings,
-        trending: partial.trending,
-        sectorOutlook: partial.sectorOutlook,
-        orderBlocks: partial.orderBlocks,
-      });
-      setBrokerConnected(nextBroker);
-
-      refreshBrokerHoldings({forceLive: forceRefresh || liveSession, silent: silent || cacheHydrated.current})
-        .then(brokerHoldings => {
-          const nextData = {
-            ...partial,
-            holdings: brokerHoldings?.rows || [],
-            brokerConnected: brokerHoldings?.authenticated ?? nextBroker,
-          };
-          setData(nextData);
-          setBrokerConnected(brokerHoldings?.authenticated ?? nextBroker);
-          if (!hasDashboardContent(nextData) && !cacheHydrated.current) {
-            setError(prev => prev || 'Dashboard data is unavailable. Pull down to refresh.');
-          }
-          if (hasDashboardContent(nextData)) {
-            return writeDashboardCache({
-              data: nextData,
+      const refreshHoldingsAndCache = nextBroker =>
+        refreshBrokerHoldings({forceLive: forceRefresh || liveSession, silent: silent || cacheHydrated.current})
+          .then(brokerHoldings => {
+            const nextData = {
+              ...partial,
+              holdings: brokerHoldings?.rows || [],
               brokerConnected: brokerHoldings?.authenticated ?? nextBroker,
-            });
-          }
-        })
-        .catch(() => {
-          if (hasDashboardContent(partial)) {
-            writeDashboardCache({
-              data: {...partial, brokerConnected: nextBroker},
-              brokerConnected: nextBroker,
-            });
-          }
+            };
+            return persistDashboard(nextData, brokerHoldings?.authenticated ?? nextBroker);
+          })
+          .catch(() => {
+            if (hasDashboardContent(partial)) {
+              writeDashboardCache({
+                data: {...partial, brokerConnected: nextBroker},
+                brokerConnected: nextBroker,
+              });
+            }
+          });
+
+      const loadDashboardExtras = async () => {
+        const rExtras = await Promise.allSettled([
+          fetchSection(
+            extrasNeed.weekly || forceRefresh,
+            () => advisorService.fetchAdvisorWeeklyEntries({limit: 25, max_entry_gap_pct: 5, timeoutMs: DASH_MS}),
+            cachedPayload.weeklyData ?? [],
+          ),
+          fetchSection(
+            extrasNeed.extras || forceRefresh,
+            () => dashboardService.fetchAdvisorAlerts({limit: 25, timeoutMs: DASH_MS}),
+            cachedPayload.alerts ?? [],
+          ),
+          fetchSection(
+            extrasNeed.extras || forceRefresh,
+            () => dashboardService.fetchAdvisorRatings({limit: 8, timeoutMs: DASH_MS}),
+            cachedPayload.ratings ?? [],
+          ),
+          fetchSection(
+            extrasNeed.extras || forceRefresh,
+            () => dashboardService.fetchTrending(20, {timeoutMs: DASH_MS}),
+            cachedPayload.trending ?? [],
+          ),
+          fetchSection(
+            extrasNeed.optional || forceRefresh,
+            () => dashboardService.fetchSectorOutlook({timeoutMs: DASH_MS}),
+            cachedPayload.sectorOutlook ?? [],
+          ),
+          fetchSection(
+            extrasNeed.optional || forceRefresh,
+            () => dashboardService.fetchWatchlistOrderBlocks({timeoutMs: DASH_MS}),
+            cachedPayload.orderBlocks ?? [],
+          ),
+          fetchSection(
+            !cacheHydrated.current || forceRefresh,
+            () => brokersService.fetchBrokerSetup({userId, timeoutMs: DASH_MS}),
+            null,
+          ),
+        ]);
+
+        partial.weeklyData = parseWeeklyEntries(settledValue(rExtras[0], cachedPayload.weeklyData ?? []));
+        partial.alerts = asRowArray(settledValue(rExtras[1], cachedPayload.alerts ?? []));
+        partial.ratings = asRowArray(settledValue(rExtras[2], cachedPayload.ratings ?? []));
+        partial.trending = parseStockList(settledValue(rExtras[3], cachedPayload.trending ?? []));
+        partial.sectorOutlook = toList(settledValue(rExtras[4], cachedPayload.sectorOutlook ?? [])).slice(0, 6);
+        partial.orderBlocks = asRowArray(settledValue(rExtras[5], cachedPayload.orderBlocks ?? []));
+        const nextBroker = isAnyBrokerConnected(settledValue(rExtras[6], null));
+        mergePartial({
+          weeklyData: partial.weeklyData,
+          alerts: partial.alerts,
+          ratings: partial.ratings,
+          trending: partial.trending,
+          sectorOutlook: partial.sectorOutlook,
+          orderBlocks: partial.orderBlocks,
         });
+        setBrokerConnected(nextBroker);
+        await refreshHoldingsAndCache(nextBroker);
+      };
+
+      if (forceRefresh) {
+        setRefreshing(false);
+        refreshEndedEarly = true;
+        void loadDashboardExtras();
+      } else {
+        await loadDashboardExtras();
+      }
     } catch (e) {
       if (!cacheHydrated.current) {
         setError(String(e?.message || e || 'Dashboard data load failed'));
       }
     } finally {
-      setRefreshing(false);
+      if (!refreshEndedEarly) {
+        setRefreshing(false);
+      }
       setLoading(false);
     }
   }, [isAuthenticated, refreshBrokerHoldings, userId]);

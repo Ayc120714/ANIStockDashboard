@@ -23,20 +23,20 @@ import {
   shouldForceAdvisorTrendNetwork,
   shouldRefreshAdvisorTrendCache,
 } from '@core/utils/dashboardCachePolicy';
-import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
-import {readPageCache, clearPageCache, writePageCache} from '@core/storage/pageCache';
+import {runScreenPayloadFetch, runScreenPayloadRefresh, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
+import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {
   extractChartBlocks,
-  normalizeTrendGrid,
-  countTrendGridRows,
   fetchAdvisorChartPayload,
   fetchAdvisorSignalsPayload,
   fetchAdvisorTrendPayload,
+  hasTrendGridRows,
   hasUsableAdvisorChartPayload,
   hasUsableAdvisorSignalsPayload,
   hasUsableAdvisorTrendPayload,
   mergeChartDisplayBlocks,
   normalizeAdvisorSignalsPayload,
+  normalizeTrendGrid,
 } from '@core/utils/advisorHubCache';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {
@@ -255,7 +255,6 @@ export function AdvisorHubScreen({navigation}) {
   const [refreshing, setRefreshing] = useState(false);
   const [trendLoading, setTrendLoading] = useState(false);
   const [cacheHydrated, setCacheHydrated] = useState(false);
-  const trendInflightRef = useRef(false);
   const signalsHasDataRef = useRef(false);
   const chartHasDataRef = useRef(false);
   const trendHasDataRef = useRef(false);
@@ -267,6 +266,17 @@ export function AdvisorHubScreen({navigation}) {
     setMonthlyRows(payload?.monthlyRows || []);
     setCustomRows(payload?.customRows || []);
     setMondayRows(payload?.mondayRows || []);
+  }, []);
+
+  const applyTrendPayload = useCallback(payload => {
+    const grid = normalizeTrendGrid(payload) || payload;
+    setTrendGrid(grid);
+    setTrendErr('');
+  }, []);
+
+  const applyChartPayload = useCallback(payload => {
+    setChartBlocks(extractChartBlocks(payload));
+    setErr('');
   }, []);
 
   useEffect(() => {
@@ -285,10 +295,7 @@ export function AdvisorHubScreen({navigation}) {
         applySignalsPayload(signals);
       }
       if (hasUsableAdvisorTrendPayload(trendCache?.data)) {
-        const grid = normalizeTrendGrid(trendCache.data) || trendCache.data;
-        if (countTrendGridRows(grid) > 0) {
-          setTrendGrid(grid);
-        }
+        applyTrendPayload(trendCache.data);
       } else if (trendCache?.data != null) {
         await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
       }
@@ -302,7 +309,7 @@ export function AdvisorHubScreen({navigation}) {
     return () => {
       cancelled = true;
     };
-  }, [applySignalsPayload]);
+  }, [applySignalsPayload, applyTrendPayload]);
 
   useEffect(() => {
     resetSort();
@@ -390,7 +397,7 @@ export function AdvisorHubScreen({navigation}) {
     [trendGrouped],
   );
 
-  const trendHasData = countTrendGridRows(trendGrid) > 0;
+  const trendHasData = hasTrendGridRows(trendGrid);
   const chartDisplayBlocks = useMemo(() => mergeChartDisplayBlocks(chartBlocks), [chartBlocks]);
   const chartHasData = chartDisplayBlocks.some(b => (b?.rows?.length || 0) > 0);
 
@@ -431,67 +438,59 @@ export function AdvisorHubScreen({navigation}) {
   }, [applySignalsPayload]);
 
   const loadChart = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
-    if (forceRefresh) setRefreshing(true);
+    if (forceRefresh) {
+      await runScreenPayloadRefresh({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubChart,
+        fetcher: () => fetchAdvisorChartPayload({forceRefresh: true}),
+        applyPayload: applyChartPayload,
+        setRefreshing,
+        setLoading: silent && chartHasDataRef.current ? () => {} : setLoading,
+        setError: msg => setErr(msg || ''),
+        hasUsable: hasUsableAdvisorChartPayload,
+      });
+      return;
+    }
     await runScreenPayloadFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubChart,
-      fetcher: () => fetchAdvisorChartPayload({forceRefresh}),
-      applyPayload: payload => setChartBlocks(extractChartBlocks(payload)),
+      fetcher: () => fetchAdvisorChartPayload({forceRefresh: false}),
+      applyPayload: applyChartPayload,
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setErr(msg || ''),
-      forceNetwork: forceRefresh,
+      forceNetwork: false,
       hasUsable: hasUsableAdvisorChartPayload,
-      silent: silent && !forceRefresh,
+      silent: silent && chartHasDataRef.current,
     });
-    setRefreshing(false);
-  }, []);
+  }, [applyChartPayload]);
 
   const loadTrend = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
-    if (trendInflightRef.current) {
-      if (!forceRefresh) return;
-    }
-    trendInflightRef.current = true;
-    const showSpinner = (!silent || forceRefresh) && !trendHasDataRef.current;
-    let hydrated = false;
     if (forceRefresh) {
-      await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-      setRefreshing(true);
+      await runScreenPayloadRefresh({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
+        fetcher: () => fetchAdvisorTrendPayload({forceRefresh: true}),
+        applyPayload: applyTrendPayload,
+        setRefreshing,
+        setLoading: v => {
+          if (!trendHasDataRef.current) setTrendLoading(v);
+        },
+        setError: msg => setTrendErr(msg || ''),
+        hasUsable: hasUsableAdvisorTrendPayload,
+      });
+      return;
     }
-    if (showSpinner) setTrendLoading(true);
-    try {
-      if (!forceRefresh) {
-        const cached = await readPageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
-        if (cached?.data && hasUsableAdvisorTrendPayload(cached.data)) {
-          const grid = normalizeTrendGrid(cached.data) || cached.data;
-          setTrendGrid(grid);
-          setTrendErr('');
-          hydrated = true;
-          if (showSpinner) setTrendLoading(false);
-          void fetchAdvisorTrendPayload({forceRefresh: false})
-            .then(gridFresh => {
-              setTrendGrid(gridFresh);
-              setTrendErr('');
-              return writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend, gridFresh);
-            })
-            .catch(() => {});
-          return;
-        }
-      }
-      if (!hydrated || forceRefresh) {
-        const grid = await fetchAdvisorTrendPayload({forceRefresh});
-        setTrendGrid(grid);
-        setTrendErr('');
-        await writePageCache(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend, grid);
-      }
-    } catch (e) {
-      if (!hydrated) {
-        setTrendErr(String(e?.message || e || 'Failed to load trend reversal.'));
-      }
-    } finally {
-      trendInflightRef.current = false;
-      if (showSpinner) setTrendLoading(false);
-      if (forceRefresh) setRefreshing(false);
-    }
-  }, []);
+    await runScreenPayloadFetch({
+      cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorHubTrend,
+      fetcher: () => fetchAdvisorTrendPayload({forceRefresh: false}),
+      applyPayload: applyTrendPayload,
+      setLoading: v => {
+        if (!silent && !trendHasDataRef.current) setTrendLoading(v);
+      },
+      setError: msg => setTrendErr(msg || ''),
+      forceNetwork: false,
+      hasUsable: hasUsableAdvisorTrendPayload,
+      silent: silent && trendHasDataRef.current,
+    });
+    if (!trendHasDataRef.current) setTrendLoading(false);
+  }, [applyTrendPayload]);
 
   useEffect(() => {
     if (!cacheHydrated) return;

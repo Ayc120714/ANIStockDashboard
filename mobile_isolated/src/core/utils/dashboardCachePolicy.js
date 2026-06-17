@@ -7,7 +7,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v4-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v9',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v10',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v3',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
@@ -83,6 +83,18 @@ export function applyLiveSessionRefreshPolicy(need, liveSession) {
   return need;
 }
 
+/**
+ * Pull-to-refresh: update indices, movers, and watchlist first; defer heavy sections
+ * so the refresh spinner clears before weekly entries, alerts, ratings, etc. finish.
+ */
+export function applyPullRefreshPolicy(need) {
+  if (!need) return need;
+  need.weekly = false;
+  need.extras = false;
+  need.optional = false;
+  return need;
+}
+
 /** Trend tab: refresh only when cache is stale or grid has zero rows (not per-timeframe visible count). */
 export function shouldRefreshAdvisorTrendCache({stale = false, trendHasData = false} = {}) {
   return Boolean(stale || !trendHasData);
@@ -104,4 +116,5 @@ export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [
   '@ani/mobile/page-cache/advisor-hub-trend-v6',
   '@ani/mobile/page-cache/advisor-hub-trend-v7',
   '@ani/mobile/page-cache/advisor-hub-trend-v8',
+  '@ani/mobile/page-cache/advisor-hub-trend-v9',
 ];

@@ -1,5 +1,6 @@
 import {
   applyLiveSessionRefreshPolicy,
+  applyPullRefreshPolicy,
   dashboardSectionsToRefresh,
   LEGACY_ADVISOR_TREND_CACHE_KEYS,
   LEGACY_DASHBOARD_CACHE_KEYS,
@@ -15,7 +16,7 @@ describe('dashboard cache policy fixes', () => {
     expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v16');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
-      '@ani/mobile/page-cache/advisor-hub-trend-v9',
+      '@ani/mobile/page-cache/advisor-hub-trend-v10',
     );
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
@@ -35,6 +36,7 @@ describe('dashboard cache policy fixes', () => {
       '@ani/mobile/page-cache/advisor-hub-trend-v6',
       '@ani/mobile/page-cache/advisor-hub-trend-v7',
       '@ani/mobile/page-cache/advisor-hub-trend-v8',
+      '@ani/mobile/page-cache/advisor-hub-trend-v9',
     ]);
     expect(LEGACY_ADVISOR_TREND_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
   });
@@ -104,6 +106,26 @@ describe('dashboard cache policy fixes', () => {
     expect(need.watchlist).toBe(true);
     expect(need.signals).toBe(true);
     expect(need.extras).toBe(true);
+  });
+
+  it('pull refresh policy defers heavy dashboard sections so spinner clears faster', () => {
+    const need = {
+      indices: true,
+      movers: true,
+      watchlist: true,
+      signals: true,
+      weekly: true,
+      extras: true,
+      optional: true,
+    };
+    applyPullRefreshPolicy(need);
+    expect(need.indices).toBe(true);
+    expect(need.movers).toBe(true);
+    expect(need.watchlist).toBe(true);
+    expect(need.signals).toBe(true);
+    expect(need.weekly).toBe(false);
+    expect(need.extras).toBe(false);
+    expect(need.optional).toBe(false);
   });
 
   it('does not refetch trend tab when grid has data but daily timeframe is empty (v1.2.43)', () => {

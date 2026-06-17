@@ -12,9 +12,9 @@ export const MOBILE_ADVISOR_LIMITS = {
   monthlyMacd: 40,
   customRs: 60,
   mondayPwh: 40,
-  buyTierSymbolLimit: 400,
-  chartSymbolLimit: 500,
-  chartRowLimit: 60,
+  buyTierSymbolLimit: 800,
+  chartSymbolLimit: 800,
+  chartRowLimit: 120,
 };
 
 export const MOBILE_SCREEN_LIST_LIMIT = 30;

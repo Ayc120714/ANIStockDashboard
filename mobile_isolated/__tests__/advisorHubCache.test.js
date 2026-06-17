@@ -1,6 +1,7 @@
 import {
   countTrendGridRows,
   extractTrendGrid,
+  hasTrendGridRows,
   hasUsableAdvisorTrendPayload,
   normalizeTrendGrid,
 } from '@core/utils/advisorHubCache';
@@ -44,12 +45,13 @@ describe('advisorHubCache trend reversal fixes', () => {
     expect(countTrendGridRows(cachedTrendEnvelope(populatedGrid))).toBe(4);
   });
 
-  it('rejects empty grid structure without items', () => {
+  it('rejects empty grid structure without items for row-based checks', () => {
     const emptyGrid = buildTrendGrid();
     expect(countTrendGridRows(emptyGrid)).toBe(0);
-    expect(hasUsableAdvisorTrendPayload(emptyGrid)).toBe(false);
-    expect(hasUsableAdvisorTrendPayload(apiTrendEnvelope(emptyGrid))).toBe(false);
-    expect(hasUsableAdvisorTrendPayload(cachedTrendEnvelope(emptyGrid))).toBe(false);
+    expect(hasTrendGridRows(emptyGrid)).toBe(false);
+    expect(hasUsableAdvisorTrendPayload(emptyGrid)).toBe(true);
+    expect(hasUsableAdvisorTrendPayload(apiTrendEnvelope(emptyGrid))).toBe(true);
+    expect(hasUsableAdvisorTrendPayload(cachedTrendEnvelope(emptyGrid))).toBe(true);
   });
 
   it('accepts populated trend payloads for cache hydration', () => {

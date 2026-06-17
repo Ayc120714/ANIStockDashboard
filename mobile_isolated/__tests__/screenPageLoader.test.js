@@ -1,6 +1,7 @@
 import {
   SCREEN_LIVE_POLL_MS,
   runScreenPayloadFetch,
+  runScreenPayloadRefresh,
   shouldRefreshPageCache,
 } from '@core/utils/screenPageLoader';
 import * as pageCache from '@core/storage/pageCache';
@@ -71,8 +72,8 @@ describe('screenPageLoader live polling fixes', () => {
     expect(stale).toBe(true);
   });
 
-  it('does not write cache when fresh payload is not usable (v1.2.43)', async () => {
-    const cacheKey = '@ani/test/trend-skip-write';
+  it('writes cache when fresh payload has grid structure but zero rows (web parity)', async () => {
+    const cacheKey = '@ani/test/trend-empty-write';
     const writeSpy = jest.spyOn(pageCache, 'writePageCache').mockResolvedValue(undefined);
     const fetcher = jest.fn(async () => buildTrendGrid());
     const applyPayload = jest.fn();
@@ -89,7 +90,35 @@ describe('screenPageLoader live polling fixes', () => {
 
     expect(fetcher).toHaveBeenCalled();
     expect(applyPayload).toHaveBeenCalled();
-    expect(writeSpy).not.toHaveBeenCalled();
+    expect(writeSpy).toHaveBeenCalled();
     writeSpy.mockRestore();
+  });
+
+  it('pull refresh shows cache immediately and does not block on network', async () => {
+    const cacheKey = '@ani/test/trend-refresh-fast';
+    const grid = buildTrendGrid({
+      daily: {B1: [sampleTrendRow('RELIANCE', 'B1')]},
+    });
+    const readSpy = jest.spyOn(pageCache, 'readPageCache').mockResolvedValue({
+      data: grid,
+      updatedAt: Date.now(),
+    });
+    const fetcher = jest.fn(async () => grid);
+    const applyPayload = jest.fn();
+    const setRefreshing = jest.fn();
+
+    await runScreenPayloadRefresh({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setRefreshing,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      hasUsable: hasUsableAdvisorTrendPayload,
+    });
+
+    expect(applyPayload).toHaveBeenCalledWith(grid);
+    expect(setRefreshing).toHaveBeenCalledWith(false);
+    readSpy.mockRestore();
   });
 });

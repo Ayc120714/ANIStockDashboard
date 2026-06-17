@@ -86,6 +86,12 @@ export function countTrendGridRows(grid) {
 }
 
 export function hasUsableAdvisorTrendPayload(data) {
+  const grid = normalizeTrendGrid(data);
+  return Boolean(grid && (grid.daily || grid.weekly || grid.monthly));
+}
+
+/** True when at least one tier has stock rows (any timeframe). */
+export function hasTrendGridRows(data) {
   return countTrendGridRows(data) > 0;
 }
 
@@ -184,8 +190,8 @@ export async function fetchAdvisorTrendPayload({forceRefresh = false} = {}) {
     timeoutMs: API_TIMEOUT_MS.advisor,
   });
   const grid = normalizeTrendGrid(res);
-  if (!grid || countTrendGridRows(grid) === 0) {
-    throw new Error('No trend reversal matches available right now.');
+  if (!grid) {
+    throw new Error('Trend reversal data format was invalid.');
   }
   return grid;
 }

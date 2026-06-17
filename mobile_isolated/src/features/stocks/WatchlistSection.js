@@ -82,13 +82,13 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     return dashboardService.fetchWatchlistByListType(horizon, {timeoutMs: WATCHLIST_FETCH_MS});
   }, [horizon]);
 
-  const mergeSignalsIntoRows = useCallback(async baseRows => {
+  const mergeSignalsIntoRows = useCallback(async (baseRows, sigs) => {
     try {
-      const sigs = await dashboardService.fetchWatchlistSignals({
+      const signals = sigs ?? await dashboardService.fetchWatchlistSignals({
         timeframe: 'intraday',
         timeoutMs: WATCHLIST_FETCH_MS,
       });
-      const merged = mergeWatchlistWithSignals(baseRows, sigs);
+      const merged = mergeWatchlistWithSignals(baseRows, signals);
       setRows(merged);
       await writePageCache(cacheKey, merged);
     } catch (_) {
@@ -162,11 +162,20 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     setRefreshing(true);
     setLoadError(null);
     try {
-      const wl = await fetchWatchlistRows();
-      const baseRows = Array.isArray(wl) ? wl : [];
+      const [wlResult, sigResult] = await Promise.allSettled([
+        fetchWatchlistRows(),
+        dashboardService.fetchWatchlistSignals({
+          timeframe: 'intraday',
+          timeoutMs: WATCHLIST_FETCH_MS,
+        }),
+      ]);
+      const baseRows =
+        wlResult.status === 'fulfilled' && Array.isArray(wlResult.value) ? wlResult.value : [];
       setRows(baseRows);
       await writePageCache(cacheKey, baseRows);
-      await mergeSignalsIntoRows(baseRows);
+      if (sigResult.status === 'fulfilled') {
+        await mergeSignalsIntoRows(baseRows, sigResult.value);
+      }
     } catch (e) {
       setLoadError(e?.message || 'Failed to refresh watchlist.');
     } finally {

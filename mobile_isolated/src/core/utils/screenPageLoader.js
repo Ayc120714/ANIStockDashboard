@@ -209,6 +209,51 @@ export async function runScreenPayloadFetch({
   }
 }
 
+/** Pull-to-refresh: show cached payload immediately, refresh in background when cache exists. */
+export async function runScreenPayloadRefresh({
+  cacheKey,
+  fetcher,
+  applyPayload,
+  setRefreshing,
+  setLoading,
+  setError,
+  hasUsable = cacheHasUsableData,
+}) {
+  if (setError) setError(null);
+  if (setRefreshing) setRefreshing(true);
+
+  const cachedWrap = await readPageCache(cacheKey);
+  if (cachedWrap?.data != null && hasUsable(cachedWrap.data)) {
+    applyPayload(cachedWrap.data);
+    if (setLoading) setLoading(false);
+    if (setRefreshing) setRefreshing(false);
+    scheduleBackgroundPayloadRefresh({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setError,
+      hasUsable,
+      forceNetwork: true,
+    });
+    return;
+  }
+
+  if (setLoading) setLoading(true);
+  try {
+    const fresh = await fetchWithRetry(fetcher, {retries: 1});
+    if (hasUsable(fresh)) {
+      await writePageCache(cacheKey, fresh);
+    }
+    applyPayload(fresh);
+    if (setError) setError(null);
+  } catch (e) {
+    if (setError) setError(e?.message || 'Failed to load data.');
+  } finally {
+    if (setLoading) setLoading(false);
+    if (setRefreshing) setRefreshing(false);
+  }
+}
+
 export async function runScreenTableFetchWithLivePoll({
   cacheKey,
   fetcher,
