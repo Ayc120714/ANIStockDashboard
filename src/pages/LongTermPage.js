@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox, Typography, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
@@ -10,9 +10,10 @@ import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/pri
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { applyWatchlistRowMutation } from '../utils/watchlistLocalMutation';
 import OrderPanel from '../components/OrderPanel';
 
-const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v1';
+const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v2';
 
 const recColors = {
   strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
@@ -214,6 +215,7 @@ function LongTermPage() {
   const rowsPerPage = 15;
   const userId = String(user?.id || user?.user_id || user?.email || 'guest');
   const priceAlertsKey = `long_term_price_alerts_${userId}`;
+  const loadGenRef = useRef(0);
 
   const loadSymbols = useCallback(() => {
     apiGet('/watchlist/available-symbols')
@@ -223,6 +225,7 @@ function LongTermPage() {
 
   const load = useCallback(async (options = {}) => {
     const forceRefresh = options?.forceRefresh === true;
+    const gen = ++loadGenRef.current;
     if (!forceRefresh) {
       const cachedWrap = readPageCache(LONG_TERM_CACHE_KEY);
       if (cachedWrap?.data) {
@@ -246,6 +249,7 @@ function LongTermPage() {
         fetchWatchlist('long_term', { skipCache }),
         fetchWatchlistSignals({ timeframe: 'intraday' }),
       ]);
+      if (gen !== loadGenRef.current) return;
       const payload = { watchlist: Array.isArray(wl) ? wl : [], signals: Array.isArray(sigs) ? sigs : [] };
       writePageCache(LONG_TERM_CACHE_KEY, payload);
       setData(payload.watchlist);
@@ -253,7 +257,7 @@ function LongTermPage() {
     } catch (_) {
       /* keep cache */
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
   }, []);
 
@@ -358,26 +362,6 @@ function LongTermPage() {
     [allSymbols, existingSymbols]
   );
 
-  const handleAddSelected = async () => {
-    if (selectedStocks.length === 0) return;
-    setAdding(true);
-    try {
-      const toAdd = Array.from(
-        new Set(
-          selectedStocks
-            .map((sym) => normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol))
-            .filter(Boolean)
-        )
-      ).filter((symbol) => !existingServerSymbols.has(symbol));
-      for (const symbol of toAdd) {
-        await addToWatchlist(symbol, 'long_term', '');
-      }
-      setSelectedStocks([]);
-      await load({ forceRefresh: true });
-    } catch (e) { alert(e?.message || 'Failed to add'); }
-    setAdding(false);
-  };
-
   const handleRemoveFromList = (sym) => {
     const target = normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol);
     setSelectedStocks(prev =>
@@ -428,26 +412,51 @@ function LongTermPage() {
     }
   };
 
-  const refreshAfterWatchlistMutation = useCallback(async (removedSymbols = []) => {
+  const refreshAfterWatchlistMutation = useCallback(async (mutation = {}) => {
     const removed = new Set(
-      (Array.isArray(removedSymbols) ? removedSymbols : [removedSymbols])
+      (Array.isArray(mutation.removed) ? mutation.removed : mutation.removed ? [mutation.removed] : [])
         .map((s) => normalizeSymbol(s))
         .filter(Boolean),
     );
-    if (removed.size > 0) {
-      setData((prev) => prev.filter((r) => !removed.has(normalizeSymbol(r.symbol))));
-      setCheckedSymbols((prev) => {
-        const next = new Set(prev);
-        removed.forEach((sym) => next.delete(sym));
-        return next;
-      });
-      if (detailSymbol && removed.has(normalizeSymbol(detailSymbol))) {
-        setDetailSymbol(null);
-        setDetailRow(null);
+    const added = (Array.isArray(mutation.added) ? mutation.added : mutation.added ? [mutation.added] : [])
+      .map((s) => normalizeSymbol(s))
+      .filter(Boolean);
+    if (removed.size > 0 || added.length > 0) {
+      setData((prev) => applyWatchlistRowMutation(prev, mutation));
+      if (removed.size > 0) {
+        setCheckedSymbols((prev) => {
+          const next = new Set(prev);
+          removed.forEach((sym) => next.delete(sym));
+          return next;
+        });
+        if (detailSymbol && removed.has(normalizeSymbol(detailSymbol))) {
+          setDetailSymbol(null);
+          setDetailRow(null);
+        }
       }
     }
     await load({ forceRefresh: true });
   }, [detailSymbol, load]);
+
+  const handleAddSelected = async () => {
+    if (selectedStocks.length === 0) return;
+    setAdding(true);
+    try {
+      const toAdd = Array.from(
+        new Set(
+          selectedStocks
+            .map((sym) => normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol))
+            .filter(Boolean)
+        )
+      ).filter((symbol) => !existingServerSymbols.has(symbol));
+      for (const symbol of toAdd) {
+        await addToWatchlist(symbol, 'long_term', '');
+      }
+      setSelectedStocks([]);
+      await refreshAfterWatchlistMutation({ added: toAdd });
+    } catch (e) { alert(e?.message || 'Failed to add'); }
+    setAdding(false);
+  };
 
   const handleBulkDelete = async () => {
     const syms = [...checkedSymbols];
@@ -457,7 +466,7 @@ function LongTermPage() {
     try {
       const res = await bulkDeleteFromWatchlist(syms, 'long_term');
       const removed = Array.isArray(res?.removed) && res.removed.length ? res.removed : syms;
-      await refreshAfterWatchlistMutation(removed);
+      await refreshAfterWatchlistMutation({ removed });
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }
     setDeleting(false);
   };
@@ -469,7 +478,7 @@ function LongTermPage() {
     setDeleting(true);
     try {
       await removeFromWatchlist(sym, 'long_term');
-      await refreshAfterWatchlistMutation([sym]);
+      await refreshAfterWatchlistMutation({ removed: [sym] });
     } catch (e) {
       alert(e?.message || 'Could not remove stock');
     }

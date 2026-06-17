@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from './apiClient';
+import { apiGet, apiPost, apiRequest, clearApiGetCache } from './apiClient';
 
 const extractRows = (payload, keys = []) => {
   if (Array.isArray(payload)) return payload;
@@ -24,7 +24,9 @@ export const fetchWatchlist = async (listType = null, options = {}) => {
 };
 
 export const addToWatchlist = async (symbol, listType = 'long_term', notes = '') => {
-  return apiPost('/watchlist', { symbol, list_type: listType, notes });
+  const res = await apiPost('/watchlist', { symbol, list_type: listType, notes });
+  clearApiGetCache();
+  return res;
 };
 
 /** Samco candles + technical + rating for symbols already on your watchlist (any list). */
@@ -42,13 +44,17 @@ export const removeFromWatchlist = async (symbol, listType = 'long_term', option
   const params = new URLSearchParams();
   params.set('list_type', listType);
   if (includeAll) params.set('include_all', 'true');
-  return apiRequest(`/watchlist/symbol/${encodeURIComponent(symbol)}?${params.toString()}`, { method: 'DELETE' });
+  const res = await apiRequest(`/watchlist/symbol/${encodeURIComponent(symbol)}?${params.toString()}`, { method: 'DELETE' });
+  clearApiGetCache();
+  return res;
 };
 
 export const bulkDeleteFromWatchlist = async (symbols, listType, options = {}) => {
   const includeAll = Boolean(options?.includeAll);
   const qs = includeAll ? '?include_all=true' : '';
-  return apiPost(`/watchlist/bulk-delete${qs}`, { symbols, list_type: listType });
+  const res = await apiPost(`/watchlist/bulk-delete${qs}`, { symbols, list_type: listType });
+  clearApiGetCache();
+  return res;
 };
 
 export const updateWatchlistEntry = async (symbol, data) => {

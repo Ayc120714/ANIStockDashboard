@@ -36,6 +36,7 @@ function UserRows({
   setError,
   setMessage,
   loadUsers,
+  onUserActionComplete,
   setPaidTarget,
   setDeleteTarget,
   selectable,
@@ -43,13 +44,16 @@ function UserRows({
   onToggleRow,
   highlightUserId,
 }) {
-  const run = async (fn) => {
+  const run = async (fn, userId) => {
     setBusy(true);
     setError('');
     setMessage('');
     try {
       await fn();
-      await loadUsers();
+      const nextRows = await loadUsers({ silent: true });
+      if (userId && typeof onUserActionComplete === 'function') {
+        onUserActionComplete(userId, nextRows);
+      }
     } catch (err) {
       setError(err?.message || 'Action failed.');
     } finally {
@@ -123,7 +127,7 @@ function UserRows({
                   run(async () => {
                     const res = await approveAdminUserAccessLink(row.id);
                     setMessage(res?.message || `Access link sent to ${row.email}.`);
-                  })
+                  }, row.id)
                 }
               >
                 Approve & Send Link
@@ -137,7 +141,7 @@ function UserRows({
                   run(async () => {
                     await rejectAdminUserRequest(row.id, 'rejected_by_admin');
                     setMessage(`User ${row.email} rejected.`);
-                  })
+                  }, row.id)
                 }
               >
                 Reject
@@ -153,7 +157,7 @@ function UserRows({
                 run(async () => {
                   await blockAdminUser(row.id, true);
                   setMessage(`User ${row.email} blocked successfully.`);
-                })
+                }, row.id)
               }
             >
               Block
@@ -168,7 +172,7 @@ function UserRows({
                 run(async () => {
                   await blockAdminUser(row.id, false);
                   setMessage(`User ${row.email} unblocked successfully.`);
-                })
+                }, row.id)
               }
             >
               Unblock
@@ -205,7 +209,7 @@ function UserRows({
                 run(async () => {
                   await clearUserPaidPremium(row.id);
                   setMessage(`Cleared paid premium for ${row.email}.`);
-                })
+                }, row.id)
               }
             >
               Clear paid
@@ -240,7 +244,7 @@ function UserRows({
                   run(async () => {
                     await setUserComplimentaryPremium(row.id, true);
                     setMessage(`Complimentary premium enabled for ${row.email} (no payment).`);
-                  })
+                  }, row.id)
                 }
               >
                 Complimentary premium
@@ -257,7 +261,7 @@ function UserRows({
                 run(async () => {
                   await setUserLifetimePremium(row.id, true);
                   setMessage(`Lifetime premium enabled for ${row.email}.`);
-                })
+                }, row.id)
               }
             >
               Lifetime premium
@@ -273,7 +277,7 @@ function UserRows({
                 run(async () => {
                   await moveUserLifetimeToComplimentary(row.id);
                   setMessage(`Moved ${row.email} from lifetime to complimentary premium.`);
-                })
+                }, row.id)
               }
             >
               Move to complimentary
@@ -289,7 +293,7 @@ function UserRows({
                 run(async () => {
                   await setUserLifetimePremium(row.id, false);
                   setMessage(`Lifetime premium removed for ${row.email}.`);
-                })
+                }, row.id)
               }
             >
               Remove lifetime
@@ -305,7 +309,7 @@ function UserRows({
                 run(async () => {
                   await setUserComplimentaryPremium(row.id, false);
                   setMessage(`Complimentary premium removed for ${row.email}.`);
-                })
+                }, row.id)
               }
             >
               Remove complimentary
@@ -356,6 +360,7 @@ export default function AdminUserDirectoryTables({
   setError,
   setMessage,
   loadUsers,
+  onUserActionComplete,
   setPaidTarget,
   setDeleteTarget,
 }) {
@@ -438,20 +443,24 @@ export default function AdminUserDirectoryTables({
   }, [lifetimeVisibleIds]);
 
   const runBulk = useCallback(
-    async (fn) => {
+    async (fn, affectedIds = [], hintTier) => {
       setBusy(true);
       setError('');
       setMessage('');
       try {
         await fn();
-        await loadUsers();
+        const nextRows = await loadUsers({ silent: true });
+        const userId = Array.isArray(affectedIds) ? affectedIds[0] : affectedIds;
+        if (userId && typeof onUserActionComplete === 'function') {
+          onUserActionComplete(userId, nextRows, hintTier);
+        }
       } catch (err) {
         setError(err?.message || 'Bulk action failed.');
       } finally {
         setBusy(false);
       }
     },
-    [loadUsers, setBusy, setError, setMessage],
+    [loadUsers, onUserActionComplete, setBusy, setError, setMessage],
   );
 
   const onBulkBasicComplimentary = useCallback(() => {
@@ -460,7 +469,7 @@ export default function AdminUserDirectoryTables({
       const res = await bulkSetUserComplimentaryPremium(selectedBasic, true);
       setMessage(`Complimentary premium saved for ${res.updated} user(s) (database updated).`);
       setSelectedBasic([]);
-    });
+    }, selectedBasic, 'monthly');
   }, [runBulk, selectedBasic, setMessage]);
 
   const onBulkBasicLifetime = useCallback(() => {
@@ -469,7 +478,7 @@ export default function AdminUserDirectoryTables({
       const res = await bulkSetUserLifetimePremium(selectedBasic, true);
       setMessage(`Lifetime premium saved for ${res.updated} user(s) (database updated).`);
       setSelectedBasic([]);
-    });
+    }, selectedBasic, 'lifetime');
   }, [runBulk, selectedBasic, setMessage]);
 
   const onBulkMonthlyLifetime = useCallback(() => {
@@ -478,7 +487,7 @@ export default function AdminUserDirectoryTables({
       const res = await bulkSetUserLifetimePremium(selectedMonthly, true);
       setMessage(`Lifetime premium saved for ${res.updated} user(s) (database updated).`);
       setSelectedMonthly([]);
-    });
+    }, selectedMonthly, 'lifetime');
   }, [runBulk, selectedMonthly, setMessage]);
 
   const onBulkYearlyLifetime = useCallback(() => {
@@ -487,7 +496,7 @@ export default function AdminUserDirectoryTables({
       const res = await bulkSetUserLifetimePremium(selectedYearly, true);
       setMessage(`Lifetime premium saved for ${res.updated} user(s) (database updated).`);
       setSelectedYearly([]);
-    });
+    }, selectedYearly, 'lifetime');
   }, [runBulk, selectedYearly, setMessage]);
 
   const onBulkLifetimeToComplimentary = useCallback(() => {
@@ -496,7 +505,7 @@ export default function AdminUserDirectoryTables({
       const res = await bulkMoveUserLifetimeToComplimentary(selectedLifetime);
       setMessage(`Moved ${res.updated} user(s) from lifetime to complimentary (database updated).`);
       setSelectedLifetime([]);
-    });
+    }, selectedLifetime, 'monthly');
   }, [runBulk, selectedLifetime, setMessage]);
 
   const tableHead = (selectable, headerChecked, headerIndeterminate, onHeaderChange) => (
@@ -529,7 +538,7 @@ export default function AdminUserDirectoryTables({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Box>
+      <Box id="admin-tier-lifetime">
         <TableTitle>Lifetime members ({tierLifetimeUsers.length})</TableTitle>
         <BulkBar count={selectedLifetime.length} busy={busy} onClear={() => setSelectedLifetime([])}>
           <Button
@@ -555,6 +564,7 @@ export default function AdminUserDirectoryTables({
                 setError={setError}
                 setMessage={setMessage}
                 loadUsers={loadUsers}
+                onUserActionComplete={onUserActionComplete}
                 setPaidTarget={setPaidTarget}
                 setDeleteTarget={setDeleteTarget}
                 selectable
@@ -567,7 +577,7 @@ export default function AdminUserDirectoryTables({
         </TableWrapper>
       </Box>
 
-      <Box>
+      <Box id="admin-tier-monthly">
         <TableTitle>Monthly premium ({tierMonthlyPremiumUsers.length})</TableTitle>
         <BulkBar count={selectedMonthly.length} busy={busy} onClear={() => setSelectedMonthly([])}>
           <Button
@@ -593,6 +603,7 @@ export default function AdminUserDirectoryTables({
                 setError={setError}
                 setMessage={setMessage}
                 loadUsers={loadUsers}
+                onUserActionComplete={onUserActionComplete}
                 setPaidTarget={setPaidTarget}
                 setDeleteTarget={setDeleteTarget}
                 selectable
@@ -605,7 +616,7 @@ export default function AdminUserDirectoryTables({
         </TableWrapper>
       </Box>
 
-      <Box>
+      <Box id="admin-tier-yearly">
         <TableTitle>Yearly premium ({tierYearlyPremiumUsers.length})</TableTitle>
         <BulkBar count={selectedYearly.length} busy={busy} onClear={() => setSelectedYearly([])}>
           <Button
@@ -631,6 +642,7 @@ export default function AdminUserDirectoryTables({
                 setError={setError}
                 setMessage={setMessage}
                 loadUsers={loadUsers}
+                onUserActionComplete={onUserActionComplete}
                 setPaidTarget={setPaidTarget}
                 setDeleteTarget={setDeleteTarget}
                 selectable
@@ -643,7 +655,7 @@ export default function AdminUserDirectoryTables({
         </TableWrapper>
       </Box>
 
-      <Box>
+      <Box id="admin-tier-basic">
         <TableTitle>Basic users ({tierBasicUsers.length})</TableTitle>
         <BulkBar count={selectedBasic.length} busy={busy} onClear={() => setSelectedBasic([])}>
           <Button
@@ -679,6 +691,7 @@ export default function AdminUserDirectoryTables({
                 setError={setError}
                 setMessage={setMessage}
                 loadUsers={loadUsers}
+                onUserActionComplete={onUserActionComplete}
                 setPaidTarget={setPaidTarget}
                 setDeleteTarget={setDeleteTarget}
                 selectable

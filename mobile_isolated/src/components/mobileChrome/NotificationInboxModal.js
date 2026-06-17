@@ -184,6 +184,10 @@ export function NotificationInboxModal({
             })}
           </ScrollView>
 
+          {loading && items.length ? (
+            <Text style={styles.refreshingHint}>Updating…</Text>
+          ) : null}
+
           {loading && !items.length ? (
             <View style={styles.center}>
               <ActivityIndicator color={AYC.accent} />
@@ -273,6 +277,7 @@ const styles = StyleSheet.create({
   filterText: {fontSize: 12, fontWeight: '700', color: AYC.text},
   filterTextOn: {color: '#fff'},
   center: {alignItems: 'center', justifyContent: 'center', paddingVertical: 24},
+  refreshingHint: {fontSize: 11, color: AYC.textMuted, paddingHorizontal: 16, paddingBottom: 6},
   error: {color: '#b91c1c', fontSize: 12, paddingHorizontal: 16, paddingBottom: 8},
   list: {maxHeight: 460},
   listContent: {paddingHorizontal: 12, paddingBottom: 12, gap: 8},

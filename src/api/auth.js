@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from './apiClient';
+import { apiGet, apiPost, apiRequest, clearApiGetCache } from './apiClient';
 
 export const validateEmail = (email) => apiPost('/auth/validate-email', { email });
 
@@ -43,8 +43,10 @@ export const logoutSession = (refreshToken) =>
 export const fetchMe = () => apiGet('/auth/me');
 export const updateMyMobile = (mobile) => apiPost('/auth/me/mobile', { mobile: String(mobile || '') });
 
-export const fetchAdminUsers = (includeInactive = true) =>
-  apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`);
+export const fetchAdminUsers = (includeInactive = true, options = {}) =>
+  apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`, {
+    skipCache: options?.skipCache === true,
+  });
 
 export const fetchAdminNotifications = ({ unreadOnly = false, limit = 50 } = {}) => {
   const params = new URLSearchParams();

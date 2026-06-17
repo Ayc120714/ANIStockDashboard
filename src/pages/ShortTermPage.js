@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Autocomplete, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
@@ -9,12 +9,13 @@ import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
+import { applyWatchlistRowMutation } from '../utils/watchlistLocalMutation';
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 
-const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v1';
+const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v2';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
@@ -296,6 +297,7 @@ function ShortTermPage() {
   const rowsPerPage = 15;
   const userId = String(user?.id || user?.user_id || user?.email || 'guest');
   const priceAlertsKey = `short_term_price_alerts_${userId}`;
+  const loadGenRef = useRef(0);
 
   const loadSymbols = useCallback(() => {
     apiGet('/watchlist/available-symbols')
@@ -305,6 +307,7 @@ function ShortTermPage() {
 
   const load = useCallback(async (options = {}) => {
     const forceRefresh = options?.forceRefresh === true;
+    const gen = ++loadGenRef.current;
     if (!forceRefresh) {
       const cachedWrap = readPageCache(SHORT_TERM_CACHE_KEY);
       if (cachedWrap?.data) {
@@ -328,6 +331,7 @@ function ShortTermPage() {
         fetchWatchlist('short_term', { skipCache }),
         fetchWatchlistSignals({ timeframe: 'intraday' }),
       ]);
+      if (gen !== loadGenRef.current) return;
       const payload = {
         watchlist: Array.isArray(wl) ? wl : [],
         signals: Array.isArray(sigs) ? sigs : [],
@@ -338,7 +342,7 @@ function ShortTermPage() {
     } catch (_) {
       /* keep cache */
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
   }, []);
 
@@ -410,26 +414,6 @@ function ShortTermPage() {
     [allSymbols, existingSymbols]
   );
 
-  const handleAddSelected = async () => {
-    if (selectedStocks.length === 0) return;
-    setAdding(true);
-    try {
-      const toAdd = Array.from(
-        new Set(
-          selectedStocks
-            .map((sym) => normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol))
-            .filter(Boolean)
-        )
-      ).filter((symbol) => !existingSymbols.has(symbol));
-      for (const symbol of toAdd) {
-        await addToWatchlist(symbol, 'short_term', '');
-      }
-      setSelectedStocks([]);
-      await load({ forceRefresh: true });
-    } catch (e) { alert(e?.message || 'Failed to add'); }
-    setAdding(false);
-  };
-
   const handleRemoveFromList = (sym) => {
     const target = normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol);
     setSelectedStocks(prev =>
@@ -480,26 +464,51 @@ function ShortTermPage() {
     }
   };
 
-  const refreshAfterWatchlistMutation = useCallback(async (removedSymbols = []) => {
+  const refreshAfterWatchlistMutation = useCallback(async (mutation = {}) => {
     const removed = new Set(
-      (Array.isArray(removedSymbols) ? removedSymbols : [removedSymbols])
+      (Array.isArray(mutation.removed) ? mutation.removed : mutation.removed ? [mutation.removed] : [])
         .map((s) => normalizeSymbol(s))
         .filter(Boolean),
     );
-    if (removed.size > 0) {
-      setData((prev) => prev.filter((r) => !removed.has(normalizeSymbol(r.symbol))));
-      setCheckedSymbols((prev) => {
-        const next = new Set(prev);
-        removed.forEach((sym) => next.delete(sym));
-        return next;
-      });
-      if (detailSymbol && removed.has(normalizeSymbol(detailSymbol))) {
-        setDetailSymbol(null);
-        setDetailRow(null);
+    const added = (Array.isArray(mutation.added) ? mutation.added : mutation.added ? [mutation.added] : [])
+      .map((s) => normalizeSymbol(s))
+      .filter(Boolean);
+    if (removed.size > 0 || added.length > 0) {
+      setData((prev) => applyWatchlistRowMutation(prev, mutation));
+      if (removed.size > 0) {
+        setCheckedSymbols((prev) => {
+          const next = new Set(prev);
+          removed.forEach((sym) => next.delete(sym));
+          return next;
+        });
+        if (detailSymbol && removed.has(normalizeSymbol(detailSymbol))) {
+          setDetailSymbol(null);
+          setDetailRow(null);
+        }
       }
     }
     await load({ forceRefresh: true });
   }, [detailSymbol, load]);
+
+  const handleAddSelected = async () => {
+    if (selectedStocks.length === 0) return;
+    setAdding(true);
+    try {
+      const toAdd = Array.from(
+        new Set(
+          selectedStocks
+            .map((sym) => normalizeSymbol(typeof sym === 'string' ? sym : sym.symbol))
+            .filter(Boolean)
+        )
+      ).filter((symbol) => !existingSymbols.has(symbol));
+      for (const symbol of toAdd) {
+        await addToWatchlist(symbol, 'short_term', '');
+      }
+      setSelectedStocks([]);
+      await refreshAfterWatchlistMutation({ added: toAdd });
+    } catch (e) { alert(e?.message || 'Failed to add'); }
+    setAdding(false);
+  };
 
   const handleBulkDelete = async () => {
     const syms = [...checkedSymbols];
@@ -509,7 +518,7 @@ function ShortTermPage() {
     try {
       const res = await bulkDeleteFromWatchlist(syms, 'short_term');
       const removed = Array.isArray(res?.removed) && res.removed.length ? res.removed : syms;
-      await refreshAfterWatchlistMutation(removed);
+      await refreshAfterWatchlistMutation({ removed });
     } catch (e) { alert(e?.message || 'Bulk delete failed'); }
     setDeleting(false);
   };
@@ -521,7 +530,7 @@ function ShortTermPage() {
     setDeleting(true);
     try {
       await removeFromWatchlist(sym, 'short_term');
-      await refreshAfterWatchlistMutation([sym]);
+      await refreshAfterWatchlistMutation({ removed: [sym] });
     } catch (e) {
       alert(e?.message || 'Could not remove stock');
     }

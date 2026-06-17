@@ -1,6 +1,7 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -13,6 +14,7 @@ import {SortableTableHeader} from '@components/SortableTableHeader';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 import {dashboardService} from '@core/api/services/dashboardService';
+import {normalizeWatchlistSymbol, watchlistService} from '@core/api/services/watchlistService';
 import {formatINR} from '@core/utils/formatMarket';
 import {formatPct, stockRowPct} from '@core/utils/stockListPayload';
 import {mergeSymbolOptions} from '@core/utils/symbolOptions';
@@ -22,7 +24,7 @@ import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {mergeWatchlistWithSignals} from '@core/utils/mergeWatchlistSignals';
 import {navigateToStocksAlerts, navigateToStocksBrokers, navigateToStocksOrders} from '@nav/navigationHelpers';
-import {readPageCache, writePageCache} from '@core/storage/pageCache';
+import {readPageCache, writePageCache, clearPageCache} from '@core/storage/pageCache';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractRowArray} from '@core/utils/screenPageLoader';
 
@@ -71,23 +73,33 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
   const [loadError, setLoadError] = useState('');
   const [symbolOptions, setSymbolOptions] = useState([]);
   const [sym, setSym] = useState('');
+  const [addSym, setAddSym] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [removingSym, setRemovingSym] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
   const [side, setSide] = useState('BUY');
   const [productType, setProductType] = useState('INTRADAY');
   const [orderType, setOrderType] = useState('MARKET');
   const {sortConfig, onSort} = useTableSort('day1d', false);
 
   const cacheKey = MOBILE_PAGE_CACHE_KEYS.watchlist(horizon);
+  const loadGenRef = useRef(0);
 
-  const fetchWatchlistRows = useCallback(async () => {
-    return dashboardService.fetchWatchlistByListType(horizon, {timeoutMs: WATCHLIST_FETCH_MS});
+  const fetchWatchlistRows = useCallback(async (options = {}) => {
+    return dashboardService.fetchWatchlistByListType(horizon, {
+      timeoutMs: WATCHLIST_FETCH_MS,
+      cacheBust: options?.cacheBust === true,
+    });
   }, [horizon]);
 
-  const mergeSignalsIntoRows = useCallback(async (baseRows, sigs) => {
+  const mergeSignalsIntoRows = useCallback(async (baseRows, sigs, gen) => {
+    if (gen != null && gen !== loadGenRef.current) return;
     try {
       const signals = sigs ?? await dashboardService.fetchWatchlistSignals({
         timeframe: 'intraday',
         timeoutMs: WATCHLIST_FETCH_MS,
       });
+      if (gen != null && gen !== loadGenRef.current) return;
       const merged = mergeWatchlistWithSignals(baseRows, signals);
       setRows(merged);
       await writePageCache(cacheKey, merged);
@@ -109,6 +121,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
 
     (async () => {
       setLoadError(null);
+      const gen = ++loadGenRef.current;
       const cached = await readPageCache(cacheKey);
       const hasCached = cached?.data != null;
       const cachedRows = hasCached ? extractRowArray(cached.data) : null;
@@ -118,11 +131,11 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
         void (async () => {
           try {
             const wl = await fetchWatchlistRows();
-            if (cancelled) return;
+            if (cancelled || gen !== loadGenRef.current) return;
             const baseRows = Array.isArray(wl) ? wl : [];
             setRows(baseRows);
             await writePageCache(cacheKey, baseRows);
-            mergeSignalsIntoRows(baseRows);
+            mergeSignalsIntoRows(baseRows, undefined, gen);
           } catch {
             /* keep cached rows */
           }
@@ -133,15 +146,15 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       setLoading(true);
       try {
         const wl = await fetchWatchlistRows();
-        if (cancelled) return;
+        if (cancelled || gen !== loadGenRef.current) return;
         const baseRows = Array.isArray(wl) ? wl : [];
         setRows(baseRows);
         setLoading(false);
         setLoadError(null);
         await writePageCache(cacheKey, baseRows);
-        mergeSignalsIntoRows(baseRows);
+        mergeSignalsIntoRows(baseRows, undefined, gen);
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || gen !== loadGenRef.current) return;
         setRows([]);
         setLoadError(e?.message || 'Failed to load watchlist.');
         setLoading(false);
@@ -159,29 +172,79 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
   }, [cacheKey, fetchWatchlistRows, loadSymbols, mergeSignalsIntoRows]);
 
   const onRefresh = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setRefreshing(true);
     setLoadError(null);
+    await clearPageCache(cacheKey);
     try {
       const [wlResult, sigResult] = await Promise.allSettled([
-        fetchWatchlistRows(),
+        fetchWatchlistRows({cacheBust: true}),
         dashboardService.fetchWatchlistSignals({
           timeframe: 'intraday',
           timeoutMs: WATCHLIST_FETCH_MS,
         }),
       ]);
+      if (gen !== loadGenRef.current) return;
       const baseRows =
         wlResult.status === 'fulfilled' && Array.isArray(wlResult.value) ? wlResult.value : [];
       setRows(baseRows);
       await writePageCache(cacheKey, baseRows);
       if (sigResult.status === 'fulfilled') {
-        await mergeSignalsIntoRows(baseRows, sigResult.value);
+        await mergeSignalsIntoRows(baseRows, sigResult.value, gen);
       }
     } catch (e) {
+      if (gen !== loadGenRef.current) return;
       setLoadError(e?.message || 'Failed to refresh watchlist.');
     } finally {
-      setRefreshing(false);
+      if (gen === loadGenRef.current) setRefreshing(false);
     }
   }, [cacheKey, fetchWatchlistRows, mergeSignalsIntoRows]);
+
+  const applyOptimisticMutation = useCallback((mutation = {}) => {
+    const removed = new Set(
+      (Array.isArray(mutation.removed) ? mutation.removed : [])
+        .map(s => normalizeWatchlistSymbol(s))
+        .filter(Boolean),
+    );
+    const added = (Array.isArray(mutation.added) ? mutation.added : [])
+      .map(s => normalizeWatchlistSymbol(s))
+      .filter(Boolean);
+    if (!removed.size && !added.length) return;
+    setRows(prev => {
+      let next = prev.filter(r => !removed.has(normalizeWatchlistSymbol(r?.symbol)));
+      const existing = new Set(next.map(r => normalizeWatchlistSymbol(r?.symbol)));
+      for (const sym of added) {
+        if (!existing.has(sym)) {
+          next = [...next, {symbol: sym}];
+          existing.add(sym);
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const reloadWatchlist = useCallback(async (options = {}) => {
+    const forceRefresh = options?.forceRefresh === true;
+    const gen = ++loadGenRef.current;
+    if (forceRefresh) {
+      await clearPageCache(cacheKey);
+      applyOptimisticMutation(options?.optimistic);
+    }
+    try {
+      const wl = await fetchWatchlistRows({cacheBust: forceRefresh});
+      if (gen !== loadGenRef.current) return [];
+      const baseRows = Array.isArray(wl) ? wl : [];
+      setRows(baseRows);
+      await writePageCache(cacheKey, baseRows);
+      await mergeSignalsIntoRows(baseRows, undefined, gen);
+      return baseRows;
+    } catch (e) {
+      if (gen === loadGenRef.current) {
+        setLoadError(e?.message || 'Failed to reload watchlist.');
+      }
+      return [];
+    }
+  }, [applyOptimisticMutation, cacheKey, fetchWatchlistRows, mergeSignalsIntoRows]);
 
   const sortedRows = useMemo(
     () => sortRows(rows, sortConfig, (row, key) => getWatchlistSortValue(row, key, horizon)),
@@ -191,6 +254,82 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
   const mergedSymbolOptions = useMemo(
     () => mergeSymbolOptions(symbolOptions, rows.map(r => r?.symbol).filter(Boolean)),
     [rows, symbolOptions],
+  );
+
+  const existingSymbols = useMemo(
+    () => new Set(rows.map(r => normalizeWatchlistSymbol(r?.symbol)).filter(Boolean)),
+    [rows],
+  );
+
+  const addSymbolOptions = useMemo(
+    () => mergedSymbolOptions.filter(opt => !existingSymbols.has(normalizeWatchlistSymbol(opt?.symbol))),
+    [existingSymbols, mergedSymbolOptions],
+  );
+
+  const handleAddToWatchlist = useCallback(async () => {
+    const symbol = normalizeWatchlistSymbol(addSym);
+    if (!symbol) {
+      setActionMsg('Select or type a symbol to add.');
+      return;
+    }
+    if (existingSymbols.has(symbol)) {
+      setActionMsg(`${symbol} is already on this watchlist.`);
+      return;
+    }
+    setAdding(true);
+    setActionMsg('');
+    setLoadError('');
+    try {
+      await watchlistService.addToWatchlist(symbol, horizon);
+      setAddSym('');
+      setSym(symbol);
+      await reloadWatchlist({
+        forceRefresh: true,
+        optimistic: {added: [symbol]},
+      });
+      setActionMsg(`Added ${symbol} to ${horizon === 'short_term' ? 'Short Term' : 'Long Term'} watchlist.`);
+    } catch (e) {
+      setActionMsg(e?.message || 'Failed to add symbol.');
+    } finally {
+      setAdding(false);
+    }
+  }, [addSym, existingSymbols, horizon, reloadWatchlist]);
+
+  const confirmRemoveFromWatchlist = useCallback(
+    symbol => {
+      const target = normalizeWatchlistSymbol(symbol);
+      if (!target) return;
+      Alert.alert(
+        'Remove from watchlist',
+        `Remove ${target} from ${horizon === 'short_term' ? 'Short Term' : 'Long Term'}?`,
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              setRemovingSym(target);
+              setActionMsg('');
+              setLoadError('');
+              try {
+                await watchlistService.removeFromWatchlist(target, horizon);
+                if (normalizeWatchlistSymbol(sym) === target) setSym('');
+                await reloadWatchlist({
+                  forceRefresh: true,
+                  optimistic: {removed: [target]},
+                });
+                setActionMsg(`Removed ${target} from watchlist.`);
+              } catch (e) {
+                setActionMsg(e?.message || 'Failed to remove symbol.');
+              } finally {
+                setRemovingSym('');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [horizon, reloadWatchlist, sym],
   );
 
   useEffect(() => {
@@ -227,6 +366,30 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
           <Text style={styles.refreshHint}>Live refresh during market hours</Text>
         </View>
       ) : null}
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>
+          Add to {horizon === 'short_term' ? 'Short Term' : 'Long Term'} watchlist
+        </Text>
+        <Text style={styles.panelHint}>Search NSE symbols and tap Add — same lists as the web dashboard.</Text>
+        <SymbolAutocomplete
+          value={addSym}
+          onChange={setAddSym}
+          options={addSymbolOptions}
+          placeholder="Search symbol to add…"
+        />
+        <Pressable
+          style={[styles.addBtn, adding ? styles.addBtnDisabled : null]}
+          onPress={handleAddToWatchlist}
+          disabled={adding}>
+          {adding ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.addBtnTxt}>Add stock</Text>
+          )}
+        </Pressable>
+        {actionMsg ? <Text style={styles.actionMsg}>{actionMsg}</Text> : null}
+      </View>
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Trade action panel</Text>
@@ -288,17 +451,21 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
                   <SortableTableHeader label="Entry" sortKey="entry" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.2}} />
                 </>
               )}
+              <Text style={[styles.th, {flex: 0.45}]}> </Text>
             </View>
           }
           renderItem={({item, index}) => {
             const pct = stockRowPct(item);
             const pc = pct == null ? AYC.textMuted : pct >= 0 ? AYC.positive : AYC.negative;
             const rs = ratingBadgeStyle(item.recommendation);
-            const selected = String(item.symbol || '').toUpperCase() === String(sym || '').toUpperCase();
+            const rowSym = normalizeWatchlistSymbol(item.symbol);
+            const selected = rowSym === normalizeWatchlistSymbol(sym);
+            const isRemoving = removingSym === rowSym;
             return (
               <Pressable
                 style={[styles.tr, index % 2 === 0 ? styles.trAlt : null, selected ? styles.trSelected : null]}
-                onPress={() => setSym(String(item.symbol || '').toUpperCase())}>
+                onPress={() => setSym(rowSym)}
+                onLongPress={() => confirmRemoveFromWatchlist(rowSym)}>
                 <View style={[styles.td, {flex: 1.1, flexDirection: 'row', alignItems: 'center'}]}>
                   <TradingViewLink symbol={item.symbol} size={14} />
                   <Text style={{fontWeight: '800', flex: 1}} numberOfLines={1}>
@@ -330,10 +497,25 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
                     </Text>
                   </>
                 )}
+                <Pressable
+                  style={styles.removeBtn}
+                  onPress={() => confirmRemoveFromWatchlist(rowSym)}
+                  disabled={isRemoving}
+                  hitSlop={8}>
+                  {isRemoving ? (
+                    <ActivityIndicator color={AYC.negative} size="small" />
+                  ) : (
+                    <Text style={styles.removeTxt}>×</Text>
+                  )}
+                </Pressable>
               </Pressable>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>No watchlist rows for this horizon.</Text>}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              No stocks on this watchlist yet. Use Add stock above to track symbols on mobile.
+            </Text>
+          }
         />
       )}
     </View>
@@ -357,6 +539,18 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   panelTitle: mobileStyles.cardTitle,
+  panelHint: {fontSize: AYC.type.caption, color: AYC.textMuted, lineHeight: 18},
+  addBtn: {
+    backgroundColor: AYC.accent,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  addBtnDisabled: {opacity: 0.7},
+  addBtnTxt: {color: '#fff', fontWeight: '800', fontSize: AYC.type.metricMd},
+  actionMsg: {fontSize: AYC.type.caption, color: AYC.accent, fontWeight: '700'},
   btnRow: {flexDirection: 'row', gap: 8, alignItems: 'center'},
   sq: {width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   buySq: {backgroundColor: AYC.positive},
@@ -407,6 +601,17 @@ const styles = StyleSheet.create({
   td: mobileStyles.td,
   badge: {paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6, alignSelf: 'center', justifyContent: 'center'},
   badgeTxt: {fontSize: AYC.type.cardLabel, fontWeight: '800', textAlign: 'center'},
+  removeBtn: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeTxt: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: AYC.negative,
+  },
   empty: {padding: 24, textAlign: 'center', color: AYC.textMuted, fontSize: AYC.type.body},
   loadErr: {marginTop: 8, fontSize: AYC.type.caption, color: AYC.negative, fontWeight: '700'},
 });

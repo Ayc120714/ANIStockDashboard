@@ -38,6 +38,7 @@
     "mobile:isolated:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-mobile-from-dev.ps1",
     "build": "craco build",
     "test": "craco test",
+    "test:ci": "CI=true craco test --watchAll=false --testPathIgnorePatterns=/App.test.js",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

@@ -29,6 +29,29 @@ import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } fro
 const LIVE_POLL_MS = 30_000;
 const CLOSED_POLL_MS = 60_000;
 
+async function loadCachedInboxSections() {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.notificationInboxSections);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.sections || typeof parsed.sections !== 'object') return null;
+    return parsed.sections;
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedInboxSections(sections) {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.notificationInboxSections,
+      JSON.stringify({sections, updatedAt: Date.now()}),
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
 async function loadStoredReadKeys(userId) {
   const scopedKey = notificationInboxReadKeys(userId);
   let stored = (await AsyncStorage.getItem(scopedKey)) || '';
@@ -72,6 +95,8 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
   const readKeysRef = useRef(new Set());
   const checkingRef = useRef(false);
   const readKeysReadyRef = useRef(false);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
 
   const syncBadge = useCallback((allItems, keys = readKeysRef.current) => {
     setBadgeCount(countUnreadInboxItems(allItems, keys));
@@ -82,20 +107,32 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
     [readKeys, sections],
   );
 
-  const load = useCallback(async () => {
-    if (!enabled || checkingRef.current) return;
+  const load = useCallback(async ({background = false} = {}) => {
+    if (!enabled) return;
+    if (checkingRef.current) {
+      if (!background) return;
+      return;
+    }
     checkingRef.current = true;
-    setLoading(true);
+    const hasCachedRows = sectionsRef.current.all?.length > 0;
+    if (!background || !hasCachedRows) {
+      setLoading(true);
+    }
     setError('');
     try {
       const adminPromise = isSuperAdmin
         ? authService.fetchAdminNotifications({limit: 40}).catch(() => null)
         : Promise.resolve(null);
 
+      const lightFetch = background && hasCachedRows;
       const [liveRes, specialRes, priceRes, adminRes, tableRes] = await Promise.allSettled([
         alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT}),
-        alertsService.fetchSpecialAlerts({limit: 300, currentDayOnly: false, includeHistory: true}),
-        userId ? alertsService.fetchPriceAlertTriggers({userId, limit: 200}) : Promise.resolve([]),
+        alertsService.fetchSpecialAlerts({
+          limit: lightFetch ? 80 : 200,
+          currentDayOnly: lightFetch,
+          includeHistory: !lightFetch,
+        }),
+        userId ? alertsService.fetchPriceAlertTriggers({userId, limit: lightFetch ? 80 : 200}) : Promise.resolve([]),
         adminPromise,
         loadAdvisorTableChangeEvents(),
       ]);
@@ -110,13 +147,16 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
       const nextSections = buildInboxSections({live, special, price, admin, tableEvents});
       setSections(nextSections);
       syncBadge(nextSections.all);
+      await saveCachedInboxSections(nextSections);
 
       const failures = [liveRes, specialRes, priceRes, adminRes].filter(r => r.status === 'rejected');
-      if (failures.length === 4 && !tableEvents.length) {
+      if (!background && failures.length === 4 && !tableEvents.length) {
         setError('Could not load notifications.');
       }
     } catch (e) {
-      setError(String(e?.message || e || 'Could not load notifications.'));
+      if (!background) {
+        setError(String(e?.message || e || 'Could not load notifications.'));
+      }
     } finally {
       setLoading(false);
       checkingRef.current = false;
@@ -207,7 +247,13 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
       if (merged.size > storedKeys.size) {
         await persistReadKeys(userId, merged);
       }
-      await load();
+      const cachedSections = await loadCachedInboxSections();
+      if (cancelled) return;
+      if (cachedSections?.all?.length) {
+        setSections(cachedSections);
+        syncBadge(cachedSections.all, merged);
+      }
+      await load({background: Boolean(cachedSections?.all?.length)});
     };
 
     init();

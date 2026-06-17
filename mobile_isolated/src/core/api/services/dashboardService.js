@@ -27,6 +27,7 @@ function watchlistUrl(opts = {}) {
   const params = new URLSearchParams();
   if (opts.listType) params.set('list_type', String(opts.listType));
   if (opts.includeAll) params.set('include_all', 'true');
+  if (opts.cacheBust) params.set('_', String(Date.now()));
   const qs = params.toString();
   return qs ? `/watchlist?${qs}` : '/watchlist';
 }

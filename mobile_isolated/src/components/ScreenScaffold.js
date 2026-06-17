@@ -5,12 +5,13 @@ import {AYC} from '@core/theme/aycMobileTheme';
 import {mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 import {resolveTopInset} from '@core/utils/safeAreaTop';
 
-export const ScreenScaffold = ({title, subtitle, children, withTopInset = false}) => {
+export const ScreenScaffold = ({title, subtitle, children, withTopInset = false, scrollRef}) => {
   const insets = useSafeAreaInsets();
   const topPad = withTopInset ? resolveTopInset(insets) : 0;
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.root}
       contentContainerStyle={[mobilePad, styles.container, topPad ? {paddingTop: topPad + 12} : null]}>
       {title ? (

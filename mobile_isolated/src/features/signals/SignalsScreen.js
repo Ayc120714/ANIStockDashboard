@@ -19,7 +19,7 @@ import {extractApiRows} from '@core/utils/apiPayload';
 import {alertsService} from '@core/api/services/alertsService';
 import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {fetchMobileSignalsTabRows} from '@core/utils/advisorHubCache';
+import {fetchSignalsTabPayload} from '@core/utils/signalsTabPayload';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
@@ -62,6 +62,7 @@ function SignalCard({item, onTrade}) {
   const trend = String(item.trend || '').toLowerCase();
   const bull = trend === 'bullish';
   const status = String(item.status || '');
+  const isLiveAlert = Boolean(item._liveAlert);
   const pct = item.pct_from_entry;
   const pctColor = pct > 0 ? '#15803d' : pct < 0 ? '#b91c1c' : '#374151';
   const statusStyle =
@@ -77,6 +78,7 @@ function SignalCard({item, onTrade}) {
     <View style={styles.card}>
       <View style={styles.cardTop}>
         <View style={styles.tags}>
+          {isLiveAlert ? <Text style={styles.tagTriggered}>Triggered alert</Text> : null}
           {item.high_conviction ? <Text style={styles.tagHi}>High conviction</Text> : null}
           <Text style={styles.tagEq}>{bull ? 'Equity · Bull' : 'Equity · Bear'}</Text>
         </View>
@@ -87,7 +89,9 @@ function SignalCard({item, onTrade}) {
         <Text style={styles.sym}>{item.symbol}</Text>
       </View>
       <Text style={styles.cmpRow}>
-        <Text style={styles.cmp}>Live {formatINR(item.cmp)}</Text>
+        <Text style={styles.cmp}>
+          {isLiveAlert && item._alertMessage ? item._alertMessage : `Live ${formatINR(item.cmp)}`}
+        </Text>
         {pct != null ? (
           <Text style={[styles.pct, {color: pctColor}]}>
             {' '}
@@ -140,7 +144,7 @@ export function SignalsScreen({navigation}) {
 
     await runScreenTableFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
-      fetcher: () => fetchMobileSignalsTabRows(),
+      fetcher: () => fetchSignalsTabPayload(),
       setRows,
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setError(msg || ''),
@@ -377,6 +381,16 @@ const styles = StyleSheet.create({
   card: {...mobileStyles.card, borderRadius: 14, padding: 14, marginBottom: 4},
   cardTop: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6},
   tags: {flexDirection: 'row', flexWrap: 'wrap', gap: 6, flex: 1},
+  tagTriggered: {
+    fontSize: AYC.type.caption,
+    fontWeight: '800',
+    color: '#9a3412',
+    backgroundColor: '#ffedd5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
   tagHi: {
     fontSize: AYC.type.caption,
     fontWeight: '800',

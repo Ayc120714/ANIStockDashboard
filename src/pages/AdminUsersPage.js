@@ -19,31 +19,22 @@ import {
   addPremiumEmail,
   deleteAdminUser,
   deletePremiumEmail,
-  fetchAdminUsers,
   fetchPremiumEmails,
   setUserPaidPremium,
 } from '../api/auth';
 import AdminUserDirectoryTables from '../components/AdminUserDirectoryTables';
 import AdminPageVisitStats from '../components/AdminPageVisitStats';
+import {
+  isBasicUser,
+  isMonthlyPremiumUser,
+  isYearlyPremiumUser,
+  tierForUser,
+  adminTierSectionId,
+} from '../utils/adminUserTiers';
+import { fetchFreshAdminUsers } from '../utils/adminUsersReload';
 import { Table, TableSection, TableTitle, TableWrapper } from './SectorOutlook.styles';
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
-
-function isMonthlyPremiumUser(row) {
-  if (row.premium_lifetime) return false;
-  if (row.paid_premium_active && row.premium_plan === 'monthly') return true;
-  return Boolean(row.premium_complimentary || row.on_premium_allowlist);
-}
-
-function isYearlyPremiumUser(row) {
-  if (row.premium_lifetime) return false;
-  if (!row.paid_premium_active) return false;
-  return row.premium_plan === 'yearly' || !row.premium_plan;
-}
-
-function isBasicUser(row) {
-  return !row.premium_lifetime && !isMonthlyPremiumUser(row) && !isYearlyPremiumUser(row);
-}
 
 const isMissingResourceError = (err) => {
   const msg = String(err?.message || '').toLowerCase();
@@ -91,22 +82,37 @@ function AdminUsersPage() {
     }
   }, []);
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
+  const loadUsers = useCallback(async (options = {}) => {
+    const silent = options?.silent === true;
+    if (!silent) setLoading(true);
     setError('');
     try {
-      const res = await fetchAdminUsers(includeInactive);
-      setRows(Array.isArray(res?.data) ? res.data : []);
+      const res = await fetchFreshAdminUsers(includeInactive);
+      const nextRows = Array.isArray(res?.data) ? res.data : [];
+      setRows(nextRows);
+      return nextRows;
     } catch (err) {
       if (isMissingResourceError(err)) {
         setRows([]);
-      } else {
-        setError(err?.message || 'Failed to load users.');
+        return [];
       }
+      setError(err?.message || 'Failed to load users.');
+      return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [includeInactive]);
+
+  const focusUserInDirectory = useCallback((userId, nextRows, hintTier) => {
+    if (!userId) return;
+    const row = (Array.isArray(nextRows) ? nextRows : rows).find((r) => r.id === userId);
+    const tier = hintTier || tierForUser(row);
+    setHighlightUserId(userId);
+    if (row?.email) setSearch(String(row.email));
+    window.requestAnimationFrame(() => {
+      document.getElementById(adminTierSectionId(tier))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [rows]);
 
   useEffect(() => {
     loadUsers();
@@ -183,7 +189,8 @@ function AdminUsersPage() {
       );
       setEmail('');
       setMobile('');
-      await loadUsers();
+      const nextRows = await loadUsers({ silent: true });
+      if (res?.user?.id) focusUserInDirectory(res.user.id, nextRows);
     } catch (err) {
       setError(err?.message || 'Unable to add user.');
     } finally {
@@ -238,8 +245,11 @@ function AdminUsersPage() {
       const planLabel = (paidTarget.plan || 'yearly') === 'monthly' ? 'Monthly' : 'Yearly';
       const ist = res?.paid_premium_until_ist ? ` (through ${res.paid_premium_until_ist})` : '';
       setMessage(`${planLabel} premium recorded for ${paidTarget.email}${ist}.`);
+      const userId = paidTarget.id;
+      const planTier = (paidTarget.plan || 'yearly') === 'monthly' ? 'monthly' : 'yearly';
       setPaidTarget(null);
-      await loadUsers();
+      const nextRows = await loadUsers({ silent: true });
+      focusUserInDirectory(userId, nextRows, planTier);
     } catch (err) {
       setError(err?.message || 'Unable to record payment.');
     } finally {
@@ -438,6 +448,7 @@ function AdminUsersPage() {
           setError={setError}
           setMessage={setMessage}
           loadUsers={loadUsers}
+          onUserActionComplete={focusUserInDirectory}
           setPaidTarget={setPaidTarget}
           setDeleteTarget={setDeleteTarget}
         />

@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   advisorTableDigests: '@ani/mobile/advisor-table-digests',
   /** Persisted table-change notification events. */
   advisorTableChangeEvents: '@ani/mobile/advisor-table-change-events',
+  /** Last rendered notification inbox sections for instant bell open. */
+  notificationInboxSections: '@ani/mobile/notification-inbox-sections-v1',
 };
 
 /** Per-user read keys for the notification inbox (survives refresh / poll). */

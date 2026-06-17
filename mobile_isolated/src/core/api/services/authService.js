@@ -93,8 +93,12 @@ export const authService = {
     }
     return localSession.user || buildLocalUser('local.user@aycindustries.com');
   },
-  fetchAdminUsers: (includeInactive = true) =>
-    apiGet(`/auth/admin/users?include_inactive=${String(includeInactive)}`),
+  fetchAdminUsers: (includeInactive = true, options = {}) => {
+    const params = new URLSearchParams();
+    params.set('include_inactive', String(includeInactive));
+    if (options?.cacheBust) params.set('_', String(Date.now()));
+    return apiGet(`/auth/admin/users?${params.toString()}`, options);
+  },
   blockAdminUser: (userId, blocked = true) =>
     apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/block`, {blocked: Boolean(blocked)}),
   approveAdminUserAccessLink: userId =>
@@ -103,6 +107,20 @@ export const authService = {
     apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, {reason: String(reason || '')}),
   deleteAdminUser: userId =>
     apiRequest(`/auth/admin/users/${encodeURIComponent(String(userId))}`, {method: 'DELETE'}),
+  setUserPaidPremium: (userId, plan = 'yearly') =>
+    apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, {plan}),
+  clearUserPaidPremium: userId =>
+    apiRequest(`/auth/admin/users/${encodeURIComponent(String(userId))}/paid-premium`, {method: 'DELETE'}),
+  setUserComplimentaryPremium: (userId, enabled) =>
+    apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/premium-complimentary`, {
+      enabled: Boolean(enabled),
+    }),
+  setUserLifetimePremium: (userId, enabled) =>
+    apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/premium-lifetime`, {
+      enabled: Boolean(enabled),
+    }),
+  moveUserLifetimeToComplimentary: userId =>
+    apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/move-lifetime-to-complimentary`, {}),
   fetchPremiumEmails: () => apiGet('/auth/admin/premium-emails'),
   addPremiumEmail: email => apiPost('/auth/admin/premium-emails', {email: String(email || '').trim()}),
   deletePremiumEmail: entryId =>

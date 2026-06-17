@@ -1,0 +1,16 @@
+---
+description: Admin tier and LT/ST watchlist mutations must update UI immediately; ship regression tests per web-mutation-refresh-guard skill.
+globs:
+  - stockdashboard/src/pages/AdminUsersPage.js
+  - stockdashboard/src/components/AdminUserDirectoryTables.js
+  - stockdashboard/src/pages/LongTermPage.js
+  - stockdashboard/src/pages/ShortTermPage.js
+  - stockdashboard/src/api/watchlist.js
+  - stockdashboard/src/api/auth.js
+  - stockdashboard/src/utils/adminUserTiers.js
+  - stockdashboard/src/utils/watchlistLocalMutation.js
+  - stockdashboard/src/utils/adminUsersReload.js
+alwaysApply: false
+---
+
+When changing admin user directory or LT/ST watchlist mutation flows, read and follow `.cursor/skills/web-mutation-refresh-guard/SKILL.md`. Every fix needs an enabled regression test in the mapped `*.test.js` file and `npm run test:ci` must pass before deploy.

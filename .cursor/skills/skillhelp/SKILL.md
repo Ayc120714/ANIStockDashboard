@@ -33,7 +33,7 @@ Nginx aliases `/mobile/ani-stock-release.apk` → `mobile-artifacts/ani-stock-re
 
 ## Required order (do not skip steps)
 
-**All unit tests must pass before generating the APK.** If tests fail, fix them and re-run — do not publish.
+**All unit tests must pass before generating the APK.** This is required by **`.cursor/skills/fix-regression-guard/SKILL.md`** and **`.cursor/skills/mobile-regression-guard/SKILL.md`**: every fix must have a regression test; `test:ci` is the publish gate. If tests fail, fix them and re-run — do not publish.
 
 ### Preferred: one script
 
