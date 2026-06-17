@@ -9,13 +9,17 @@ import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel
 import { apiGet } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
-import { applyWatchlistRowMutation } from '../utils/watchlistLocalMutation';
+import {
+  collectWatchlistMutationSymbols,
+  computeOptimisticWatchlistMutation,
+  prepareWatchlistMutationRefresh,
+} from '../utils/watchlistPageMutation';
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
-import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 
-const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v2';
+const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v3';
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',
@@ -298,6 +302,8 @@ function ShortTermPage() {
   const userId = String(user?.id || user?.user_id || user?.email || 'guest');
   const priceAlertsKey = `short_term_price_alerts_${userId}`;
   const loadGenRef = useRef(0);
+  const signalsRef = useRef([]);
+  signalsRef.current = signals;
 
   const loadSymbols = useCallback(() => {
     apiGet('/watchlist/available-symbols')
@@ -307,8 +313,9 @@ function ShortTermPage() {
 
   const load = useCallback(async (options = {}) => {
     const forceRefresh = options?.forceRefresh === true;
+    const silentPoll = options?.silentPoll === true;
     const gen = ++loadGenRef.current;
-    if (!forceRefresh) {
+    if (!forceRefresh && !silentPoll) {
       const cachedWrap = readPageCache(SHORT_TERM_CACHE_KEY);
       if (cachedWrap?.data) {
         setData(Array.isArray(cachedWrap.data.watchlist) ? cachedWrap.data.watchlist : []);
@@ -320,13 +327,12 @@ function ShortTermPage() {
       if (await shouldUseCachedPageDataOnly(SHORT_TERM_CACHE_KEY)) {
         return;
       }
-    } else {
-      clearPageCache(SHORT_TERM_CACHE_KEY);
+    } else if (forceRefresh) {
       clearApiGetCache();
       setLoading(true);
     }
     try {
-      const skipCache = forceRefresh;
+      const skipCache = forceRefresh || silentPoll;
       const [wl, sigs] = await Promise.all([
         fetchWatchlist('short_term', { skipCache }),
         fetchWatchlistSignals({ timeframe: 'intraday' }),
@@ -356,7 +362,7 @@ function ShortTermPage() {
       await ensureMarketSession();
       const pollMs = getMarketPollingIntervalMs(60000, 0);
       if (pollMs > 0) {
-        interval = setInterval(load, pollMs);
+        interval = setInterval(() => load({ silentPoll: true }), pollMs);
       }
     })();
     return () => {
@@ -465,16 +471,12 @@ function ShortTermPage() {
   };
 
   const refreshAfterWatchlistMutation = useCallback(async (mutation = {}) => {
-    const removed = new Set(
-      (Array.isArray(mutation.removed) ? mutation.removed : mutation.removed ? [mutation.removed] : [])
-        .map((s) => normalizeSymbol(s))
-        .filter(Boolean),
-    );
-    const added = (Array.isArray(mutation.added) ? mutation.added : mutation.added ? [mutation.added] : [])
-      .map((s) => normalizeSymbol(s))
-      .filter(Boolean);
-    if (removed.size > 0 || added.length > 0) {
-      setData((prev) => applyWatchlistRowMutation(prev, mutation));
+    const { removed, hasChange } = collectWatchlistMutationSymbols(mutation);
+    if (hasChange) {
+      prepareWatchlistMutationRefresh(loadGenRef);
+      setData((prev) =>
+        computeOptimisticWatchlistMutation(prev, mutation, SHORT_TERM_CACHE_KEY, signalsRef.current),
+      );
       if (removed.size > 0) {
         setCheckedSymbols((prev) => {
           const next = new Set(prev);

@@ -49,6 +49,7 @@ Add or extend tests **in the same PR** as the fix:
 |-------|-----------|-----------------|
 | Admin tier buckets | `src/utils/adminUserTiers.test.js` | `tierForUser` for lifetime / monthly / yearly / basic |
 | Watchlist optimistic UI | `src/utils/watchlistLocalMutation.test.js` | `applyWatchlistRowMutation` add/remove without duplicate |
+| Watchlist poll/cache race | `src/utils/watchlistPageMutation.test.js` | optimistic persist + load generation bump |
 | API cache bust | `src/api/mutationCache.test.js` | `clearApiGetCache` on watchlist mutations; `fetchFreshAdminUsers` uses `skipCache` |
 
 **Do not** ship admin/watchlist mutation fixes without at least one new or updated test in the table above.
