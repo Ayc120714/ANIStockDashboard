@@ -2,6 +2,7 @@ import {
   applyLiveSessionRefreshPolicy,
   dashboardSectionsToRefresh,
   LEGACY_ADVISOR_TREND_CACHE_KEYS,
+  LEGACY_DASHBOARD_CACHE_KEYS,
   MOBILE_PAGE_CACHE_KEYS,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
@@ -11,7 +12,7 @@ import {
 
 describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
-    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v15');
+    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v16');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
       '@ani/mobile/page-cache/advisor-hub-trend-v9',
@@ -20,6 +21,11 @@ describe('dashboard cache policy fixes', () => {
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
       'screens-v5',
     );
+  });
+
+  it('tracks legacy dashboard cache keys for upgrade cleanup', () => {
+    expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v15');
+    expect(LEGACY_DASHBOARD_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.dashboard);
   });
 
   it('tracks legacy trend cache keys for upgrade cleanup', () => {

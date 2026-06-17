@@ -24,6 +24,7 @@ import {diffNewSignals, signalsDigest} from '@core/utils/signalsDigest';
 import {
   ensureNotificationPermission,
   notifyNewSignals,
+  queueInAppEntryBanner,
   queueInAppSignalBanner,
   showSystemNotification,
 } from '@core/utils/signalNotifications';
@@ -58,6 +59,17 @@ async function notifyTableChanges(newEvents = []) {
       `${label}: ${rows.length} new setup${countLabel}`,
       names || 'Tap notifications to review',
     );
+    const navTarget = meta.screensMain
+      ? {type: 'screens', screensMain: meta.screensMain}
+      : meta.advisorTab
+        ? {type: 'advisor', advisorTab: meta.advisorTab, trendTf: meta.trendTf}
+        : null;
+    if (navTarget) {
+      await queueInAppEntryBanner({
+        entryHint: `${label}: ${rows.length} new setup${countLabel}${names ? ` — ${names}` : ''}`,
+        navTarget,
+      });
+    }
   }
 }
 
@@ -76,6 +88,7 @@ function liveAlertNotificationCopy(alert) {
  */
 export function useMarketSetupAlerts({enabled = true} = {}) {
   const [entryHint, setEntryHint] = useState('');
+  const [entryNavTarget, setEntryNavTarget] = useState(null);
   const [signalsBadge, setSignalsBadge] = useState(undefined);
   const firstSignalPoll = useRef(true);
   const firstLiveAlertPoll = useRef(true);
@@ -88,6 +101,7 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
     const payload = buildSignalNotificationPayload(fresh);
     if (!payload) return;
     setEntryHint(payload.entryHint);
+    setEntryNavTarget(payload.navTarget || {type: 'signals'});
     setSignalsBadge(fresh.length > 99 ? '99+' : String(fresh.length));
     await queueInAppSignalBanner(payload);
     await notifyNewSignals(fresh, {vibrateInApp: appStateRef.current === 'active'});
@@ -149,7 +163,6 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
     const {newEvents, bootstrapped} = await processAdvisorTableSnapshots(snapshots);
     if (!firstTablePoll.current && !bootstrapped && newEvents.length) {
       await notifyTableChanges(newEvents);
-      setSignalsBadge(prevBadge => prevBadge || (newEvents.length > 99 ? '99+' : String(newEvents.length)));
     }
     firstTablePoll.current = false;
   }, []);
@@ -223,11 +236,15 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
     };
   }, [enabled, scheduleNext, tick]);
 
-  const clearEntryHint = useCallback(() => setEntryHint(''), []);
+  const clearEntryHint = useCallback(() => {
+    setEntryHint('');
+    setEntryNavTarget(null);
+  }, []);
   const clearSignalsBadge = useCallback(() => setSignalsBadge(undefined), []);
 
   return {
     entryHint,
+    entryNavTarget,
     signalsBadge,
     clearEntryHint,
     clearSignalsBadge,

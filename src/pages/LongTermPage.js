@@ -622,13 +622,7 @@ function LongTermPage() {
     );
   }, [dedupedData, search]);
 
-  const fundField = (row, key) => {
-    const f = row?.fundamentals || {};
-    if (key === 'fund_pe') return f.pe_ttm;
-    if (key === 'fund_div') return f.div_yield_pct;
-    if (key === 'fund_fiscal') return f.fiscal_period;
-    return row?.[key];
-  };
+  const fundField = (row, key) => row?.[key];
 
   const sorted = useMemo(() => {
     if (!sortConfig.key) return filtered;
@@ -689,14 +683,9 @@ function LongTermPage() {
     { key: 'symbol', label: 'Symbol' },
     { key: 'price', label: 'CMP' },
     { key: 'day1d', label: '1D %' },
-    { key: 'fund_pe', label: 'P/E' },
-    { key: 'fund_div', label: 'Div %' },
-    { key: 'fund_fiscal', label: 'Fiscal' },
     { key: 'composite_score', label: 'Score' },
     { key: 'recommendation', label: 'Rating' },
     { key: 'trend', label: 'Trend' },
-    { key: 'supertrend_direction', label: 'TS' },
-    { key: 'macd_cross', label: 'MACD' },
     { key: 'volume_ratio', label: 'Vol Ratio' },
     { key: 'entry_price', label: 'Entry' },
     { key: 'stop_loss', label: 'SL' },
@@ -954,9 +943,6 @@ function LongTermPage() {
                   <td style={{ fontWeight: 600, color: (row.day1d || 0) > 0 ? '#2e7d32' : (row.day1d || 0) < 0 ? '#c62828' : undefined }}>
                     {row.day1d != null ? `${row.day1d > 0 ? '+' : ''}${row.day1d.toFixed(2)}%` : '—'}
                   </td>
-                  <td>{row.fundamentals?.pe_ttm != null ? Number(row.fundamentals.pe_ttm).toFixed(1) : '—'}</td>
-                  <td>{row.fundamentals?.div_yield_pct != null ? `${Number(row.fundamentals.div_yield_pct).toFixed(2)}%` : '—'}</td>
-                  <td style={{ fontSize: 11 }}>{row.fundamentals?.fiscal_period || '—'}</td>
                   <td style={{ fontWeight: 600 }}>{row.composite_score != null ? row.composite_score.toFixed(0) : '—'}</td>
                   <td>
                     {row.recommendation ? (
@@ -965,12 +951,6 @@ function LongTermPage() {
                     ) : '—'}
                   </td>
                   <td>{row.trend || '—'}</td>
-                  <td style={{ color: row.supertrend_direction === 'up' ? '#2e7d32' : row.supertrend_direction === 'down' ? '#c62828' : undefined, fontWeight: 600 }}>
-                    {row.supertrend_direction ? String(row.supertrend_direction).toUpperCase() : '—'}
-                  </td>
-                  <td style={{ color: deriveMacdLabel(row) === 'BUY' || deriveMacdLabel(row) === 'BULL' ? '#2e7d32' : deriveMacdLabel(row) === 'SELL' || deriveMacdLabel(row) === 'BEAR' ? '#c62828' : undefined, fontWeight: 600 }}>
-                    {deriveMacdLabel(row)}
-                  </td>
                   <td style={{ fontWeight: 600, color: (row.volume_ratio || 0) >= 2 ? '#c62828' : undefined }}>
                     {row.volume_ratio != null ? `${row.volume_ratio.toFixed(1)}x` : '—'}
                   </td>

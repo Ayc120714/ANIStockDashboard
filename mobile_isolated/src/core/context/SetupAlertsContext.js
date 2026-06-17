@@ -13,6 +13,7 @@ export function useSetupAlerts() {
   if (!ctx) {
     return {
       entryHint: '',
+      entryNavTarget: null,
       signalsBadge: undefined,
       clearEntryHint: () => {},
       clearSignalsBadge: () => {},

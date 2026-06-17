@@ -1,5 +1,5 @@
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v15',
+  dashboard: '@ani/mobile/page-cache/dashboard-v16',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v4',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v5-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
@@ -91,6 +91,11 @@ export function shouldRefreshAdvisorTrendCache({stale = false, trendHasData = fa
 export function shouldForceAdvisorTrendNetwork({stale = false, trendHasData = false} = {}) {
   return !trendHasData || stale;
 }
+
+/** Prior dashboard cache keys — cleared on upgrade so stale EOD shells are not reused. */
+export const LEGACY_DASHBOARD_CACHE_KEYS = [
+  '@ani/mobile/page-cache/dashboard-v15',
+];
 
 /** Prior cache keys — cleared on upgrade so empty/stale shells are not reused. */
 export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [

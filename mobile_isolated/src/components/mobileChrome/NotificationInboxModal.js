@@ -13,6 +13,7 @@ import {
   INBOX_FILTER_CHIPS,
   INBOX_SOURCES,
   formatAlertTimeIST,
+  resolveInboxNavigationTarget,
 } from '@core/utils/alertInboxUtils';
 import {
   navigateToAdvisorTab,
@@ -120,25 +121,27 @@ export function NotificationInboxModal({
   const handleSelect = item => {
     onMarkItemRead?.(item);
     onClose?.();
-    const raw = item?.raw || item;
     if (item.source === INBOX_SOURCES.ADMIN && navigation?.navigate) {
       navigation.navigate('Admin');
       return;
     }
-    if (raw?.advisorTab || raw?.screensMain) {
-      if (raw.advisorTab) {
-        navigateToAdvisorTab(navigation, raw.advisorTab, {
-          trendTf: raw.trendTf || item.trendTf,
-        });
-        return;
-      }
-      if (raw.screensMain) {
-        navigateToScreensMain(navigation, raw.screensMain);
-        return;
-      }
+    const target = resolveInboxNavigationTarget(item);
+    if (target?.type === 'advisor' && target.advisorTab) {
+      navigateToAdvisorTab(navigation, target.advisorTab, {
+        trendTf: target.trendTf,
+      });
+      return;
     }
-    if (item.source === INBOX_SOURCES.LIVE) {
+    if (target?.type === 'screens' && target.screensMain) {
+      navigateToScreensMain(navigation, target.screensMain);
+      return;
+    }
+    if (target?.type === 'signals') {
       navigateToMainTab(navigation, 'Signals');
+      return;
+    }
+    if (target?.type === 'stocks_alerts') {
+      navigateToStocksAlerts(navigation);
       return;
     }
     navigateToStocksAlerts(navigation);

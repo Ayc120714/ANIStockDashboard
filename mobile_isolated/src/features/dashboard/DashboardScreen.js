@@ -8,11 +8,12 @@ import {brokersService} from '@core/api/services/brokersService';
 import {advisorService} from '@core/api/services/advisorService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {useAuth} from '@core/auth/AuthContext';
-import {readPageCache} from '@core/storage/pageCache';
+import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
 import {
   applyLiveSessionRefreshPolicy,
   hasDashboardMovers,
+  isDashboardCacheIncomplete,
   MOBILE_PAGE_CACHE_KEYS,
   dashboardSectionsToRefresh,
 } from '@core/utils/dashboardCachePolicy';
@@ -184,7 +185,14 @@ export const DashboardScreen = ({navigation}) => {
 
       const session = getCachedMarketSession() || (await ensureMarketSession());
       liveSession = shouldPollLiveMarket(session);
-      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session);
+      const cacheIncomplete = isDashboardCacheIncomplete(cachedPayload);
+      const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session) || cacheIncomplete;
+
+      if (cacheStale && !forceRefresh) {
+        await clearPageCache(DASHBOARD_CACHE_KEY);
+        cachedPayload = {};
+        cacheHydrated.current = false;
+      }
 
       if (!forceRefresh && cacheHydrated.current && !liveSession && !cacheStale) {
         refreshBrokerHoldings({silent: true});

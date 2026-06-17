@@ -70,15 +70,43 @@ export async function previewSignalNotification(sampleRows) {
 
 export async function queueInAppSignalBanner(payload) {
   if (!payload?.entryHint) return;
-  await AsyncStorage.setItem(PENDING_ENTRY_HINT_KEY, payload.entryHint);
+  await queueInAppEntryBanner({
+    entryHint: payload.entryHint,
+    navTarget: payload.navTarget || {type: 'signals'},
+  });
+}
+
+export async function queueInAppEntryBanner({entryHint, navTarget} = {}) {
+  if (!entryHint) return;
+  await AsyncStorage.setItem(
+    PENDING_ENTRY_HINT_KEY,
+    JSON.stringify({
+      hint: entryHint,
+      navTarget: navTarget || {type: 'signals'},
+    }),
+  );
 }
 
 export async function consumePendingEntryHint() {
-  const hint = await AsyncStorage.getItem(PENDING_ENTRY_HINT_KEY);
-  if (hint) {
+  const raw = await AsyncStorage.getItem(PENDING_ENTRY_HINT_KEY);
+  if (raw) {
     await AsyncStorage.removeItem(PENDING_ENTRY_HINT_KEY);
   }
-  return hint || '';
+  if (!raw) {
+    return {hint: '', navTarget: null};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.hint) {
+      return {
+        hint: String(parsed.hint),
+        navTarget: parsed.navTarget || {type: 'signals'},
+      };
+    }
+  } catch {
+    /* legacy plain-string hint */
+  }
+  return {hint: raw, navTarget: {type: 'signals'}};
 }
 
 /** Create backend demo alert + fire mobile notification + queue in-app banner. */

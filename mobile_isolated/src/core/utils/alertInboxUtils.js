@@ -350,6 +350,56 @@ export function isTableChangeInboxItem(item) {
   return TABLE_CHANGE_SOURCE_SET.has(item?.source);
 }
 
+/**
+ * Resolve where an inbox row should navigate (Advisor sub-tab, Screens, Signals, or Stocks alerts).
+ * Falls back to source metadata when persisted events omit advisorTab on raw.
+ */
+export function resolveInboxNavigationTarget(item) {
+  const {ADVISOR_TABLE_META, INBOX_SOURCE_NAV_TARGETS} = require('@core/utils/advisorTableSnapshots');
+  const raw = item?.raw || item || {};
+  const tableKey = raw.tableKey || item?.tableKey;
+  const tableMeta = tableKey ? ADVISOR_TABLE_META[tableKey] : null;
+  if (tableMeta?.screensMain) {
+    return {type: 'screens', screensMain: tableMeta.screensMain};
+  }
+  if (tableMeta?.advisorTab) {
+    return {
+      type: 'advisor',
+      advisorTab: tableMeta.advisorTab,
+      trendTf: tableMeta.trendTf,
+    };
+  }
+  if (raw.screensMain) {
+    return {type: 'screens', screensMain: raw.screensMain};
+  }
+  const advisorTab = raw.advisorTab || item?.advisorTab;
+  if (advisorTab) {
+    return {
+      type: 'advisor',
+      advisorTab,
+      trendTf: raw.trendTf || item?.trendTf,
+    };
+  }
+  const fromSource = INBOX_SOURCE_NAV_TARGETS[item?.source];
+  if (fromSource?.screensMain) {
+    return {type: 'screens', screensMain: fromSource.screensMain};
+  }
+  if (fromSource?.advisorTab) {
+    return {
+      type: 'advisor',
+      advisorTab: fromSource.advisorTab,
+      trendTf: fromSource.trendTf,
+    };
+  }
+  if (item?.source === INBOX_SOURCES.LIVE) {
+    return {type: 'signals'};
+  }
+  if (item?.source === INBOX_SOURCES.PRICE) {
+    return {type: 'stocks_alerts'};
+  }
+  return null;
+}
+
 export function isInboxItemRead(item, readKeys) {
   const keys = readKeys instanceof Set ? readKeys : parseInboxReadKeys(readKeys);
   if (keys.has(inboxItemKey(item))) return true;

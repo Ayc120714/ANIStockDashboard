@@ -9,6 +9,7 @@ import {
   normalizeLiveAdvisorRows,
   parseAdvisorAlertMs,
   parseInboxReadKeys,
+  resolveInboxNavigationTarget,
 } from '@core/utils/alertInboxUtils';
 
 describe('notification inbox read state', () => {
@@ -23,6 +24,7 @@ describe('notification inbox read state', () => {
   const tableItem = {
     id: 'trend_b1:RELIANCE:2026-06-15T10:00:00.000Z',
     source: INBOX_SOURCES.TREND_B1,
+    tableKey: 'trend_b1_weekly',
     title: 'New B1',
     isRead: false,
   };
@@ -70,5 +72,31 @@ describe('notification inbox read state', () => {
       hour12: false,
     }).format(new Date(ms));
     expect(ist.replace(', ', ' ')).toContain('15:30');
+  });
+
+  it('routes trend reversal inbox rows to Advisor trend tab', () => {
+    expect(resolveInboxNavigationTarget(tableItem)).toEqual({
+      type: 'advisor',
+      advisorTab: 'trend',
+      trendTf: 'weekly',
+    });
+  });
+
+  it('routes chart setup inbox rows to Advisor chart tab', () => {
+    expect(
+      resolveInboxNavigationTarget({
+        id: 'chart_daily:INFY:2026',
+        source: INBOX_SOURCES.CHART_DAILY,
+        title: 'Daily setup',
+      }),
+    ).toEqual({
+      type: 'advisor',
+      advisorTab: 'chart',
+      trendTf: undefined,
+    });
+  });
+
+  it('routes live advisor alerts to Signals tab', () => {
+    expect(resolveInboxNavigationTarget(liveItem)).toEqual({type: 'signals'});
   });
 });

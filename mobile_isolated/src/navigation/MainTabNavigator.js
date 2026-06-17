@@ -9,7 +9,8 @@ import {useAuth} from '@core/auth/AuthContext';
 import {useSetupAlerts} from '@core/context/SetupAlertsContext';
 import {authService} from '@core/api/services/authService';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {ensureNotificationPermission, showSystemNotification, consumePendingEntryHint} from '@core/utils/signalNotifications';
+import {ensureNotificationPermission, showSystemNotification, consumePendingEntryHint, queueInAppEntryBanner} from '@core/utils/signalNotifications';
+import {navigateToAdvisorTab, navigateToScreensMain, navigateToStocksAlerts} from '@nav/navigationHelpers';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {DashboardScreen} from '@features/dashboard/DashboardScreen';
 import {StocksHubScreen} from '@features/stocks/StocksHubScreen';
@@ -44,11 +45,13 @@ export function MainTabNavigator({navigation}) {
   const isSuperAdmin = Boolean(user?.is_super_admin);
   const {
     entryHint: setupEntryHint,
+    entryNavTarget: setupEntryNavTarget,
     signalsBadge,
     clearEntryHint,
     clearSignalsBadge,
   } = useSetupAlerts();
   const [entryHint, setEntryHint] = useState('');
+  const [entryNavTarget, setEntryNavTarget] = useState(null);
   const [adminHint, setAdminHint] = useState('');
   const firstAdminPoll = useRef(true);
 
@@ -102,9 +105,10 @@ export function MainTabNavigator({navigation}) {
 
   useEffect(() => {
     const applyPendingHint = async () => {
-      const hint = await consumePendingEntryHint();
-      if (hint) {
-        setEntryHint(hint);
+      const pending = await consumePendingEntryHint();
+      if (pending?.hint) {
+        setEntryHint(pending.hint);
+        setEntryNavTarget(pending.navTarget || null);
       }
     };
     applyPendingHint();
@@ -112,17 +116,28 @@ export function MainTabNavigator({navigation}) {
     return () => clearInterval(t);
   }, []);
 
-  const onOpenSignals = useCallback(() => {
-    navigation?.navigate('MainTabs', {screen: 'Signals'});
+  const clearEntryBanner = useCallback(() => {
     clearEntryHint();
     setEntryHint('');
-    clearSignalsBadge();
-  }, [clearEntryHint, clearSignalsBadge, navigation]);
-
-  const onDismissEntry = useCallback(() => {
-    clearEntryHint();
-    setEntryHint('');
+    setEntryNavTarget(null);
   }, [clearEntryHint]);
+
+  const onOpenEntry = useCallback(() => {
+    const target = entryNavTarget || setupEntryNavTarget || {type: 'signals'};
+    if (target.type === 'advisor' && target.advisorTab) {
+      navigateToAdvisorTab(navigation, target.advisorTab, {
+        trendTf: target.trendTf,
+      });
+    } else if (target.type === 'screens' && target.screensMain) {
+      navigateToScreensMain(navigation, target.screensMain);
+    } else if (target.type === 'stocks_alerts') {
+      navigateToStocksAlerts(navigation);
+    } else {
+      navigation?.navigate('MainTabs', {screen: 'Signals'});
+      clearSignalsBadge();
+    }
+    clearEntryBanner();
+  }, [clearEntryBanner, clearSignalsBadge, entryNavTarget, navigation, setupEntryNavTarget]);
 
   const onOpenAdmin = useCallback(() => {
     navigation?.navigate('Admin');
@@ -145,8 +160,8 @@ export function MainTabNavigator({navigation}) {
           <AppShellBanner
             entryHint={bannerHint}
             adminHint={adminHint}
-            onOpenSignals={onOpenSignals}
-            onDismissEntry={onDismissEntry}
+            onOpenSignals={onOpenEntry}
+            onDismissEntry={clearEntryBanner}
             onOpenAdmin={onOpenAdmin}
             onDismissAdmin={onDismissAdmin}
           />
@@ -180,6 +195,7 @@ export function MainTabNavigator({navigation}) {
             clearSignalsBadge();
             clearEntryHint();
             setEntryHint('');
+            setEntryNavTarget(null);
           },
         }}
         options={{

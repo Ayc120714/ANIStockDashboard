@@ -5,6 +5,7 @@ export const LEGACY_FORMATTED_SCREEN_CACHE_PREFIXES = [
   'priceShockersData_v3_',
   'volumeShockersData_v4_',
   'dashboard_overview_cache_v4',
+  'dashboard_overview_cache_v5',
 ];
 
 let legacyPurged = false;

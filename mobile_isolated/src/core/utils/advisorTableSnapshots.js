@@ -124,6 +124,17 @@ for (const tier of TREND_TIERS) {
   }
 }
 
+/** Map inbox notification source → Advisor/Screens navigation (fallback when raw payload omits advisorTab). */
+export const INBOX_SOURCE_NAV_TARGETS = Object.values(ADVISOR_TABLE_META).reduce((acc, meta) => {
+  if (!meta?.source) return acc;
+  acc[meta.source] = {
+    advisorTab: meta.advisorTab,
+    trendTf: meta.trendTf,
+    screensMain: meta.screensMain,
+  };
+  return acc;
+}, {});
+
 function symbolsFromRows(rows) {
   return [
     ...new Set(

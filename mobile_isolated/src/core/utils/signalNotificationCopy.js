@@ -19,7 +19,8 @@ export function buildSignalNotificationPayload(freshSignals = []) {
     return {
       title: `Entry ready · ${entryReady.length} signal${countLabel}`,
       message: names || 'Tap to view signals',
-      entryHint: `New entry-ready signal${countLabel}: ${names}. Tap Signals tab.`,
+      entryHint: `New entry-ready signal${countLabel}: ${names}. Tap to open.`,
+      navTarget: {type: 'signals'},
       entryReadyCount: entryReady.length,
       totalCount: fresh.length,
     };
@@ -29,7 +30,8 @@ export function buildSignalNotificationPayload(freshSignals = []) {
   return {
     title: `New advisor signal${countLabel}`,
     message: names || 'Tap to view signals',
-    entryHint: `New advisor signal${countLabel}: ${names}. Tap Signals tab.`,
+    entryHint: `New advisor signal${countLabel}: ${names}. Tap to open.`,
+    navTarget: {type: 'signals'},
     entryReadyCount: 0,
     totalCount: fresh.length,
   };

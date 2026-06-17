@@ -326,6 +326,19 @@ export function AdvisorHubScreen({navigation}) {
     }
   }, [route?.params?.advisorTab, selectTab]);
 
+  useFocusEffect(
+    useCallback(() => {
+      const next = route?.params?.advisorTab;
+      if (next && TABS.some(t => t.id === next)) {
+        setTab(next);
+      }
+      const tf = route?.params?.trendTf;
+      if (tf && ['daily', 'weekly', 'monthly'].includes(tf)) {
+        setTrendTf(tf);
+      }
+    }, [route?.params?.advisorTab, route?.params?.trendTf]),
+  );
+
   useEffect(() => {
     const tf = route?.params?.trendTf;
     if (tf && ['daily', 'weekly', 'monthly'].includes(tf)) {

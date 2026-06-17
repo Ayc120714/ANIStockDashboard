@@ -50,7 +50,8 @@ const payload = buildSignalNotificationPayload(fresh);
 assert(payload != null, 'payload is built for fresh signals');
 assert(payload.title.includes('Entry ready'), 'entry-ready signals use entry-ready title');
 assert(payload.message.includes('INFY'), 'payload message lists symbols');
-assert(payload.entryHint.includes('Signals tab'), 'in-app banner hint points to Signals tab');
+assert(payload.entryHint.includes('Tap to open'), 'in-app banner hint is actionable');
+assert(payload.navTarget?.type === 'signals', 'signal payload targets Signals tab');
 
 const genericPayload = buildSignalNotificationPayload([
   {symbol: 'SBIN', status: 'watch', entry_price: 800, updated_at: '2026-06-14T11:00:00Z'},
