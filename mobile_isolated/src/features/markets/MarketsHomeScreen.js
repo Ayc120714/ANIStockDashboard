@@ -2,6 +2,7 @@
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
+import {SubsectorStocksModal} from '@components/SubsectorStocksModal';
 import {FiiDiiCashCards} from '@components/FiiDiiCashCards';
 import {MarketIndexCardsRow} from '@components/MarketIndexCardsRow';
 import {SortableTableHeader} from '@components/SortableTableHeader';
@@ -37,6 +38,7 @@ export function MarketsHomeScreen({navigation}) {
   const [subRows, setSubRows] = useState([]);
   const [fii, setFii] = useState(null);
   const [error, setError] = useState('');
+  const [stocksModal, setStocksModal] = useState({visible: false, subsector: '', sector: ''});
   const tabSortKey = tab === 'subsector' ? 'all' : 'day1d';
   const {sortConfig, onSort, resetSort} = useTableSort(tabSortKey, false);
 
@@ -127,6 +129,10 @@ export function MarketsHomeScreen({navigation}) {
     setError('');
     setTab(nextTab);
   }, [tab]);
+
+  const openSubsectorStocks = useCallback((subsectorName, sectorName) => {
+    setStocksModal({visible: true, subsector: subsectorName, sector: sectorName || ''});
+  }, []);
 
   const sortFn =
     tab === 'sector' ? getSectorSortValue : tab === 'subsector' ? getSubsectorSortValue : getMarketIndexSortValue;
@@ -253,20 +259,30 @@ export function MarketsHomeScreen({navigation}) {
                       <Text style={styles.sectorHeaderText}>{item.sector}</Text>
                     </View>
                   ) : null}
-                  <View style={[styles.tableRow, {backgroundColor: subsectorRowBg(item?.trend_pct)}]}>
-                    <Text style={[styles.c, {flex: 1.2}]} numberOfLines={2}>
+                  <Pressable
+                    style={[styles.tableRow, {backgroundColor: subsectorRowBg(item?.trend_pct)}]}
+                    onPress={() => openSubsectorStocks(item.name, item.sector)}>
+                    <Text
+                      style={[styles.c, styles.subsectorLink, {flex: 1.2}]}
+                      numberOfLines={2}>
                       {item.name}
                     </Text>
                     <Text style={[styles.c, {flex: 0.55, color: perfColor, fontWeight: '800'}]}>{item.performance}</Text>
                     <Text style={[styles.c, {flex: 0.5, color: w0Color}]}>{item.week0}</Text>
                     <Text style={[styles.c, {flex: 0.5, color: w1Color}]}>{item.week1}</Text>
-                  </View>
+                  </Pressable>
                 </React.Fragment>
               );
             })}
           </>
         )}
       </ScrollView>
+      <SubsectorStocksModal
+        visible={stocksModal.visible}
+        subsectorName={stocksModal.subsector}
+        sectorName={stocksModal.sector}
+        onClose={() => setStocksModal({visible: false, subsector: '', sector: ''})}
+      />
     </MobileChrome>
   );
 }
@@ -290,6 +306,7 @@ const styles = StyleSheet.create({
   h: {color: '#fff', fontSize: AYC.type.cardLabel, fontWeight: '800'},
   tableRow: {flexDirection: 'row', paddingVertical: 7, paddingHorizontal: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: AYC.cardBorder, backgroundColor: '#fff'},
   c: {fontSize: AYC.type.caption, color: AYC.text, fontWeight: '700'},
+  subsectorLink: {color: AYC.accent, textDecorationLine: 'underline'},
   sectorHeader: {
     backgroundColor: '#eff6ff',
     paddingVertical: 6,

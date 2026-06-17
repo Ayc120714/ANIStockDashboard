@@ -67,7 +67,7 @@ Prefer testing **behavior**, not implementation details. One focused test per ro
 | Platform | Command | When to run |
 |----------|---------|-------------|
 | **Web** | `cd stockdashboard && npm run test:ci` | Before `npm run build` and VPS deploy |
-| **Mobile** | `cd stockdashboard/mobile_isolated && npm run test:ci` | Before `npm run android:apk:release` / publish APK |
+| **Mobile** | `cd stockdashboard/mobile_isolated && npm run test:ci` | Before `npm run build`, APK publish, or VPS deploy (`test:ci` runs `lint:ci` + Jest) |
 | **Backend** | `pytest` (or project test command) | Before service restart / deploy |
 
 Release scripts (`publish-release-apk.sh`, `vps-restart`) must not skip the test step.

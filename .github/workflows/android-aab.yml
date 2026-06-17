@@ -45,10 +45,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
+      - name: Lint and unit tests
         run: npm run test:ci
 
       - name: Build release AAB

@@ -1,6 +1,7 @@
 module.exports = {
   root: true,
   extends: '@react-native',
+  ignorePatterns: ['coverage/', 'android/', 'node_modules/'],
   globals: {
     globalThis: 'readonly',
     TextEncoder: 'readonly',

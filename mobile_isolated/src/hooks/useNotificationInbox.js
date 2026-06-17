@@ -270,7 +270,7 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [enabled, load, userId]);
+  }, [enabled, load, syncBadge, userId]);
 
   useEffect(() => {
     if (!readKeysReadyRef.current) return;

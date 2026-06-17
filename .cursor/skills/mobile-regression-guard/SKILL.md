@@ -18,7 +18,7 @@ Read **`.cursor/skills/fix-regression-guard/SKILL.md`** first (universal web + m
 - [ ] 1. Reproduce on device or simulator (symptom + root cause)
 - [ ] 2. Minimal fix in mobile_isolated/src/
 - [ ] 3. Add/update test in __tests__/ (same PR/commit)
-- [ ] 4. npm run test:ci — all tests green
+- [ ] 4. npm run test:ci — lint + unit tests green (includes `lint:ci`)
 - [ ] 5. npm run typecheck — pass (before APK)
 - [ ] 6. Bump MOBILE_PAGE_CACHE_KEYS version if stale AsyncStorage can mask fix
 - [ ] 7. Publish only via skillhelp after steps 4–5 (if releasing APK)
@@ -66,9 +66,12 @@ Extract pure logic from screens into `src/core/utils/` or `src/core/api/services
 
 ```bash
 cd /opt/ani-stock/stockdashboard/mobile_isolated
-npm run test:ci
+npm run test:ci   # runs lint:ci then jest
+npm run lint:ci   # ESLint errors only (src, __tests__, scripts)
 npm run typecheck
 ```
+
+`__tests__/eslintQualityGate.test.js` fails if any ESLint **error** is introduced under `src/` or `__tests__/`, including `react-hooks/exhaustive-deps` in `src/hooks/`.
 
 ## Publish gate
 

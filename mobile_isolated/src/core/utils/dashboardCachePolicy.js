@@ -17,7 +17,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   mutualFundsRs: mode => `@ani/mobile/page-cache/mf-rs-v2-${mode || 'or_signal'}`,
   marketsFno: '@ani/mobile/page-cache/markets-fno-v2',
   subsectorStocks: (subsector, page) =>
-    `@ani/mobile/page-cache/subsector-stocks-v1-${encodeURIComponent(String(subsector || ''))}-p${page}`,
+    `@ani/mobile/page-cache/subsector-stocks-v2-${encodeURIComponent(String(subsector || ''))}-p${page}`,
 };
 
 /** Dashboard has both top gainers and top losers (required for Market Movers card). */

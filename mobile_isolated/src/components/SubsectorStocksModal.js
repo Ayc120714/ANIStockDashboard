@@ -14,6 +14,10 @@ import {SortableTableHeader} from '@components/SortableTableHeader';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {
+  hasSubsectorStocksPayload,
+  loadSubsectorStocksPage,
+} from '@core/utils/subsectorStocksLoader';
 import {runScreenPayloadFetch} from '@core/utils/screenPageLoader';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {sortRows} from '@core/utils/tableSort';
@@ -28,16 +32,6 @@ function chgColor(chg) {
   if (s.startsWith('-')) return AYC.negative;
   if (s && s !== '—') return AYC.positive;
   return AYC.text;
-}
-
-function dedupeStocks(stocks) {
-  const seen = new Set();
-  return (stocks || []).filter(stock => {
-    const sym = String(stock?.symbol || '').toUpperCase();
-    if (!sym || seen.has(sym)) return false;
-    seen.add(sym);
-    return true;
-  });
 }
 
 export function SubsectorStocksModal({visible, subsectorName, sectorName, onClose}) {
@@ -59,17 +53,10 @@ export function SubsectorStocksModal({visible, subsectorName, sectorName, onClos
       const cacheKey = MOBILE_PAGE_CACHE_KEYS.subsectorStocks(subsectorName, pageNum);
       await runScreenPayloadFetch({
         cacheKey,
-        fetcher: async () => {
-          const paged = await dashboardService.fetchStocksForSubsector(subsectorName, pageNum, PAGE_SIZE, {
+        fetcher: async () =>
+          loadSubsectorStocksPage(dashboardService, subsectorName, pageNum, PAGE_SIZE, {
             hydrateMarketFields,
-          });
-          const stocks = dedupeStocks(paged.data);
-          return {
-            rows: stocks,
-            total: Number(paged.total || stocks.length),
-            page: pageNum,
-          };
-        },
+          }),
         applyPayload: payload => {
           setRows(payload.rows || []);
           setTotal(Number(payload.total || 0));
@@ -78,7 +65,7 @@ export function SubsectorStocksModal({visible, subsectorName, sectorName, onClos
         setLoading,
         setError: () => {},
         forceNetwork: forceRefresh,
-        hasUsable: data => Array.isArray(data?.rows),
+        hasUsable: hasSubsectorStocksPayload,
       });
     },
     [subsectorName],
