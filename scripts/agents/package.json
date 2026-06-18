@@ -1,0 +1,17 @@
+{
+  "name": "ani-stock-local-agents",
+  "private": true,
+  "type": "module",
+  "description": "Local Cursor SDK runners for ANI Stock agent skills",
+  "scripts": {
+    "verify": "bash verify-all-agents.sh",
+    "run:context": "node run-context-agent.mjs",
+    "run:orchestrator": "node run-orchestrator-agent.mjs"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.19"
+  },
+  "engines": {
+    "node": ">=24.15.0"
+  }
+}

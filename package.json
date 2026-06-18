@@ -39,6 +39,9 @@
     "build": "craco build",
     "test": "craco test",
     "test:ci": "CI=true craco test --watchAll=false --testPathIgnorePatterns=/App.test.js",
+    "verify:agents": "bash scripts/agents/verify-all-agents.sh && CI=true craco test --watchAll=false --testPathPattern=cursorAgents",
+    "agents:install": "npm --prefix scripts/agents install",
+    "agents:smoke": "npm --prefix scripts/agents run verify && npm --prefix scripts/agents run run:context && npm --prefix scripts/agents run run:orchestrator",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

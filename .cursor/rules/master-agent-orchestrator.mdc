@@ -1,0 +1,21 @@
+---
+description: >-
+  Multi-agent workflows: generate 5-layer sub-agent context, spawn children
+  with Composer 2.5, monitor health, require regression tests, wire web+mobile
+  notifications.
+globs:
+  - .cursor/skills/**/*
+  - stockdashboard/.cursor/skills/**/*
+alwaysApply: false
+---
+
+# Master agent + sub-agents
+
+When the user asks for sub-agents, parallel agents, context engineering, or orchestrated full-stack work:
+
+1. Read `.cursor/skills/context-engineering-subagents/SKILL.md` — build 5-layer briefs per child.
+2. Read `.cursor/skills/master-agent-orchestrator/SKILL.md` — spawn Task children with `model: composer-2.5-fast`.
+3. Run `.cursor/skills/master-agent-orchestrator/scripts/check-fleet-health.sh` before/after deploy-class work.
+4. Every fix must follow `.cursor/skills/fix-regression-guard/SKILL.md` (unit test + test:ci).
+
+Child prompts must include Identity, World, Task, Example, and Constraint sections — never rely on parent chat history.

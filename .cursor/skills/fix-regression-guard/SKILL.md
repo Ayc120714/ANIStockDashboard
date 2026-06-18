@@ -117,3 +117,9 @@ When finishing **any** fix:
 2. Test command run and result (e.g. "web 36/36, mobile 80/80 passed")
 3. Whether CI / publish script runs tests before release
 4. Any cache-key bump or user action after install (pull-to-refresh, reinstall)
+
+## Related skills (ANI Stock)
+
+- `context-engineering-subagents` — 5-layer briefs for child Task sub-agents
+- `master-agent-orchestrator` — spawn/monitor children, health, web+mobile notifications
+- `web-mutation-refresh-guard` / `mobile-regression-guard` — mutation/cache patterns
