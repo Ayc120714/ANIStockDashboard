@@ -125,7 +125,7 @@ export const MOBILE_APP_TABS = [
     id: 'stocks',
     label: 'Stocks',
     path: '/outlook',
-    match: ['/outlook', '/long-term', '/short-term', '/portfolio-manager', '/alerts', '/fno', '/commodities', '/forex', '/mutual-funds'],
+    match: ['/outlook', '/long-term', '/short-term', '/portfolio-manager', '/fno', '/commodities', '/forex', '/mutual-funds'],
     icon: '◎',
   },
   {id: 'signals', label: 'Signals', path: '/advisor?advisorTab=signals', match: ['/advisor'], icon: '⚡'},

@@ -23,7 +23,7 @@ export function getRootNavigation(navigation) {
 
 const STOCK_OUTLOOK_TABS = new Set(['market', 'sector', 'sub']);
 const STOCK_WATCHLIST_TABS = new Set(['long_term', 'short_term']);
-const STOCK_TOOL_TABS = new Set(['orders', 'brokers', 'alerts']);
+const STOCK_TOOL_TABS = new Set(['orders', 'brokers']);
 const STOCK_TAB_IDS = new Set([...STOCK_OUTLOOK_TABS, ...STOCK_WATCHLIST_TABS, ...STOCK_TOOL_TABS]);
 const STOCK_EMBEDDED_TABS = new Set([...STOCK_WATCHLIST_TABS, ...STOCK_TOOL_TABS]);
 
@@ -83,8 +83,14 @@ export function navigateToStocksBrokers(navigation, brokersParams = {}) {
   navigateToStocksOutlookTab(navigation, 'brokers', {brokersParams});
 }
 
+/** Web `/alerts` monitoring surfaces on the Signals tab — not Stocks → Alerts. */
+export function navigateToSignals(navigation) {
+  navigateToMainTab(navigation, 'Signals');
+}
+
+/** @deprecated Use navigateToSignals — web alerts map to the Signals tab. */
 export function navigateToStocksAlerts(navigation) {
-  navigateToStocksOutlookTab(navigation, 'alerts');
+  navigateToSignals(navigation);
 }
 
 export function navigateToAdvisorTab(navigation, advisorTab = 'sig', extraParams = {}) {
@@ -128,11 +134,11 @@ export function navigateFromInboxItem(navigation, item, target) {
     navigateToMainTab(navigation, 'Signals');
     return;
   }
-  if (target?.type === 'stocks_alerts') {
-    navigateToStocksAlerts(navigation);
+  if (target?.type === 'stocks_alerts' || target?.type === 'signals') {
+    navigateToSignals(navigation);
     return;
   }
-  navigateToStocksAlerts(navigation);
+  navigateToSignals(navigation);
 }
 
 /**
@@ -157,7 +163,7 @@ export function navigateFromMenu(navigation, screen, params) {
     return;
   }
   if (screen === 'Alerts') {
-    navigateToStocksAlerts(navigation);
+    navigateToSignals(navigation);
     return;
   }
   if (screen === 'Signals') {

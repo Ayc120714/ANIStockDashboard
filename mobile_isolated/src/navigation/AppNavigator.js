@@ -11,6 +11,7 @@ import {WebPortalScreen} from '@features/web/WebPortalScreen';
 import {useBrokerDeepLinking} from '@features/brokers/useBrokerDeepLinking';
 import {MainTabNavigator} from '@nav/MainTabNavigator';
 import {RedirectToStocksTab} from '@nav/RedirectToStocksTab';
+import {RedirectToSignalsTab} from '@nav/RedirectToSignalsTab';
 import {SignalsScreen} from '@features/signals/SignalsScreen';
 import {MarketsHomeScreen} from '@features/markets/MarketsHomeScreen';
 import {WatchlistScreen} from '@features/stocks/WatchlistScreen';
@@ -67,9 +68,7 @@ export const AppNavigator = () => {
           <Stack.Screen name="Brokers" options={{headerShown: false}}>
             {props => <RedirectToStocksTab {...props} outlookTab="brokers" />}
           </Stack.Screen>
-          <Stack.Screen name="Alerts" options={{headerShown: false}}>
-            {props => <RedirectToStocksTab {...props} outlookTab="alerts" />}
-          </Stack.Screen>
+          <Stack.Screen name="Alerts" options={{headerShown: false}} component={RedirectToSignalsTab} />
           <Stack.Screen name="WebPortal" component={WebPortalScreen} options={{headerShown: true}} />
           {user?.is_super_admin ? <Stack.Screen name="Admin" component={AdminScreen} options={{title: 'Admin'}} /> : null}
         </Stack.Navigator>

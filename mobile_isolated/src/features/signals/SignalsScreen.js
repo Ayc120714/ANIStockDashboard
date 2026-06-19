@@ -239,7 +239,7 @@ export function SignalsScreen({navigation}) {
       }
       Alert.alert(
         'Demo alert sent',
-        'Check your notification shade, the banner above the tabs, Stocks → Alerts, and this Signals list.',
+        'Check your notification shade, the banner above the tabs, and this Signals list.',
       );
     } catch (e) {
       Alert.alert('Demo alert failed', String(e?.message || e));

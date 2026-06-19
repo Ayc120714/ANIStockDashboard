@@ -199,18 +199,17 @@ export function HamburgerMenu({visible, onClose, navigation, user}) {
                 <SubRow label="Signals" onPress={() => go('Signals')} />
                 <SubRow label="Orders" onPress={() => go('Stocks', {outlookTab: 'orders'})} />
                 <SubRow label="Brokers" onPress={() => go('Stocks', {outlookTab: 'brokers'})} />
-                <SubRow label="Alerts" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
               </View>
             ) : null}
 
             <NavRow icon="▤" label="Screens" active={activeTab === 'Screens'} onPress={() => go('Screens')} />
             <NavRow icon="✦" label="Advisor" active={activeTab === 'Advisor'} onPress={() => go('Advisor')} />
             <NavRow icon="👛" label="Portfolio Manager" onPress={() => go('Portfolio')} />
-            <NavRow icon="🔔" label="Alerts" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
+            <NavRow icon="🔔" label="Live signals" onPress={() => go('Signals')} />
 
             <View style={styles.divider} />
 
-            <NavRow icon="❓" label="Help & Support" onPress={() => go('Stocks', {outlookTab: 'alerts'})} />
+            <NavRow icon="❓" label="Help & Support" onPress={() => go('WebPortal', {path: '/onboarding'})} />
             <Pressable
               onPress={() => {
                 logout();

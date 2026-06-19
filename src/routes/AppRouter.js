@@ -8,7 +8,7 @@ import LongTermPage from '../pages/LongTermPage';
 import ShortTermPage from '../pages/ShortTermPage';
 import OutlookPage from '../pages/OutlookPage';
 import ScreensPage from '../pages/ScreensPage';
-import StockAlertsPage from '../pages/StockAlertsPage';
+import StockAlertsRoute from './StockAlertsRoute';
 import FinancialAdvisorPage from '../pages/FinancialAdvisorPage';
 import NextWeekSetupPage from '../pages/NextWeekSetupPage';
 import PortfolioManagerPage from '../pages/PortfolioManagerPage';
@@ -77,7 +77,7 @@ function AppRouter() {
           <Route path="/next-week-setup" element={<AdminRoute><NextWeekSetupPage /></AdminRoute>} />
           <Route path="/video-screener" element={<Navigate to="/screens" replace />} />
           <Route path="/portfolio-manager" element={<PremiumModuleRoute><PortfolioManagerPage /></PremiumModuleRoute>} />
-          <Route path="/alerts" element={<PremiumModuleRoute><StockAlertsPage /></PremiumModuleRoute>} />
+          <Route path="/alerts" element={<StockAlertsRoute />} />
           <Route path="/algo-performance" element={<AdminRoute level="admin"><AlgoPerformancePage /></AdminRoute>} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/upgrade-premium" element={<UpgradePremiumPage />} />

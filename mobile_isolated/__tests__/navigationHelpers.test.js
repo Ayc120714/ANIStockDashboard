@@ -2,7 +2,9 @@ import {
   getRootNavigation,
   isInsideMainTabs,
   navigateFromInboxItem,
+  navigateFromMenu,
   navigateToMainTab,
+  navigateToSignals,
 } from '@nav/navigationHelpers';
 import {INBOX_SOURCES} from '@core/utils/alertInboxUtils';
 
@@ -77,6 +79,18 @@ describe('navigationHelpers', () => {
       params: {advisorTab: 'sig', trendTf: 'daily'},
       merge: true,
     });
+  });
+
+  it('routes legacy Alerts menu entries to the Signals tab', () => {
+    const navigation = mockTabNavigation();
+    navigateFromMenu(navigation, 'Alerts');
+    expect(navigation.navigate).toHaveBeenCalledWith('Signals');
+  });
+
+  it('maps navigateToStocksAlerts to the Signals tab', () => {
+    const navigation = mockTabNavigation();
+    navigateToSignals(navigation);
+    expect(navigation.navigate).toHaveBeenCalledWith('Signals');
   });
 
   it('walks parent navigators to find root', () => {

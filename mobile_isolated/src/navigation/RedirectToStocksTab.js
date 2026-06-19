@@ -3,7 +3,7 @@ import {ActivityIndicator, View} from 'react-native';
 import {navigateToStocksOutlookTab} from '@nav/navigationHelpers';
 
 /**
- * Legacy stack routes (Orders, Brokers, Alerts) redirect into Stocks hub sub-tabs.
+ * Legacy stack routes (Orders, Brokers) redirect into Stocks hub sub-tabs.
  */
 export function RedirectToStocksTab({navigation, route, outlookTab}) {
   useEffect(() => {

@@ -45,7 +45,7 @@ import {
 import {formatChartCell} from '@core/utils/chartFundamentalTables';
 import {groupTrendReversalGridRows} from '@core/utils/buyTierGrid';
 import {formatINR} from '@core/utils/formatMarket';
-import {navigateToStocksAlerts} from '@nav/navigationHelpers';
+import {navigateToSignals} from '@nav/navigationHelpers';
 import {sortRows} from '@core/utils/tableSort';
 import {getAdvisorSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
@@ -882,8 +882,8 @@ export function AdvisorHubScreen({navigation}) {
           <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigation.navigate('Portfolio')}>
             <Text style={[styles.btnTxt, {color: AYC.accent}]}>Portfolio manager</Text>
           </Pressable>
-          <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigateToStocksAlerts(navigation)}>
-            <Text style={[styles.btnTxt, {color: AYC.accent}]}>Stock alerts</Text>
+          <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => navigateToSignals(navigation)}>
+            <Text style={[styles.btnTxt, {color: AYC.accent}]}>Live signals</Text>
           </Pressable>
         </ScrollView>
       </MobileChrome>

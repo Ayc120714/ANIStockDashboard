@@ -11,7 +11,7 @@ export const SITE_SECTIONS = [
   {title: 'Advisor', path: '/advisor'},
   {title: 'Video screener', path: '/video-screener'},
   {title: 'Portfolio manager', path: '/portfolio-manager'},
-  {title: 'Stock alerts', path: '/alerts'},
+  {title: 'Live signals', path: '/advisor?advisorTab=signals'},
   {title: 'Mutual funds', path: '/mutual-funds'},
   {title: 'Profile', path: '/profile'},
   {title: 'Upgrade premium', path: '/upgrade-premium'},

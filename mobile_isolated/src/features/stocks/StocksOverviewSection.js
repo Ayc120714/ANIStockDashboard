@@ -26,7 +26,6 @@ import {isStockEmbeddedTabId, isStockOutlookTab, isStockTabId, isWatchlistTabId}
 import {WatchlistSection} from './WatchlistSection';
 import {OrdersScreen} from '@features/orders/OrdersScreen';
 import {BrokersScreen} from '@features/brokers/BrokersScreen';
-import {AlertsScreen} from '@features/alerts/AlertsScreen';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {useFocusEffect} from '@react-navigation/native';
@@ -52,7 +51,6 @@ const OUTLOOK_TABS = [
   {id: 'short_term', label: 'Short term'},
   {id: 'orders', label: 'Orders'},
   {id: 'brokers', label: 'Brokers'},
-  {id: 'alerts', label: 'Alerts'},
 ];
 
 const SUB_STRENGTH = [
@@ -534,7 +532,6 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
             embedded
           />
         ) : null}
-        {tab === 'alerts' ? <AlertsScreen navigation={navigation} embedded /> : null}
       </View>
     );
   }

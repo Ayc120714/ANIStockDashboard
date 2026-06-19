@@ -6,8 +6,14 @@ import {signalsService} from '@core/api/services/signalsService';
 import {MOBILE_ALERTS_LIMIT, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {STORAGE_KEYS} from '@core/storage/keys';
+import {clearPageCache} from '@core/storage/pageCache';
+import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {isTodayInIST} from '@core/utils/alertInboxUtils';
+import {
+  isLiveEntryExitAlert,
+  liveAlertToSignalRow,
+} from '@core/utils/signalsTabPayload';
 import {
   loadAdvisorTableChangeEvents,
   processAdvisorTableSnapshots,
@@ -147,14 +153,36 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
         const copy = liveAlertNotificationCopy(alert);
         await showSystemNotification(copy.title, copy.message);
       }
-      if (fresh.length) {
+      const actionable = fresh
+        .filter(isLiveEntryExitAlert)
+        .map(liveAlertToSignalRow)
+        .filter(row => row.symbol);
+      if (actionable.length) {
+        const entryReady = actionable.filter(row => String(row.status) === 'entry_ready');
+        if (entryReady.length) {
+          await applySignalBanner(entryReady);
+        } else {
+          const names = actionable
+            .slice(0, 4)
+            .map(row => row.symbol)
+            .join(', ');
+          setEntryHint(`New live signal${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`);
+          setEntryNavTarget({type: 'signals'});
+          setSignalsBadge(prevBadge => prevBadge || (actionable.length > 99 ? '99+' : String(actionable.length)));
+          await queueInAppEntryBanner({
+            entryHint: `New live signal${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`,
+            navTarget: {type: 'signals'},
+          });
+        }
+        await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
+      } else if (fresh.length) {
         setSignalsBadge(prevBadge => prevBadge || (fresh.length > 99 ? '99+' : String(fresh.length)));
       }
     }
 
     await AsyncStorage.setItem(STORAGE_KEYS.liveAdvisorAlertsDigest, digest);
     firstLiveAlertPoll.current = false;
-  }, []);
+  }, [applySignalBanner]);
 
   const pollTableChanges = useCallback(async () => {
     const snapshots = await fetchAdvisorTableSnapshots().catch(() => null);

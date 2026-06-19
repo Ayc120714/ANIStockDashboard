@@ -10,7 +10,7 @@ import {useSetupAlerts} from '@core/context/SetupAlertsContext';
 import {authService} from '@core/api/services/authService';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {ensureNotificationPermission, showSystemNotification, consumePendingEntryHint, queueInAppEntryBanner} from '@core/utils/signalNotifications';
-import {navigateToAdvisorTab, navigateToMainTab, navigateToScreensMain, navigateToStocksAlerts} from '@nav/navigationHelpers';
+import {navigateToAdvisorTab, navigateToMainTab, navigateToScreensMain, navigateToSignals} from '@nav/navigationHelpers';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {DashboardScreen} from '@features/dashboard/DashboardScreen';
 import {StocksHubScreen} from '@features/stocks/StocksHubScreen';
@@ -130,8 +130,8 @@ export function MainTabNavigator({navigation}) {
       });
     } else if (target.type === 'screens' && target.screensMain) {
       navigateToScreensMain(navigation, target.screensMain);
-    } else if (target.type === 'stocks_alerts') {
-      navigateToStocksAlerts(navigation);
+    } else if (target.type === 'stocks_alerts' || target.type === 'signals') {
+      navigateToSignals(navigation);
     } else {
       navigateToMainTab(navigation, 'Signals');
       clearSignalsBadge();

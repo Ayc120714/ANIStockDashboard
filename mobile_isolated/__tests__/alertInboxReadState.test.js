@@ -99,4 +99,14 @@ describe('notification inbox read state', () => {
   it('routes live advisor alerts to Signals tab', () => {
     expect(resolveInboxNavigationTarget(liveItem)).toEqual({type: 'signals'});
   });
+
+  it('routes price alerts to Signals tab (not Stocks alerts)', () => {
+    expect(
+      resolveInboxNavigationTarget({
+        id: 'price:1',
+        source: INBOX_SOURCES.PRICE,
+        title: 'RELIANCE crossed threshold',
+      }),
+    ).toEqual({type: 'signals'});
+  });
 });

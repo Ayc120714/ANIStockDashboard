@@ -395,9 +395,9 @@ export function resolveInboxNavigationTarget(item) {
     return {type: 'signals'};
   }
   if (item?.source === INBOX_SOURCES.PRICE) {
-    return {type: 'stocks_alerts'};
+    return {type: 'signals'};
   }
-  return null;
+  return {type: 'signals'};
 }
 
 export function isInboxItemRead(item, readKeys) {
