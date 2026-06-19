@@ -19,7 +19,7 @@ import {extractApiRows} from '@core/utils/apiPayload';
 import {alertsService} from '@core/api/services/alertsService';
 import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {fetchSignalsTabPayload} from '@core/utils/signalsTabPayload';
+import {fetchSignalsTabPayload, isSignalRowFromToday} from '@core/utils/signalsTabPayload';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
@@ -187,7 +187,8 @@ export function SignalsScreen({navigation}) {
   const [filter, setFilter] = useState('all');
 
   const filtered = useMemo(() => {
-    const deduped = dedupeSignalsBySymbol(rows);
+    const todayOnly = (rows || []).filter(isSignalRowFromToday);
+    const deduped = dedupeSignalsBySymbol(todayOnly);
     if (filter === 'entry_ready') {
       return deduped.filter(r => String(r.status) === 'entry_ready');
     }

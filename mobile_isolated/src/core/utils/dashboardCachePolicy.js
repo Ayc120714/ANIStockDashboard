@@ -1,6 +1,6 @@
 export const MOBILE_PAGE_CACHE_KEYS = {
   dashboard: '@ani/mobile/page-cache/dashboard-v16',
-  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v4',
+  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v5',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v5-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v2-${tab}`,

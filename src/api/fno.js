@@ -14,6 +14,9 @@ export const fetchNseEquitySymbols = ({ exclude_fno = true, search, limit = 4000
 export const fetchExpiryDates = (symbol = 'NIFTY') =>
   apiGet(`/fno/expiry-dates?symbol=${encodeURIComponent(symbol)}`);
 
+export const fetchFnoLiveFeedStatus = (symbol = 'NIFTY') =>
+  apiGet(`/fno/live-feed-status?symbol=${encodeURIComponent(symbol)}`);
+
 export const fetchOptionChain = (symbol = 'NIFTY', expiry = '') => {
   let url = `/fno/option-chain?symbol=${encodeURIComponent(symbol)}`;
   if (expiry) url += `&expiry=${encodeURIComponent(expiry)}`;

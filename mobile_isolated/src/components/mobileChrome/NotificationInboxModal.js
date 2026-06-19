@@ -16,10 +16,8 @@ import {
   resolveInboxNavigationTarget,
 } from '@core/utils/alertInboxUtils';
 import {
+  navigateFromInboxItem,
   navigateToAdvisorTab,
-  navigateToMainTab,
-  navigateToScreensMain,
-  navigateToStocksAlerts,
 } from '@nav/navigationHelpers';
 
 function sourceTone(source) {
@@ -120,31 +118,11 @@ export function NotificationInboxModal({
 
   const handleSelect = item => {
     onMarkItemRead?.(item);
-    onClose?.();
-    if (item.source === INBOX_SOURCES.ADMIN && navigation?.navigate) {
-      navigation.navigate('Admin');
-      return;
-    }
     const target = resolveInboxNavigationTarget(item);
-    if (target?.type === 'advisor' && target.advisorTab) {
-      navigateToAdvisorTab(navigation, target.advisorTab, {
-        trendTf: target.trendTf,
-      });
-      return;
-    }
-    if (target?.type === 'screens' && target.screensMain) {
-      navigateToScreensMain(navigation, target.screensMain);
-      return;
-    }
-    if (target?.type === 'signals') {
-      navigateToMainTab(navigation, 'Signals');
-      return;
-    }
-    if (target?.type === 'stocks_alerts') {
-      navigateToStocksAlerts(navigation);
-      return;
-    }
-    navigateToStocksAlerts(navigation);
+    onClose?.();
+    setTimeout(() => {
+      navigateFromInboxItem(navigation, item, target);
+    }, 0);
   };
 
   return (
@@ -232,7 +210,9 @@ export function NotificationInboxModal({
               style={[styles.footerBtn, styles.footerBtnPrimary]}
               onPress={() => {
                 onClose?.();
-                navigateToMainTab(navigation, 'Advisor', {advisorTab: 'sig'});
+                setTimeout(() => {
+                  navigateToAdvisorTab(navigation, 'sig');
+                }, 0);
               }}
             >
               <Text style={[styles.footerBtnText, styles.footerBtnTextPrimary]}>Advisor</Text>

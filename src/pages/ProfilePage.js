@@ -312,7 +312,7 @@ function ProfilePage() {
     if (broker === 'fyers' || broker === 'zerodha') {
       return { api_key: '', api_secret: '', access_token: '', auth_code: '', redirect_uri: '' };
     }
-    return { pin: '', access_token: '' }; // samco
+    return { pin: '', access_token: '', api_key: '', api_secret: '', client_secret: '' }; // samco
   };
 
   const readBrokerDraft = useCallback((broker) => {
@@ -1026,7 +1026,7 @@ function ProfilePage() {
 
     if (broker === 'dhan') return Boolean(clientId && ((pin && totp) || accessToken || (apiKey && apiSecret)));
     // Samco live data uses server SAMCO_* env (Trade API); Validate calls server login — no per-user secrets required in UI.
-    if (broker === 'samco') return true;
+    if (broker === 'samco') return true; // equities WS uses server env; optional personal fields
     if (broker === 'angelone' || broker === 'kotak') {
       return Boolean(clientId && ((apiKey && pin && totp) || accessToken));
     }
@@ -1590,16 +1590,14 @@ function ProfilePage() {
               {activeBrokerRow.broker === 'samco' ? (
                 <>
                   <Typography sx={{ fontSize: 12, color: '#666', gridColumn: '1 / -1', lineHeight: 1.45 }}>
-                    Samco market and session checks use the server&apos;s <code>SAMCO_*</code> environment variables (Trade API: password, YOB, secret key or daily access token). Use super-admin{' '}
-                    <code>POST /api/system/samco/*</code> for IP registration and OTP onboarding. Optional fields below are for your records; <strong>Validate &amp; Create Session</strong> runs{' '}
-                    <code>SamcoClient.login()</code> on the server. Follow{' '}
-                    <Link href={BROKER_SETUP_DOC_URLS.samco} target="_blank" rel="noreferrer">Samco Trade API documentation</Link>
-                    {' '}for gateway access, OTP, and static IP rules.
+                    <strong>Equities live feed</strong> uses server Samco credentials (auto-renewed at 08:00 IST).
+                    No daily Profile login required for stocks when <code>SAMCO_*</code> env is configured on the server.
+                    Optional fields below are for personal Samco trading only.
                   </Typography>
                   <TextField
                     size="small"
                     type="text"
-                    label="PIN/Password (optional, not sent to Samco from here)"
+                    label="PIN/Password (optional — personal trading)"
                     value={activeBrokerRow.credentials?.pin || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'pin', e.target.value)}
                     InputProps={brokerSecretAdornment('pin')}
@@ -1609,13 +1607,19 @@ function ProfilePage() {
                   />
                   <TextField
                     size="small"
-                    label="Access Token (optional, not used for server login)"
+                    label="Access Token (optional)"
                     value={activeBrokerRow.credentials?.access_token || ''}
                     onChange={(e) => updateRowCredential(activeBrokerRow.broker, 'access_token', e.target.value)}
                     autoComplete="off"
                     inputProps={brokerLockedInputProps('broker_samco_access_token')}
                   />
                 </>
+              ) : null}
+              {activeBrokerRow.broker === 'dhan' ? (
+                <Typography sx={{ fontSize: 12, color: '#0d9488', gridColumn: '1 / -1', lineHeight: 1.45, fontWeight: 600 }}>
+                  <strong>FnO live feed</strong> requires daily login here (PIN+TOTP or OAuth).
+                  After connect, Dhan index options on the FnO page update live automatically.
+                </Typography>
               ) : null}
               {activeBrokerRow.broker === 'angelone' ? (
                 <>

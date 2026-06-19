@@ -9,6 +9,18 @@ function normalizeSymbol(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+/** True when a signal row was generated during today's live market session (IST). */
+export function isSignalRowFromToday(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row._liveAlert) {
+    return isTodayInIST(row._alertAt);
+  }
+  if (isTodayInIST(row.scan_time)) return true;
+  if (row.daily_entry_triggered && isTodayInIST(row.daily_entry_day)) return true;
+  if (row.entry_triggered && isTodayInIST(row.entry_day)) return true;
+  return false;
+}
+
 /** Map live advisor DB alert → Signals tab card row. */
 export function liveAlertToSignalRow(alert) {
   const symbol = normalizeSymbol(alert?.symbol);
@@ -41,7 +53,7 @@ export function liveAlertToSignalRow(alert) {
   };
 }
 
-/** Today's triggered live alerts first, then latest signal rows (no duplicate symbols). */
+/** Today's live-market rows only: triggered alerts first, then today's scanned signals (no duplicate symbols). */
 export function buildSignalsTabRows(signals = [], liveAlerts = []) {
   const todayLive = (Array.isArray(liveAlerts) ? liveAlerts : [])
     .filter(row => isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time))
@@ -58,9 +70,9 @@ export function buildSignalsTabRows(signals = [], liveAlerts = []) {
   const liveList = [...liveBySymbol.values()];
   const liveSymbols = new Set(liveList.map(row => row.symbol));
 
-  const rest = (Array.isArray(signals) ? signals : []).filter(
-    row => !liveSymbols.has(normalizeSymbol(row?.symbol)),
-  );
+  const rest = (Array.isArray(signals) ? signals : [])
+    .filter(row => !liveSymbols.has(normalizeSymbol(row?.symbol)))
+    .filter(isSignalRowFromToday);
 
   return [...liveList, ...rest];
 }

@@ -1,13 +1,30 @@
-import {buildSignalsTabRows, liveAlertToSignalRow} from '@core/utils/signalsTabPayload';
+import {buildSignalsTabRows, isSignalRowFromToday, liveAlertToSignalRow} from '@core/utils/signalsTabPayload';
+import {NOTIFICATION_TIMEZONE} from '@core/utils/alertInboxUtils';
+
+function istDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: NOTIFICATION_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function istTimestamp(date = new Date()) {
+  return `${istDateKey(date)} 11:00:00`;
+}
 
 describe('signalsTabPayload', () => {
+  const today = istTimestamp(new Date());
+  const yesterday = istTimestamp(new Date(Date.now() - 86_400_000));
+
   it('maps live advisor alert to signal card row', () => {
     const row = liveAlertToSignalRow({
       id: 9,
       symbol: 'reliance',
       alert_type: 'entry_long',
       message: 'RELIANCE entry trigger',
-      timestamp: '2026-06-17 10:15:00',
+      timestamp: today,
       entry_price: 2800,
       stop_loss: 2750,
       target_1: 2900,
@@ -21,17 +38,32 @@ describe('signalsTabPayload', () => {
 
   it('prepends today live alerts before signal rows without duplicate symbols', () => {
     const merged = buildSignalsTabRows(
-      [{symbol: 'TCS', status: 'watch'}, {symbol: 'INFY', status: 'watch'}],
       [
-        {id: 1, symbol: 'RELIANCE', alert_type: 'entry_long', timestamp: '2026-06-17 11:00:00'},
-        {id: 2, symbol: 'TCS', alert_type: 'entry_long', timestamp: '2026-06-17 10:30:00'},
+        {symbol: 'TCS', status: 'watch', scan_time: today},
+        {symbol: 'INFY', status: 'watch', scan_time: yesterday},
+      ],
+      [
+        {id: 1, symbol: 'RELIANCE', alert_type: 'entry_long', timestamp: today},
+        {id: 2, symbol: 'TCS', alert_type: 'entry_long', timestamp: today},
       ],
     );
     expect(merged[0].symbol).toBe('RELIANCE');
     expect(merged[0]._liveAlert).toBe(true);
     expect(merged[1].symbol).toBe('TCS');
     expect(merged[1]._liveAlert).toBe(true);
-    expect(merged.some(r => r.symbol === 'INFY')).toBe(true);
+    expect(merged.some(r => r.symbol === 'INFY')).toBe(false);
     expect(merged.filter(r => r.symbol === 'TCS')).toHaveLength(1);
+  });
+
+  it('excludes signal rows not scanned during today live session', () => {
+    expect(
+      isSignalRowFromToday({symbol: 'TCS', scan_time: today}),
+    ).toBe(true);
+    expect(
+      isSignalRowFromToday({symbol: 'TCS', scan_time: yesterday}),
+    ).toBe(false);
+    expect(
+      buildSignalsTabRows([{symbol: 'OLD', status: 'watch', scan_time: yesterday}], []),
+    ).toEqual([]);
   });
 });

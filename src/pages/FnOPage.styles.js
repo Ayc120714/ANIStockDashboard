@@ -2,7 +2,7 @@ import styled, { css } from 'styled-components';
 
 export const PageWrapper = styled.div`
   padding: 18px 24px 32px;
-  max-width: 1500px;
+  max-width: 1600px;
   margin: 0 auto;
   font-family: 'Inter', -apple-system, sans-serif;
 `;
@@ -35,6 +35,7 @@ export const TabBar = styled.div`
   border-bottom: 2px solid #e0e6ed;
   margin-bottom: 18px;
   gap: 0;
+  overflow-x: auto;
 `;
 
 export const Tab = styled.button`
@@ -48,12 +49,46 @@ export const Tab = styled.button`
   margin-bottom: -2px;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
   &:hover { color: #1a3c5e; background: #f5f8fc; }
+`;
+
+export const SpotHeaderBar = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  .spot-main {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a3c5e;
+  }
+  .spot-chg {
+    font-size: 13px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .metric {
+    font-size: 11px;
+    color: #64748b;
+    .val {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a3c5e;
+      margin-top: 2px;
+    }
+  }
 `;
 
 export const SummaryCards = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 `;
@@ -91,65 +126,136 @@ export const ExpiryPill = styled.button`
 export const ChainTable = styled.table`
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11px;
   thead {
     background: #1a3c5e;
     th {
       color: #fff;
-      padding: 7px 8px;
+      padding: 6px 5px;
       font-weight: 600;
-      font-size: 11px;
+      font-size: 10px;
       text-align: right;
       white-space: nowrap;
-      &:first-child { text-align: left; }
     }
   }
   tbody tr {
     border-bottom: 1px solid #eef1f5;
     transition: background 0.12s;
-    &:hover { background: #f5f8fc; }
-    &:nth-child(even) { background: #fafbfc; }
-    &:nth-child(even):hover { background: #f0f4f8; }
+    &:hover { background: #f5f8fc !important; }
   }
   td {
-    padding: 5px 8px;
+    padding: 4px 5px;
     text-align: right;
-    font-size: 12px;
+    font-size: 11px;
     color: #334155;
-    &:first-child { text-align: left; }
+    vertical-align: middle;
   }
 `;
 
 export const StrikeCell = styled.td`
   font-weight: 700 !important;
   text-align: center !important;
-  background: ${p => p.$atm ? '#e8edf2' : 'transparent'};
+  background: ${p => p.$atm ? '#c8e6c9' : '#f8fafc'} !important;
   color: #1a3c5e !important;
+  border-left: 2px solid #cbd5e1 !important;
+  border-right: 2px solid #cbd5e1 !important;
+  font-size: 12px !important;
 `;
 
-const itmBg = css`background: rgba(46,125,50,0.06);`;
-const otmBg = css`background: transparent;`;
+export const PcrCell = styled.td`
+  text-align: center !important;
+  font-weight: 600;
+  color: #475569 !important;
+  background: #f8fafc !important;
+  font-size: 10px !important;
+`;
+
+const ceItmBg = css`background: rgba(255, 235, 59, 0.18) !important;`;
+const peItmBg = css`background: rgba(124, 77, 255, 0.1) !important;`;
 
 export const CeCell = styled.td`
-  ${p => p.$itm ? itmBg : otmBg}
+  ${p => p.$itm ? ceItmBg : ''}
 `;
 
 export const PeCell = styled.td`
-  ${p => p.$itm ? itmBg : otmBg}
+  ${p => p.$itm ? peItmBg : ''}
+`;
+
+export const TvChartCell = styled.td`
+  text-align: center !important;
+  padding: 2px 4px !important;
+  width: 28px;
+  ${p => p.$side === 'ce' && p.$itm ? ceItmBg : ''}
+  ${p => p.$side === 'pe' && p.$itm ? peItmBg : ''}
+  a {
+    margin: 0 auto;
+  }
+`;
+
+export const OIBarWrap = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  min-width: 70px;
+`;
+
+export const OIBarTrack = styled.div`
+  flex: 1;
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 56px;
 `;
 
 export const OIBar = styled.div`
   background: ${p => p.$type === 'ce' ? '#ff9800' : '#7c4dff'};
-  height: 14px;
+  height: 100%;
   border-radius: 2px;
   min-width: 2px;
+  transition: width 0.2s;
+`;
+
+export const OIRankBadge = styled.span`
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: ${p => p.$rank === 1 ? '#ef5350' : p.$rank === 2 ? '#ff7043' : '#ffa726'};
+  color: #fff;
+  margin-left: 2px;
+`;
+
+export const OISectionTitle = styled.h3`
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a3c5e;
+  margin: 20px 0 10px;
+`;
+
+export const OISummaryTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 16px;
+  th, td {
+    padding: 8px 12px;
+    border: 1px solid #e0e6ed;
+    text-align: right;
+  }
+  th {
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+    text-align: left;
+  }
+  td:first-child, th:first-child { text-align: left; }
 `;
 
 export const MoverRow = styled.tr`
   cursor: default;
-  td {
-    padding: 6px 10px !important;
-  }
+  td { padding: 6px 10px !important; }
 `;
 
 export const StrategySection = styled.div`
@@ -249,6 +355,9 @@ export const RefreshBtn = styled.button`
   color: #4a5568;
   cursor: pointer;
   &:hover { border-color: #1a3c5e; color: #1a3c5e; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 `;
 
 export const EmptyState = styled.div`
@@ -256,4 +365,10 @@ export const EmptyState = styled.div`
   padding: 40px 20px;
   color: #8899a6;
   font-size: 14px;
+`;
+
+export const ChainScroll = styled.div`
+  overflow-x: auto;
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
 `;
