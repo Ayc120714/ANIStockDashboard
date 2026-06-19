@@ -7,40 +7,114 @@ export function readUserAgent() {
   return String(navigator.userAgent || '');
 }
 
-export function isTabletUserAgent(ua = readUserAgent()) {
-  const agent = String(ua || '');
-  if (/iPad/i.test(agent)) return true;
-  if (/Android/i.test(agent) && !/Mobile/i.test(agent)) return true;
-  if (/Tablet/i.test(agent)) return true;
-  if (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) {
-    return true;
+export function readUserAgentDataMobile() {
+  if (typeof navigator === 'undefined') return null;
+  return navigator.userAgentData?.mobile ?? null;
+}
+
+export function getViewportWidth() {
+  if (typeof window === 'undefined') return 1280;
+  return Math.round(window.visualViewport?.width ?? window.innerWidth);
+}
+
+export function getViewportMinSide() {
+  if (typeof window === 'undefined') return 1280;
+  const w = window.visualViewport?.width ?? window.innerWidth;
+  const h = window.visualViewport?.height ?? window.innerHeight;
+  return Math.round(Math.min(w, h));
+}
+
+export function isTouchPrimaryDevice() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  if (window.matchMedia?.('(pointer: coarse)').matches) return true;
+  return (navigator.maxTouchPoints ?? 0) > 0;
+}
+
+export function readClientPlatformHints() {
+  if (typeof navigator === 'undefined') {
+    return {platform: '', maxTouchPoints: 0, userAgentDataMobile: null};
   }
+  return {
+    platform: String(navigator.platform || ''),
+    maxTouchPoints: navigator.maxTouchPoints ?? 0,
+    userAgentDataMobile: readUserAgentDataMobile(),
+  };
+}
+
+export function buildDeviceViewContext(overrides = {}) {
+  const hints = readClientPlatformHints();
+  return {
+    width: getViewportWidth(),
+    minViewportSide: getViewportMinSide(),
+    ua: readUserAgent(),
+    userAgentDataMobile: hints.userAgentDataMobile,
+    platform: hints.platform,
+    maxTouchPoints: hints.maxTouchPoints,
+    touchPrimary: isTouchPrimaryDevice(),
+    ...overrides,
+  };
+}
+
+export function isTabletUserAgent(ua = readUserAgent(), options = {}) {
+  const agent = String(ua || '');
+  const userAgentDataMobile = options.userAgentDataMobile ?? null;
+  if (userAgentDataMobile === true) return false;
+
+  if (/iPhone|iPod/i.test(agent)) return false;
+  if (/iPad/i.test(agent)) return true;
+  if (/Android/i.test(agent) && (/Mobile/i.test(agent) || /Mobi/i.test(agent))) return false;
+  if (/Android/i.test(agent)) return true;
+  if (/Tablet/i.test(agent)) return true;
+
+  const platform = options.platform ?? (typeof navigator !== 'undefined' ? navigator.platform : '');
+  const maxTouchPoints = options.maxTouchPoints
+    ?? (typeof navigator !== 'undefined' ? navigator.maxTouchPoints ?? 0 : 0);
+  if (platform === 'MacIntel' && maxTouchPoints > 1) return true;
+
   return false;
 }
 
-export function isPhoneUserAgent(ua = readUserAgent()) {
+export function isPhoneUserAgent(ua = readUserAgent(), options = {}) {
   const agent = String(ua || '');
-  if (isTabletUserAgent(agent)) return false;
+  const userAgentDataMobile = options.userAgentDataMobile ?? null;
+  if (userAgentDataMobile === true) return true;
+
   if (/iPhone|iPod/i.test(agent)) return true;
-  if (/Android/i.test(agent) && /Mobile/i.test(agent)) return true;
+  if (/Android/i.test(agent) && (/Mobile/i.test(agent) || /Mobi/i.test(agent))) return true;
   if (/Windows Phone/i.test(agent)) return true;
+  if (/EdgA\/|EdgiOS\//i.test(agent)) return true;
+  if (/Mobi/i.test(agent) && !/iPad|Tablet/i.test(agent)) return true;
+
   return false;
 }
 
 /** Coarse device bucket used before viewport fallback. */
-export function detectDeviceClass({width, ua} = {}) {
-  const agent = ua ?? readUserAgent();
-  if (isTabletUserAgent(agent)) return 'tablet';
-  if (isPhoneUserAgent(agent)) return 'phone';
+export function detectDeviceClass(options = {}) {
+  const agent = options.ua ?? readUserAgent();
+  const userAgentDataMobile = options.userAgentDataMobile ?? null;
+  const width = options.width ?? getViewportWidth();
+  const minViewportSide = options.minViewportSide ?? width;
+  const touchPrimary = options.touchPrimary ?? false;
+  const tabletOptions = {
+    userAgentDataMobile,
+    platform: options.platform,
+    maxTouchPoints: options.maxTouchPoints,
+  };
 
-  const w = width ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
-  if (w <= PHONE_MAX_WIDTH_PX) return 'phone';
-  if (w <= 1024) return 'tablet';
+  if (userAgentDataMobile === true) return 'phone';
+  if (isPhoneUserAgent(agent, {userAgentDataMobile})) return 'phone';
+  if (isTabletUserAgent(agent, tabletOptions)) return 'tablet';
+
+  if (width <= PHONE_MAX_WIDTH_PX && touchPrimary) return 'phone';
+  if (minViewportSide <= PHONE_MAX_WIDTH_PX && touchPrimary) return 'phone';
+  if (width <= PHONE_MAX_WIDTH_PX) return 'phone';
+
+  if (width <= 1024) return 'tablet';
   return 'desktop';
 }
 
 /** `app` = mobile app shell; `desktop` = sidebar rail layout (tablet + desktop). */
-export function resolveViewMode(options) {
+export function resolveViewMode(options = {}) {
   const deviceClass = detectDeviceClass(options);
   return deviceClass === 'phone' ? 'app' : 'desktop';
 }

@@ -50,7 +50,6 @@ import {usePagedList} from '@hooks/usePagedList';
 import {AYC} from '@core/theme/mobileStyles';
 
 const PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
-const CUSTOM_RS_PAGE = 15;
 const SIGNALS_SETUP_META = EXTRA_SETUPS.filter(s => s.id !== 'other' && s.id !== 'custom_rs');
 const ED_TFS = [
   {id: 'daily', label: 'Daily'},
@@ -177,7 +176,7 @@ function LiveSignalsTable({rows, pageSize = PAGE_SIZE}) {
   );
 }
 
-function CustomRsTable({rows, signalBySymbol, pageSize = CUSTOM_RS_PAGE}) {
+function CustomRsTable({rows, signalBySymbol, pageSize = PAGE_SIZE}) {
   const enriched = useMemo(() => {
     const deduped = dedupeSignalsBySymbol(rows || []);
     return deduped.map(row => {
