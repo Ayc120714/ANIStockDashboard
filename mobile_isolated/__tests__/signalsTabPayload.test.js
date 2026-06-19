@@ -1,4 +1,11 @@
-import {buildSignalsTabRows, isSignalRowFromToday, liveAlertToSignalRow} from '@core/utils/signalsTabPayload';
+import {
+  buildSignalsTabRows,
+  isActionableTodaySignalRow,
+  isLiveEntryExitAlert,
+  isSignalRowFromToday,
+  liveAlertToSignalRow,
+  mapLiveAlertStatus,
+} from '@core/utils/signalsTabPayload';
 import {NOTIFICATION_TIMEZONE} from '@core/utils/alertInboxUtils';
 
 function istDateKey(date = new Date()) {
@@ -36,15 +43,22 @@ describe('signalsTabPayload', () => {
     expect(row.status).toBe('entry_ready');
   });
 
+  it('maps EXIT_READY alerts to exit_watch status', () => {
+    expect(mapLiveAlertStatus({alert_type: 'EXIT_READY'})).toBe('exit_watch');
+    expect(liveAlertToSignalRow({symbol: 'TCS', alert_type: 'EXIT_READY', timestamp: today}).status).toBe(
+      'exit_watch',
+    );
+  });
+
   it('prepends today live alerts before signal rows without duplicate symbols', () => {
     const merged = buildSignalsTabRows(
       [
-        {symbol: 'TCS', status: 'watch', scan_time: today},
+        {symbol: 'TCS', status: 'entry_ready', scan_time: today},
         {symbol: 'INFY', status: 'watch', scan_time: yesterday},
       ],
       [
-        {id: 1, symbol: 'RELIANCE', alert_type: 'entry_long', timestamp: today},
-        {id: 2, symbol: 'TCS', alert_type: 'entry_long', timestamp: today},
+        {id: 1, symbol: 'RELIANCE', alert_type: 'ENTRY_READY', timestamp: today},
+        {id: 2, symbol: 'TCS', alert_type: 'ENTRY_READY', timestamp: today},
       ],
     );
     expect(merged[0].symbol).toBe('RELIANCE');
@@ -56,14 +70,17 @@ describe('signalsTabPayload', () => {
   });
 
   it('excludes signal rows not scanned during today live session', () => {
-    expect(
-      isSignalRowFromToday({symbol: 'TCS', scan_time: today}),
-    ).toBe(true);
-    expect(
-      isSignalRowFromToday({symbol: 'TCS', scan_time: yesterday}),
-    ).toBe(false);
+    expect(isSignalRowFromToday({symbol: 'TCS', scan_time: today})).toBe(true);
+    expect(isSignalRowFromToday({symbol: 'TCS', scan_time: yesterday})).toBe(false);
     expect(
       buildSignalsTabRows([{symbol: 'OLD', status: 'watch', scan_time: yesterday}], []),
     ).toEqual([]);
+  });
+
+  it('includes actionable entry_ready rows scanned today', () => {
+    expect(isActionableTodaySignalRow({symbol: 'TCS', status: 'entry_ready', scan_time: today})).toBe(true);
+    expect(isActionableTodaySignalRow({symbol: 'TCS', status: 'watch', scan_time: today})).toBe(false);
+    expect(isLiveEntryExitAlert({alert_type: 'ENTRY_READY'})).toBe(true);
+    expect(isLiveEntryExitAlert({alert_type: 'EXIT_READY'})).toBe(true);
   });
 });

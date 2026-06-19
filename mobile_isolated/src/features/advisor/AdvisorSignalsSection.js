@@ -12,9 +12,21 @@ import {TradingViewLink} from '@components/TradingViewLink';
 import {ListPagePager} from '@components/ListPagePager';
 import {advisorService} from '@core/api/services/advisorService';
 import {alertsService} from '@core/api/services/alertsService';
-import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
+import {MOBILE_ALERTS_LIMIT, MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
+import {isTodayInIST} from '@core/utils/alertInboxUtils';
+import {
+  isLiveEntryExitAlert,
+  isActionableTodaySignalRow,
+} from '@core/utils/signalsTabPayload';
+import {
+  ensureMarketSession,
+  getCachedMarketSession,
+  getMarketPollingIntervalMs,
+  shouldPollLiveMarket,
+} from '@core/utils/marketSession';
+import {SCREEN_LIVE_POLL_MS} from '@core/utils/screenPageLoader';
 import {
   ADVISOR_RECO_OPTIONS,
   ADVISOR_STRATEGY_OPTIONS,
@@ -37,7 +49,7 @@ import {safeFetch} from '@core/utils/safeFetch';
 import {usePagedList} from '@hooks/usePagedList';
 import {AYC} from '@core/theme/mobileStyles';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
 const CUSTOM_RS_PAGE = 15;
 const SIGNALS_SETUP_META = EXTRA_SETUPS.filter(s => s.id !== 'other' && s.id !== 'custom_rs');
 const ED_TFS = [
@@ -340,7 +352,10 @@ export function AdvisorSignalsSection({
   }, [sigRows]);
 
   const filteredLive = useMemo(
-    () => filterAdvisorSignals(sigRows, monthlyRows, {strategyFilter, recoFilter, convFilter}),
+    () =>
+      filterAdvisorSignals(sigRows, monthlyRows, {strategyFilter, recoFilter, convFilter}).filter(
+        isActionableTodaySignalRow,
+      ),
     [sigRows, monthlyRows, strategyFilter, recoFilter, convFilter],
   );
 
@@ -404,7 +419,11 @@ export function AdvisorSignalsSection({
     try {
       const res = await alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT});
       const raw = Array.isArray(res) ? res : extractApiRows(res);
-      setAlertRows(dedupeAlertsBySymbol(raw));
+      const todayEntryExit = raw.filter(row => {
+        if (!isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time)) return false;
+        return isLiveEntryExitAlert(row) || String(row?.source || '').toLowerCase() === 'demo';
+      });
+      setAlertRows(dedupeAlertsBySymbol(todayEntryExit));
     } catch {
       setAlertRows([]);
     } finally {
@@ -415,9 +434,22 @@ export function AdvisorSignalsSection({
   useEffect(() => {
     if (subView === 'signals') {
       loadEarlyDetection();
-    } else {
-      loadAlerts();
+      return undefined;
     }
+    loadAlerts();
+    let pollId;
+    void (async () => {
+      await ensureMarketSession();
+      const pollMs = getMarketPollingIntervalMs(SCREEN_LIVE_POLL_MS, 0);
+      if (pollMs <= 0) return;
+      pollId = setInterval(() => {
+        if (!shouldPollLiveMarket(getCachedMarketSession())) return;
+        loadAlerts();
+      }, pollMs);
+    })();
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
   }, [subView, loadEarlyDetection, loadAlerts]);
 
   useEffect(() => {

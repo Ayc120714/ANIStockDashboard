@@ -19,16 +19,22 @@ import {extractApiRows} from '@core/utils/apiPayload';
 import {alertsService} from '@core/api/services/alertsService';
 import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {fetchSignalsTabPayload, isSignalRowFromToday} from '@core/utils/signalsTabPayload';
+import {fetchSignalsTabPayload, isActionableTodaySignalRow} from '@core/utils/signalsTabPayload';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
-import {runScreenTableFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
+import {
+  runScreenTableFetch,
+  runScreenTableFetchWithLivePoll,
+  SCREEN_LIVE_POLL_MS,
+  shouldRefreshPageCache,
+} from '@core/utils/screenPageLoader';
+import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
 import {AYC, mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 import {ListPagePager} from '@components/ListPagePager';
 import {usePagedList} from '@hooks/usePagedList';
 
-const SIGNALS_PAGE_SIZE = 10;
+const SIGNALS_PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
 
 function dedupeSignalsBySymbol(rows) {
   const seen = new Set();
@@ -63,6 +69,7 @@ function SignalCard({item, onTrade}) {
   const bull = trend === 'bullish';
   const status = String(item.status || '');
   const isLiveAlert = Boolean(item._liveAlert);
+  const isExitSignal = status === 'exit_watch' || status === 'done';
   const pct = item.pct_from_entry;
   const pctColor = pct > 0 ? '#15803d' : pct < 0 ? '#b91c1c' : '#374151';
   const statusStyle =
@@ -78,7 +85,11 @@ function SignalCard({item, onTrade}) {
     <View style={styles.card}>
       <View style={styles.cardTop}>
         <View style={styles.tags}>
-          {isLiveAlert ? <Text style={styles.tagTriggered}>Triggered alert</Text> : null}
+          {isLiveAlert ? (
+            <Text style={[styles.tagTriggered, isExitSignal ? styles.tagExit : null]}>
+              {isExitSignal ? 'Exit signal' : 'Entry signal'}
+            </Text>
+          ) : null}
           {item.high_conviction ? <Text style={styles.tagHi}>High conviction</Text> : null}
           <Text style={styles.tagEq}>{bull ? 'Equity · Bull' : 'Equity · Bear'}</Text>
         </View>
@@ -157,19 +168,28 @@ export function SignalsScreen({navigation}) {
 
   useEffect(() => {
     let cancelled = false;
+    let pollId;
     (async () => {
       const hadCache = await hydrateFromPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals, {
         apply: data => setRows(Array.isArray(data) ? data : extractApiRows(data)),
         hasUsable: data => Array.isArray(data) && data.length > 0,
       });
       if (cancelled) return;
-      await load({silent: hadCache});
+      pollId = await runScreenTableFetchWithLivePoll({
+        cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
+        fetcher: () => fetchSignalsTabPayload(),
+        setRows,
+        setLoading: hadCache ? () => {} : setLoading,
+        setError: msg => setError(msg || ''),
+        liveIntervalMs: SCREEN_LIVE_POLL_MS,
+      });
       initialLoadDone.current = true;
     })();
     return () => {
       cancelled = true;
+      if (pollId) clearInterval(pollId);
     };
-  }, [load]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -187,7 +207,7 @@ export function SignalsScreen({navigation}) {
   const [filter, setFilter] = useState('all');
 
   const filtered = useMemo(() => {
-    const todayOnly = (rows || []).filter(isSignalRowFromToday);
+    const todayOnly = (rows || []).filter(isActionableTodaySignalRow);
     const deduped = dedupeSignalsBySymbol(todayOnly);
     if (filter === 'entry_ready') {
       return deduped.filter(r => String(r.status) === 'entry_ready');
@@ -391,6 +411,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  tagExit: {
+    color: '#991b1b',
+    backgroundColor: '#fee2e2',
   },
   tagHi: {
     fontSize: AYC.type.caption,
