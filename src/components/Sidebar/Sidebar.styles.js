@@ -1,8 +1,8 @@
 import styled from 'styled-components';
 
 const mobileBreakpoint = '768px';
-/** Matches MUI `md` (900px): permanent mobile shell uses drawer below this width. */
-export const mobileNavBreakpoint = '899.95px';
+/** Phones use app shell drawer; tablets/desktops keep the sidebar rail from 768px up. */
+export const mobileNavBreakpoint = '767.95px';
 
 export const SidebarContainer = styled.div.withConfig({
   shouldForwardProp: (prop) => prop !== 'collapsed' && prop !== '$inDrawer',

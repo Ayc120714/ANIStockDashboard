@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import {
   Box, TextField, Button, Chip, CircularProgress, Tabs, Tab, Select, MenuItem,
@@ -184,8 +185,25 @@ function getTrailingState(row) {
   return { t1Hit, costExit, effectiveStopLoss };
 }
 
+function resolveAdvisorTabIndex(advisorTab) {
+  const key = String(advisorTab || '').trim().toLowerCase();
+  if (!key) return 0;
+  if (key === 'signals' || key === 'sig' || key === 'alerts') return 0;
+  if (key === 'trend' || key === 'reversal' || key === 'trend_reversal') return 1;
+  if (key === 'chart' || key === 'fundamental') return 2;
+  if (key === 'analysis' || key === 'ai') return 3;
+  if (key === 'portfolio') return 4;
+  const n = Number(key);
+  return Number.isFinite(n) && n >= 0 && n <= 4 ? n : 0;
+}
+
 function FinancialAdvisorPage() {
-  const [tab, setTab] = useState(0);
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => resolveAdvisorTabIndex(searchParams.get('advisorTab')));
+
+  useEffect(() => {
+    setTab(resolveAdvisorTabIndex(searchParams.get('advisorTab')));
+  }, [searchParams]);
 
   useEffect(() => {
     apiGet('/system/status')

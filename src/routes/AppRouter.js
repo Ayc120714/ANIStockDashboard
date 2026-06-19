@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import usePageVisitTracker from '../hooks/usePageVisitTracker';
 import { ensureMarketSession } from '../utils/marketSession';
-import MainLayout from '../layouts/MainLayout';
+import MainLayout from '../layouts/AdaptiveMainLayout';
 import DashboardPage from '../pages/DashboardPage';
 import LongTermPage from '../pages/LongTermPage';
 import ShortTermPage from '../pages/ShortTermPage';
