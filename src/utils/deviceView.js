@@ -88,13 +88,25 @@ export function isPhoneUserAgent(ua = readUserAgent(), options = {}) {
   return false;
 }
 
+export function isDesktopUserAgent(ua = readUserAgent(), options = {}) {
+  if (options.userAgentDataMobile === true) return false;
+  if (options.userAgentDataMobile === false) return true;
+  const agent = String(ua || '');
+  if (isPhoneUserAgent(agent, options)) return false;
+  if (isTabletUserAgent(agent, options)) return false;
+  if (/Windows NT/i.test(agent)) return true;
+  if (/Macintosh/i.test(agent) && !/iPhone|iPad|iPod/i.test(agent)) return true;
+  if (/CrOS/i.test(agent)) return true;
+  if (/X11; Linux x86_64/i.test(agent) && !/Android/i.test(agent)) return true;
+  return false;
+}
+
 /** Coarse device bucket used before viewport fallback. */
 export function detectDeviceClass(options = {}) {
   const agent = options.ua ?? readUserAgent();
   const userAgentDataMobile = options.userAgentDataMobile ?? null;
   const width = options.width ?? getViewportWidth();
   const minViewportSide = options.minViewportSide ?? width;
-  const touchPrimary = options.touchPrimary ?? false;
   const tabletOptions = {
     userAgentDataMobile,
     platform: options.platform,
@@ -105,9 +117,11 @@ export function detectDeviceClass(options = {}) {
   if (isPhoneUserAgent(agent, {userAgentDataMobile})) return 'phone';
   if (isTabletUserAgent(agent, tabletOptions)) return 'tablet';
 
-  if (width <= PHONE_MAX_WIDTH_PX && touchPrimary) return 'phone';
-  if (minViewportSide <= PHONE_MAX_WIDTH_PX && touchPrimary) return 'phone';
-  if (width <= PHONE_MAX_WIDTH_PX) return 'phone';
+  if (isDesktopUserAgent(agent, options)) {
+    return width <= 1024 ? 'tablet' : 'desktop';
+  }
+
+  if (width <= PHONE_MAX_WIDTH_PX || minViewportSide <= PHONE_MAX_WIDTH_PX) return 'phone';
 
   if (width <= 1024) return 'tablet';
   return 'desktop';

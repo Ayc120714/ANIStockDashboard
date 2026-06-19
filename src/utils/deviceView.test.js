@@ -1,6 +1,7 @@
 import {
   activeMobileAppTab,
   detectDeviceClass,
+  isDesktopUserAgent,
   isPhoneUserAgent,
   isTabletUserAgent,
   resolveViewMode,
@@ -13,6 +14,8 @@ const FIREFOX_ANDROID_MOBILE =
   'Mozilla/5.0 (Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0';
 const EDGE_ANDROID_MOBILE =
   'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 EdgA/120.0.0.0';
+const WINDOWS_CHROME_LAPTOP =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
 describe('deviceView', () => {
   it('detects phone vs tablet user agents', () => {
@@ -27,7 +30,7 @@ describe('deviceView', () => {
     expect(isPhoneUserAgent(CHROME_ANDROID_MOBILE)).toBe(true);
     expect(isPhoneUserAgent(FIREFOX_ANDROID_MOBILE)).toBe(true);
     expect(isPhoneUserAgent(EDGE_ANDROID_MOBILE)).toBe(true);
-    expect(resolveViewMode({ua: CHROME_ANDROID_MOBILE, width: 412})).toBe('app');
+    expect(resolveViewMode({ua: CHROME_ANDROID_MOBILE, width: 412, userAgentDataMobile: true})).toBe('app');
     expect(resolveViewMode({ua: FIREFOX_ANDROID_MOBILE, width: 412})).toBe('app');
     expect(resolveViewMode({ua: EDGE_ANDROID_MOBILE, width: 412})).toBe('app');
   });
@@ -47,25 +50,35 @@ describe('deviceView', () => {
     ).toBe(false);
   });
 
-  it('uses the shorter viewport side for touch phones in landscape', () => {
+  it('keeps laptops on desktop web layout even with touch and narrow windows', () => {
+    expect(isDesktopUserAgent(WINDOWS_CHROME_LAPTOP, {userAgentDataMobile: false})).toBe(true);
     expect(
       resolveViewMode({
-        ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36',
-        width: 915,
-        minViewportSide: 412,
-        touchPrimary: true,
+        ua: WINDOWS_CHROME_LAPTOP,
+        width: 1440,
         userAgentDataMobile: false,
+        touchPrimary: true,
+        maxTouchPoints: 10,
       }),
-    ).toBe('app');
+    ).toBe('desktop');
+    expect(
+      resolveViewMode({
+        ua: WINDOWS_CHROME_LAPTOP,
+        width: 600,
+        userAgentDataMobile: false,
+        touchPrimary: true,
+      }),
+    ).toBe('desktop');
+    expect(detectDeviceClass({width: 600, ua: WINDOWS_CHROME_LAPTOP, userAgentDataMobile: false})).toBe('tablet');
   });
 
-  it('falls back to narrow touch viewport when UA is ambiguous', () => {
+  it('uses phone landscape viewport for mobile Chrome', () => {
     expect(
       resolveViewMode({
-        ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36',
-        width: 390,
-        touchPrimary: true,
-        userAgentDataMobile: false,
+        ua: CHROME_ANDROID_MOBILE,
+        width: 915,
+        minViewportSide: 412,
+        userAgentDataMobile: true,
       }),
     ).toBe('app');
   });
@@ -75,7 +88,6 @@ describe('deviceView', () => {
     expect(resolveViewMode({ua: 'Mozilla/5.0 (iPad)', width: 820})).toBe('desktop');
     expect(resolveViewMode({ua: 'Mozilla/5.0 (Windows NT 10.0)', width: 1440})).toBe('desktop');
     expect(resolveViewMode({ua: 'Mozilla/5.0 (Macintosh)', width: 800})).toBe('desktop');
-    expect(detectDeviceClass({width: 600, ua: 'Mozilla/5.0 (Windows NT 10.0)'})).toBe('phone');
   });
 
   it('highlights signals vs advisor tabs on /advisor routes', () => {
