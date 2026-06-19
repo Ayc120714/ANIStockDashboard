@@ -1,7 +1,7 @@
 import styled from 'styled-components';
 
 const mobileBreakpoint = '768px';
-/** Phones use app shell drawer; tablets/desktops keep the sidebar rail from 768px up. */
+/** Sidebar rail stays visible at all widths (icon-only below 768px). */
 export const mobileNavBreakpoint = '767.95px';
 
 export const SidebarContainer = styled.div.withConfig({
@@ -51,7 +51,7 @@ export const SidebarContainer = styled.div.withConfig({
     padding: ${(p) => (p.$inDrawer ? '20px 16px' : p.collapsed ? '14px 10px' : '18px 14px')};
   }
 
-  /* Legacy narrow rail when JS falls back only — primary mobile UX uses off-canvas drawer instead */
+  /* Narrow viewports: keep icon rail visible (labels hidden via SidebarNavLink CSS) */
   @media (max-width: ${mobileBreakpoint}) {
     width: ${(p) => (p.$inDrawer ? '280px' : '72px')};
     padding: ${(p) => (p.$inDrawer ? '20px 14px' : '16px 8px')};

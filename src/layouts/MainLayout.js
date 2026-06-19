@@ -1,8 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import Drawer from '@mui/material/Drawer';
-import Box from '@mui/material/Box';
+import React from 'react';
+import { Outlet } from 'react-router';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
 import { BootstrapReadyProvider } from '../context/BootstrapReadyContext';
@@ -124,47 +121,14 @@ const DesktopOnlyNote = styled.div`
 `;
 
 function MainLayout() {
-  const location = useLocation();
-  const isMobileNav = useMediaQuery(`(max-width:${mobileNavBreakpoint})`, { noSsr: true });
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [location.pathname, location.search]);
-
   return (
     <BootstrapReadyProvider pollMs={3000} maxWaitForApiMs={60000}>
-      <MobileNavDrawerProvider onRequestClose={closeMobileNav}>
+      <MobileNavDrawerProvider onRequestClose={() => {}}>
         <LayoutContainer>
-          {!isMobileNav ? <Sidebar variant="rail" /> : null}
-
-          <Drawer
-            anchor="left"
-            open={isMobileNav && mobileNavOpen}
-            onClose={closeMobileNav}
-            ModalProps={{ keepMounted: true }}
-            PaperProps={{
-              sx: {
-                width: 280,
-                maxWidth: '88vw',
-                boxSizing: 'border-box',
-                background: 'transparent',
-                overflow: 'hidden',
-              },
-            }}
-          >
-            <Box role="presentation" sx={{ height: '100%', overflow: 'auto' }}>
-              <Sidebar variant="drawer" />
-            </Box>
-          </Drawer>
+          <Sidebar variant="rail" />
 
           <MainContent>
-            <Header
-              showMenuButton={isMobileNav}
-              onMenuOpen={() => setMobileNavOpen(true)}
-            />
+            <Header />
             <ContentArea>
               <DesktopOnlyNote>
                 Note: Some analytics tables are easiest to read on a larger monitor; the app is fully usable on
