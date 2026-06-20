@@ -730,7 +730,7 @@ export function AdvisorHubScreen({navigation}) {
             />
           }>
           {head}
-          <Text style={mobileStyles.subtitle}>RS daily / weekly / monthly setup screener</Text>
+          <Text style={mobileStyles.subtitle}>Daily / weekly / monthly custom screener</Text>
           {cacheHydrated
             ? chartDisplayBlocks.map(block => <ChartFundamentalTable key={block.id} block={block} />)
             : null}

@@ -27,7 +27,7 @@ const DAILY_COLS = [
   { key: 'symbol', label: 'Symbol', width: 88 },
   { key: 'sector', label: 'Sector', width: 100 },
   { key: 'close', label: 'Close', numeric: true, width: 80 },
-  { key: 'rs_daily_123', label: 'RS123', numeric: true, pct: true, width: 68 },
+  { key: 'rs_daily_123', label: 'RS', numeric: true, pct: true, width: 68 },
   { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
@@ -38,7 +38,7 @@ const WEEKLY_COLS = [
   { key: 'sector', label: 'Sector', width: 96 },
   { key: 'weekly_close', label: 'Wk Close', numeric: true, width: 80 },
   { key: 'weekly_close_prev', label: 'Prev Wk', numeric: true, width: 80 },
-  { key: 'rs_weekly_52', label: 'RS52', numeric: true, pct: true, width: 68 },
+  { key: 'rs_weekly_52', label: 'RS', numeric: true, pct: true, width: 68 },
   { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
@@ -49,15 +49,11 @@ const MONTHLY_COLS = [
   { key: 'sector', label: 'Sector', width: 96 },
   { key: 'monthly_close', label: 'Mo Close', numeric: true, width: 80 },
   { key: 'monthly_close_prev', label: 'Prev Mo', numeric: true, width: 80 },
-  { key: 'rs_monthly_11', label: 'RS11', numeric: true, pct: true, width: 68 },
+  { key: 'rs_monthly_11', label: 'RS', numeric: true, pct: true, width: 68 },
   { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
 ];
-
-const CHARTINK_DAILY_URL = 'https://chartink.com/screener/rs-daily-scan-2';
-const CHARTINK_WEEKLY_URL = 'https://chartink.com/screener/rs-weekly-scan-3';
-const CHARTINK_MONTHLY_URL = 'https://chartink.com/screener/rs-monthly-11';
 
 const fmt = (v) => {
   if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
@@ -570,9 +566,8 @@ export default function ChartFundamentalAgentTab() {
           }}
         >
           <AgentResultsTable
-            title="Daily setup (RS 123)"
+            title="Daily setup"
             subtitle={`${payload?.count ?? dailyRows.length} matches${scanMeta}`}
-            chartinkUrl={CHARTINK_DAILY_URL}
             cols={DAILY_COLS}
             rows={dailyRows}
             emptyMessage="No stocks passed all gates on the latest daily session."
@@ -584,9 +579,8 @@ export default function ChartFundamentalAgentTab() {
             onPageChange={setDailyPage}
           />
           <AgentResultsTable
-            title="Weekly setup (RS 52W)"
+            title="Weekly setup"
             subtitle={`${payload?.weekly_count ?? weeklyRows.length} matches · weekly vs Nifty${scanMeta}`}
-            chartinkUrl={CHARTINK_WEEKLY_URL}
             cols={WEEKLY_COLS}
             rows={weeklyRows}
             emptyMessage="No stocks passed all gates on the latest weekly bar."
@@ -598,9 +592,8 @@ export default function ChartFundamentalAgentTab() {
             onPageChange={setWeeklyPage}
           />
             <AgentResultsTable
-              title="Monthly setup (RS 11M)"
-              subtitle={`${payload?.monthly_count ?? monthlyRows.length} matches · ChartInk monthly vs Nifty (11)${scanMeta}`}
-              chartinkUrl={CHARTINK_MONTHLY_URL}
+              title="Monthly setup"
+              subtitle={`${payload?.monthly_count ?? monthlyRows.length} matches · monthly vs Nifty${scanMeta}`}
               cols={MONTHLY_COLS}
             rows={monthlyRows}
             emptyMessage="No stocks passed all gates on the latest monthly bar."
