@@ -23,7 +23,6 @@ export default function useDeviceViewMode() {
 
     window.addEventListener('resize', sync);
     window.addEventListener('orientationchange', sync);
-    window.visualViewport?.addEventListener('resize', sync);
 
     const mediaListeners = MEDIA_QUERIES.map(query => {
       const mql = window.matchMedia(query);
@@ -40,7 +39,6 @@ export default function useDeviceViewMode() {
       cancelled = true;
       window.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
-      window.visualViewport?.removeEventListener('resize', sync);
       mediaListeners.forEach(({mql, onChange}) => {
         if (mql.removeEventListener) {
           mql.removeEventListener('change', onChange);

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useScrollActiveTabIntoView } from '../hooks/useScrollActiveTabIntoView';
 import AiPicksPage from './AiPicksPage';
 import IPOsPage from './IPOsPage';
@@ -7,23 +8,34 @@ import RelativePerformancePage from './RelativePerformancePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './ScreensPage.style';
 import TrendingPage from './TrendingPage';
 import VolumeShockersPage from './VolumeShockersPage';
-
-const SCREEN_TABS = ['AI Picks', 'Trending', 'Top Movers', 'Volume Movers', 'Alpha Tracker', 'IPOs'];
+import { resolveScreenTab, SCREEN_TABS, screenTabToParam } from '../utils/screenTabUtils';
 
 function ScreensPage() {
-  const [activeTab, setActiveTab] = useState('AI Picks');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => resolveScreenTab(searchParams.get('screenTab')));
   const setTabRef = useScrollActiveTabIntoView(activeTab);
+
+  useEffect(() => {
+    setActiveTab(resolveScreenTab(searchParams.get('screenTab')));
+  }, [searchParams]);
+
+  const updateTab = useCallback((label) => {
+    setActiveTab(label);
+    const next = new URLSearchParams(searchParams);
+    next.set('screenTab', screenTabToParam(label));
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   return (
     <PageContainer>
       <PageTitle>Screens</PageTitle>
-      <TabContainer>
+      <TabContainer data-page-tabs>
         {SCREEN_TABS.map((label, index) => (
           <Tab
             key={label}
             ref={setTabRef(label)}
             active={activeTab === label}
-            onClick={() => setActiveTab(label)}
+            onClick={() => updateTab(label)}
             last={index === SCREEN_TABS.length - 1}
           >
             {label}

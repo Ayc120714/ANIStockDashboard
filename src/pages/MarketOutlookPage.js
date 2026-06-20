@@ -10,6 +10,7 @@ import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
+import { buildMarketBarChart } from '../utils/marketBarChart';
 import {
   CardContainer,
   Card,
@@ -379,31 +380,6 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     return diiCard.series[diiCard.series.length - 1];
   }, [diiCard, diiHoverIdx]);
 
-  const buildBarChart = (values, activeIndex = null, height = 68) => {
-    if (!values || values.length < 1) return null;
-    const safeVals = values.map((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    });
-    const width = Math.max(160, safeVals.length * 12);
-    const maxAbs = Math.max(...safeVals.map(Math.abs), 1);
-    const gap = 2;
-    const barW = Math.max(4, (width - gap * (values.length - 1)) / values.length);
-    const midY = height / 2;
-    const maxH = midY - 2;
-
-    const rects = safeVals.map((val, i) => {
-      const x = i * (barW + gap);
-      const h = (Math.abs(val) / maxAbs) * maxH;
-      const y = val >= 0 ? midY - h : midY;
-      const fill = val >= 0 ? '#28a745' : '#dc3545';
-      const isActive = activeIndex === i;
-      return { x, y, w: barW, h, fill, isActive, i };
-    });
-
-    return { rects, midY, width, height };
-  };
-
   const getTrendClass = (trend) => {
     if (/bullish|up|↗/i.test(trend)) return 'up';
     if (/bearish|down|↘/i.test(trend)) return 'down';
@@ -514,7 +490,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
       <CashCardContainer>
         {/* FII Cash - Left Column */}
         {(() => {
-          const bars = buildBarChart(fiiCard.bars, fiiHoverIdx);
+          const bars = buildMarketBarChart(fiiCard.bars, fiiHoverIdx);
           return (
             <CashCard>
               <CashTitle>FII Cash</CashTitle>
@@ -536,7 +512,6 @@ function MarketOutlookContent({ apiReady, timedOut }) {
                   <svg
                     viewBox={`0 0 ${bars.width} ${bars.height}`}
                     preserveAspectRatio="xMidYMid meet"
-                    width={bars.width}
                     onMouseLeave={() => setFiiHoverIdx(null)}
                   >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />
@@ -572,7 +547,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
 
         {/* DII Cash - Right Column */}
         {(() => {
-          const bars = buildBarChart(diiCard.bars, diiHoverIdx);
+          const bars = buildMarketBarChart(diiCard.bars, diiHoverIdx);
           return (
             <CashCard>
               <CashTitle>DII Cash</CashTitle>
@@ -594,7 +569,6 @@ function MarketOutlookContent({ apiReady, timedOut }) {
                   <svg
                     viewBox={`0 0 ${bars.width} ${bars.height}`}
                     preserveAspectRatio="xMidYMid meet"
-                    width={bars.width}
                     onMouseLeave={() => setDiiHoverIdx(null)}
                   >
                     <line x1="0" y1={bars.midY} x2={bars.width} y2={bars.midY} stroke="#ccc" strokeWidth="0.5" />

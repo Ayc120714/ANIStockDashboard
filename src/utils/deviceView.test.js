@@ -1,6 +1,7 @@
 import {
   activeMobileAppTab,
   detectDeviceClass,
+  getLayoutViewportWidth,
   isDesktopUserAgent,
   isPhoneUserAgent,
   isTabletUserAgent,
@@ -121,5 +122,25 @@ describe('deviceView', () => {
     expect(tabMatchesPath({id: 'advisor', match: ['/advisor']}, '/advisor', '')).toBe(true);
     expect(activeMobileAppTab('/outlook')).toBe('stocks');
     expect(activeMobileAppTab('/')).toBe('dashboard');
+  });
+
+  it('keeps phone user on app shell when zoom inflates reported width', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
+    expect(getLayoutViewportWidth()).toBe(390);
+    expect(
+      resolveViewMode({
+        ua: IPHONE_SAFARI,
+        width: getLayoutViewportWidth(),
+        minViewportSide: 390,
+      }),
+    ).toBe('app');
+    expect(
+      resolveViewMode({
+        ua: IPHONE_SAFARI,
+        width: 820,
+        minViewportSide: 390,
+      }),
+    ).toBe('app');
   });
 });

@@ -12,18 +12,26 @@ export function readUserAgentDataMobile() {
   return navigator.userAgentData?.mobile ?? null;
 }
 
-export function getViewportWidth() {
+/**
+ * Layout viewport width — ignores pinch-zoom visualViewport shrink/grow so
+ * app-vs-desktop shell does not flip when the user zooms in or out.
+ */
+export function getLayoutViewportWidth() {
   if (typeof window === 'undefined') return 1280;
-  const vv = window.visualViewport?.width;
-  const cw = document.documentElement?.clientWidth;
+  const cw = window.document?.documentElement?.clientWidth;
   const iw = window.innerWidth;
-  return Math.round(Math.min(vv ?? iw, cw ?? iw, iw));
+  return Math.round((cw && cw > 0 ? cw : null) ?? iw);
+}
+
+/** @deprecated Prefer getLayoutViewportWidth for layout breakpoints. */
+export function getViewportWidth() {
+  return getLayoutViewportWidth();
 }
 
 export function getViewportMinSide() {
   if (typeof window === 'undefined') return 1280;
-  const w = getViewportWidth();
-  const h = Math.round(window.visualViewport?.height ?? window.innerHeight);
+  const w = getLayoutViewportWidth();
+  const h = Math.round(window.innerHeight);
   return Math.min(w, h);
 }
 

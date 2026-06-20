@@ -163,7 +163,7 @@ const extractNumeric = (value) => {
     <Box display="flex" justifyContent="flex-end" mb={2}> <TextField size="small" variant="outlined" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /> </Box> 
     {/* Table Section */}
       <TableSection>
-        <TableTitle>Market Indices</TableTitle>
+        <TableTitle>Sector Indices</TableTitle>
         <TableWrapper>
           <Table>
             <thead>

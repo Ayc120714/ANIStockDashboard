@@ -19,7 +19,7 @@ export const SidebarContainer = styled.div.withConfig({
   overflow-x: hidden;
   box-sizing: border-box;
   transition: width 200ms ease, padding 200ms ease;
-  position: ${(p) => (p.$inDrawer ? 'relative' : 'sticky')};
+  position: ${(p) => (p.$inDrawer ? 'relative' : 'relative')};
   top: 0;
   overflow-y: auto;
   overflow-x: hidden;

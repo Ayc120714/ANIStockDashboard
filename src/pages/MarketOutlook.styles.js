@@ -180,8 +180,8 @@ export const BarChart = styled.div`
   overflow-y: hidden;
 
   svg {
+    width: 100%;
     height: 100%;
-    min-width: 100%;
     display: block;
   }
 `;
