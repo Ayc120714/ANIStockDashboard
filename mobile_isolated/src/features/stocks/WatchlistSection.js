@@ -27,6 +27,7 @@ import {navigateToStocksAlerts, navigateToStocksBrokers, navigateToStocksOrders}
 import {readPageCache, writePageCache, clearPageCache} from '@core/storage/pageCache';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractRowArray} from '@core/utils/screenPageLoader';
+import {initialWatchlistPanelState, watchlistHorizonLabel} from './watchlistEmbeddedLayout';
 
 const WATCHLIST_FETCH_MS = API_TIMEOUT_MS.screen;
 
@@ -47,20 +48,43 @@ function ratingBadgeStyle(rec) {
   return {bg: '#ffedd5', fg: '#9a3412', t: r || '—'};
 }
 
-function ChipPicker({options, value, onSelect}) {
+function ChipPicker({options, value, onSelect, compact = false}) {
   return (
-    <View style={styles.chipRow}>
+    <View style={[styles.chipRow, compact ? styles.chipRowCompact : null]}>
       {options.map(opt => {
         const active = value === opt.value;
         return (
           <Pressable
             key={opt.value}
-            style={[styles.chip, active ? styles.chipActive : null]}
+            style={[styles.chip, compact ? styles.chipCompact : null, active ? styles.chipActive : null]}
             onPress={() => onSelect(opt.value)}>
-            <Text style={[styles.chipTxt, active ? styles.chipTxtActive : null]}>{opt.label}</Text>
+            <Text style={[styles.chipTxt, compact ? styles.chipTxtCompact : null, active ? styles.chipTxtActive : null]}>
+              {opt.label}
+            </Text>
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+function EmbeddedActionBar({addExpanded, tradeExpanded, sym, onToggleAdd, onToggleTrade}) {
+  return (
+    <View style={styles.embeddedBar}>
+      <Pressable
+        style={[styles.embeddedBarBtn, addExpanded ? styles.embeddedBarBtnOn : null]}
+        onPress={onToggleAdd}>
+        <Text style={[styles.embeddedBarBtnTxt, addExpanded ? styles.embeddedBarBtnTxtOn : null]}>
+          {addExpanded ? '− Add' : '+ Add'}
+        </Text>
+      </Pressable>
+      <Pressable
+        style={[styles.embeddedBarBtn, tradeExpanded ? styles.embeddedBarBtnOn : null]}
+        onPress={onToggleTrade}>
+        <Text style={[styles.embeddedBarBtnTxt, tradeExpanded ? styles.embeddedBarBtnTxtOn : null]} numberOfLines={1}>
+          {tradeExpanded ? '− Trade' : sym ? `Trade · ${sym}` : 'Trade'}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -80,7 +104,11 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
   const [side, setSide] = useState('BUY');
   const [productType, setProductType] = useState('INTRADAY');
   const [orderType, setOrderType] = useState('MARKET');
+  const panelDefaults = initialWatchlistPanelState(embedded);
+  const [addExpanded, setAddExpanded] = useState(panelDefaults.addExpanded);
+  const [tradeExpanded, setTradeExpanded] = useState(panelDefaults.tradeExpanded);
   const {sortConfig, onSort} = useTableSort('day1d', false);
+  const horizonLabel = watchlistHorizonLabel(horizon);
 
   const cacheKey = MOBILE_PAGE_CACHE_KEYS.watchlist(horizon);
   const loadGenRef = useRef(0);
@@ -115,6 +143,12 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       setSymbolOptions([]);
     }
   }, []);
+
+  useEffect(() => {
+    const next = initialWatchlistPanelState(embedded);
+    setAddExpanded(next.addExpanded);
+    setTradeExpanded(next.tradeExpanded);
+  }, [embedded, horizon]);
 
   useEffect(() => {
     let cancelled = false;
@@ -356,71 +390,151 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     });
   };
 
+  const toggleAddPanel = useCallback(() => {
+    setAddExpanded(prev => {
+      const next = !prev;
+      if (next) setTradeExpanded(false);
+      return next;
+    });
+  }, []);
+
+  const toggleTradePanel = useCallback(() => {
+    setTradeExpanded(prev => {
+      const next = !prev;
+      if (next) setAddExpanded(false);
+      return next;
+    });
+  }, []);
+
+  const selectRowSymbol = useCallback(
+    rowSym => {
+      setSym(rowSym);
+      if (embedded) {
+        setAddExpanded(false);
+        setTradeExpanded(true);
+      }
+    },
+    [embedded],
+  );
+
+  const showAddPanel = !embedded || addExpanded;
+  const showTradePanel = !embedded || tradeExpanded;
+
+  const addPanel = showAddPanel ? (
+    <View style={[styles.panel, embedded ? styles.panelEmbedded : null]}>
+      {!embedded ? (
+        <>
+          <Text style={styles.panelTitle}>Add to {horizonLabel} watchlist</Text>
+          <Text style={styles.panelHint}>Search NSE symbols and tap Add — same lists as the web dashboard.</Text>
+        </>
+      ) : null}
+      <SymbolAutocomplete
+        value={addSym}
+        onChange={setAddSym}
+        options={addSymbolOptions}
+        placeholder="Search symbol to add…"
+      />
+      <Pressable
+        style={[styles.addBtn, embedded ? styles.addBtnCompact : null, adding ? styles.addBtnDisabled : null]}
+        onPress={handleAddToWatchlist}
+        disabled={adding}>
+        {adding ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.addBtnTxt}>{embedded ? 'Add' : 'Add stock'}</Text>
+        )}
+      </Pressable>
+      {actionMsg ? <Text style={styles.actionMsg}>{actionMsg}</Text> : null}
+    </View>
+  ) : null;
+
+  const tradePanel = showTradePanel ? (
+    <View style={[styles.panel, embedded ? styles.panelEmbedded : null]}>
+      {!embedded ? <Text style={styles.panelTitle}>Trade action panel</Text> : null}
+      <View style={styles.btnRow}>
+        <Pressable style={[styles.sq, side === 'BUY' ? styles.buySq : styles.buySqMuted]} onPress={() => setSide('BUY')}>
+          <Text style={styles.sqTxt}>B</Text>
+        </Pressable>
+        <Pressable style={[styles.sq, side === 'SELL' ? styles.sellSq : styles.sellSqMuted]} onPress={() => setSide('SELL')}>
+          <Text style={styles.sqTxt}>S</Text>
+        </Pressable>
+        <Pressable style={styles.outlineBtn} onPress={() => navigateToStocksAlerts(navigation)}>
+          <Text style={styles.outlineTxt}>Set alert</Text>
+        </Pressable>
+        <Pressable style={styles.outlineBtn} onPress={() => navigateToStocksBrokers(navigation)}>
+          <Text style={styles.outlineTxt}>Broker</Text>
+        </Pressable>
+      </View>
+      <SymbolAutocomplete
+        value={sym}
+        onChange={setSym}
+        options={mergedSymbolOptions}
+        placeholder="Search & select symbol…"
+      />
+      <ChipPicker options={PRODUCT_OPTIONS} value={productType} onSelect={setProductType} compact={embedded} />
+      <ChipPicker options={ORDER_TYPES} value={orderType} onSelect={setOrderType} compact={embedded} />
+      <Pressable style={[styles.place, embedded ? styles.placeCompact : null]} onPress={openOrders}>
+        <Text style={styles.placeTxt}>Place order</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const tableHeadRow = (
+    <View style={styles.tableHead}>
+      <SortableTableHeader label="Symbol" sortKey="symbol" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.1}} />
+      <SortableTableHeader label="CMP" sortKey="price" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.9}} />
+      <SortableTableHeader label="1D%" sortKey="day1d" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.7}} />
+      {horizon === 'short_term' ? (
+        <>
+          <SortableTableHeader label="Tier" sortKey="buy_sell_tier" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.5}} />
+          <SortableTableHeader label="RSI" sortKey="rsi" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.6}} />
+          <SortableTableHeader label="Scr" sortKey="score" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.5}} />
+        </>
+      ) : (
+        <>
+          <SortableTableHeader label="Rating" sortKey="recommendation" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.8}} />
+          <SortableTableHeader label="Trnd" sortKey="trend" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.7}} />
+          <SortableTableHeader label="Entry" sortKey="entry" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.2}} />
+        </>
+      )}
+      <Text style={[styles.th, {flex: 0.45}]}> </Text>
+    </View>
+  );
+
+  const listHeader = embedded ? (
+    <>
+      <View style={styles.embeddedHead}>
+        <Text style={styles.embeddedTitle}>{horizonLabel} watchlist</Text>
+        <Text style={styles.embeddedCount}>{rows.length} stocks</Text>
+      </View>
+      <EmbeddedActionBar
+        addExpanded={addExpanded}
+        tradeExpanded={tradeExpanded}
+        sym={sym}
+        onToggleAdd={toggleAddPanel}
+        onToggleTrade={toggleTradePanel}
+      />
+      {addPanel}
+      {tradePanel}
+      {loadError ? <Text style={styles.loadErr}>{loadError}</Text> : null}
+      {tableHeadRow}
+    </>
+  ) : (
+    tableHeadRow
+  );
+
   return (
     <View style={[styles.wrap, embedded ? styles.wrapEmbedded : null]}>
       {!embedded ? (
         <View style={styles.headRow}>
-          <Text style={styles.screenTitle}>
-            {horizon === 'short_term' ? 'Short Term Watchlist' : 'Long Term Watchlist'}
-          </Text>
+          <Text style={styles.screenTitle}>{horizonLabel} Watchlist</Text>
           <Text style={styles.refreshHint}>Live refresh during market hours</Text>
         </View>
       ) : null}
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>
-          Add to {horizon === 'short_term' ? 'Short Term' : 'Long Term'} watchlist
-        </Text>
-        <Text style={styles.panelHint}>Search NSE symbols and tap Add — same lists as the web dashboard.</Text>
-        <SymbolAutocomplete
-          value={addSym}
-          onChange={setAddSym}
-          options={addSymbolOptions}
-          placeholder="Search symbol to add…"
-        />
-        <Pressable
-          style={[styles.addBtn, adding ? styles.addBtnDisabled : null]}
-          onPress={handleAddToWatchlist}
-          disabled={adding}>
-          {adding ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.addBtnTxt}>Add stock</Text>
-          )}
-        </Pressable>
-        {actionMsg ? <Text style={styles.actionMsg}>{actionMsg}</Text> : null}
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Trade action panel</Text>
-        <View style={styles.btnRow}>
-          <Pressable style={[styles.sq, side === 'BUY' ? styles.buySq : styles.buySqMuted]} onPress={() => setSide('BUY')}>
-            <Text style={styles.sqTxt}>B</Text>
-          </Pressable>
-          <Pressable style={[styles.sq, side === 'SELL' ? styles.sellSq : styles.sellSqMuted]} onPress={() => setSide('SELL')}>
-            <Text style={styles.sqTxt}>S</Text>
-          </Pressable>
-          <Pressable style={styles.outlineBtn} onPress={() => navigateToStocksAlerts(navigation)}>
-            <Text style={styles.outlineTxt}>Set alert</Text>
-          </Pressable>
-          <Pressable style={styles.outlineBtn} onPress={() => navigateToStocksBrokers(navigation)}>
-            <Text style={styles.outlineTxt}>Broker</Text>
-          </Pressable>
-        </View>
-        <SymbolAutocomplete
-          value={sym}
-          onChange={setSym}
-          options={mergedSymbolOptions}
-          placeholder="Search & select symbol…"
-        />
-        <ChipPicker options={PRODUCT_OPTIONS} value={productType} onSelect={setProductType} />
-        <ChipPicker options={ORDER_TYPES} value={orderType} onSelect={setOrderType} />
-        <Pressable style={styles.place} onPress={openOrders}>
-          <Text style={styles.placeTxt}>Place order</Text>
-        </Pressable>
-      </View>
-
-      {loadError ? <Text style={styles.loadErr}>{loadError}</Text> : null}
+      {!embedded ? addPanel : null}
+      {!embedded ? tradePanel : null}
+      {!embedded && loadError ? <Text style={styles.loadErr}>{loadError}</Text> : null}
 
       {loading ? (
         <ActivityIndicator style={{marginTop: 16}} color={AYC.accent} />
@@ -428,32 +542,12 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
         <FlatList
           data={sortedRows}
           keyExtractor={item => String(item.id || item.symbol)}
-          style={styles.list}
+          style={[styles.list, embedded ? null : styles.listStandalone]}
           contentContainerStyle={{paddingBottom: 32}}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={
-            <View style={styles.tableHead}>
-              <SortableTableHeader label="Symbol" sortKey="symbol" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.1}} />
-              <SortableTableHeader label="CMP" sortKey="price" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.9}} />
-              <SortableTableHeader label="1D%" sortKey="day1d" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.7}} />
-              {horizon === 'short_term' ? (
-                <>
-                  <SortableTableHeader label="Tier" sortKey="buy_sell_tier" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.5}} />
-                  <SortableTableHeader label="RSI" sortKey="rsi" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.6}} />
-                  <SortableTableHeader label="Scr" sortKey="score" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.5}} />
-                </>
-              ) : (
-                <>
-                  <SortableTableHeader label="Rating" sortKey="recommendation" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.8}} />
-                  <SortableTableHeader label="Trnd" sortKey="trend" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.7}} />
-                  <SortableTableHeader label="Entry" sortKey="entry" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.2}} />
-                </>
-              )}
-              <Text style={[styles.th, {flex: 0.45}]}> </Text>
-            </View>
-          }
+          ListHeaderComponent={listHeader}
           renderItem={({item, index}) => {
             const pct = stockRowPct(item);
             const pc = pct == null ? AYC.textMuted : pct >= 0 ? AYC.positive : AYC.negative;
@@ -464,7 +558,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
             return (
               <Pressable
                 style={[styles.tr, index % 2 === 0 ? styles.trAlt : null, selected ? styles.trSelected : null]}
-                onPress={() => setSym(rowSym)}
+                onPress={() => selectRowSymbol(rowSym)}
                 onLongPress={() => confirmRemoveFromWatchlist(rowSym)}>
                 <View style={[styles.td, {flex: 1.1, flexDirection: 'row', alignItems: 'center'}]}>
                   <TradingViewLink symbol={item.symbol} size={14} />
@@ -513,7 +607,9 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
           }}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              No stocks on this watchlist yet. Use Add stock above to track symbols on mobile.
+              {embedded
+                ? 'No stocks on this watchlist yet. Tap + Add to track symbols.'
+                : 'No stocks on this watchlist yet. Use Add stock above to track symbols on mobile.'}
             </Text>
           }
         />
@@ -524,10 +620,32 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
 
 const styles = StyleSheet.create({
   wrap: {flex: 1},
-  wrapEmbedded: {minHeight: 420},
+  wrapEmbedded: {flex: 1, minHeight: 0},
   headRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 4},
   screenTitle: {...mobileStyles.pageTitle, flex: 1},
   refreshHint: {fontSize: AYC.type.caption, fontWeight: '700', color: AYC.accent},
+  embeddedHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  embeddedTitle: {fontSize: AYC.type.body, fontWeight: '800', color: AYC.text},
+  embeddedCount: {fontSize: AYC.type.caption, fontWeight: '700', color: AYC.textMuted},
+  embeddedBar: {flexDirection: 'row', gap: 8, marginBottom: 8},
+  embeddedBarBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: AYC.cardBorder,
+    backgroundColor: AYC.card,
+    alignItems: 'center',
+  },
+  embeddedBarBtnOn: {backgroundColor: AYC.appBar, borderColor: AYC.appBar},
+  embeddedBarBtnTxt: {fontSize: AYC.type.caption, fontWeight: '800', color: AYC.text},
+  embeddedBarBtnTxtOn: {color: '#fff'},
   panel: {
     marginTop: 10,
     padding: 12,
@@ -538,6 +656,7 @@ const styles = StyleSheet.create({
     gap: 8,
     zIndex: 30,
   },
+  panelEmbedded: {marginTop: 0, padding: 10, borderRadius: 12, gap: 6},
   panelTitle: mobileStyles.cardTitle,
   panelHint: {fontSize: AYC.type.caption, color: AYC.textMuted, lineHeight: 18},
   addBtn: {
@@ -549,6 +668,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addBtnDisabled: {opacity: 0.7},
+  addBtnCompact: {paddingVertical: 10, minHeight: 40},
   addBtnTxt: {color: '#fff', fontWeight: '800', fontSize: AYC.type.metricMd},
   actionMsg: {fontSize: AYC.type.caption, color: AYC.accent, fontWeight: '700'},
   btnRow: {flexDirection: 'row', gap: 8, alignItems: 'center'},
@@ -567,6 +687,7 @@ const styles = StyleSheet.create({
   },
   outlineTxt: {fontSize: AYC.type.caption, fontWeight: '700', color: AYC.accent},
   chipRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  chipRowCompact: {gap: 6},
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -575,8 +696,10 @@ const styles = StyleSheet.create({
     borderColor: AYC.cardBorder,
     backgroundColor: AYC.card,
   },
+  chipCompact: {paddingHorizontal: 8, paddingVertical: 6},
   chipActive: {borderColor: AYC.accent, backgroundColor: '#eff6ff'},
   chipTxt: mobileStyles.chipText,
+  chipTxtCompact: {fontSize: AYC.type.caption},
   chipTxtActive: {color: AYC.accent},
   place: {
     backgroundColor: AYC.appBar,
@@ -584,8 +707,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
+  placeCompact: {paddingVertical: 10},
   placeTxt: {color: '#fff', fontWeight: '800', fontSize: AYC.type.metricMd},
-  list: {marginTop: 12, flex: 1},
+  list: {flex: 1},
+  listStandalone: {marginTop: 12},
   tableHead: {
     flexDirection: 'row',
     backgroundColor: AYC.appBar,

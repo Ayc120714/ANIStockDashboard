@@ -20,12 +20,14 @@ export function StocksHubScreen({navigation, route}) {
     <MobileChrome navigation={navigation}>
       <View style={styles.container}>
         <Text style={styles.screenTitle}>Stocks</Text>
-        <StocksOverviewSection
-          navigation={navigation}
-          initialTab={outlookTab}
-          ordersParams={ordersParams}
-          brokersParams={brokersParams}
-        />
+        <View style={styles.sectionFlex}>
+          <StocksOverviewSection
+            navigation={navigation}
+            initialTab={outlookTab}
+            ordersParams={ordersParams}
+            brokersParams={brokersParams}
+          />
+        </View>
       </View>
     </MobileChrome>
   );
@@ -34,4 +36,5 @@ export function StocksHubScreen({navigation, route}) {
 const styles = StyleSheet.create({
   container: {flex: 1, ...mobilePad},
   screenTitle: mobileStyles.pageTitle,
+  sectionFlex: {flex: 1, minHeight: 0},
 });

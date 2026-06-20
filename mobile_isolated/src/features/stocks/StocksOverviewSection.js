@@ -47,8 +47,8 @@ const OUTLOOK_TABS = [
   {id: 'market', label: 'Market'},
   {id: 'sector', label: 'Sector'},
   {id: 'sub', label: 'SubSector'},
-  {id: 'long_term', label: 'Long term'},
-  {id: 'short_term', label: 'Short term'},
+  {id: 'long_term', label: 'LT'},
+  {id: 'short_term', label: 'ST'},
   {id: 'orders', label: 'Orders'},
   {id: 'brokers', label: 'Brokers'},
 ];
@@ -513,7 +513,7 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
   if (isStockEmbeddedTabId(tab)) {
     return (
       <View style={styles.wrapFlex}>
-        <Text style={styles.ovTitle}>Overview</Text>
+        {!isWatchlistTabId(tab) ? <Text style={styles.ovTitle}>Overview</Text> : null}
         {tabBar}
         {isWatchlistTabId(tab) ? (
           <WatchlistSection navigation={navigation} listType={tab} embedded />
@@ -574,13 +574,13 @@ const styles = StyleSheet.create({
   chipRow: {flexDirection: 'row', gap: 8, paddingVertical: 4, alignItems: 'center'},
   chipScroll: {flexGrow: 0},
   bigChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: AYC.accent,
     backgroundColor: AYC.card,
-    minHeight: 36,
+    minHeight: 34,
     justifyContent: 'center',
     flexShrink: 0,
   },
