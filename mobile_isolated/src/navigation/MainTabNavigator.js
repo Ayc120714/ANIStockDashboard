@@ -10,13 +10,14 @@ import {useSetupAlerts} from '@core/context/SetupAlertsContext';
 import {authService} from '@core/api/services/authService';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {ensureNotificationPermission, showSystemNotification, consumePendingEntryHint, queueInAppEntryBanner} from '@core/utils/signalNotifications';
-import {navigateToAdvisorTab, navigateToMainTab, navigateToScreensMain, navigateToSignals} from '@nav/navigationHelpers';
+import {navigateToAdvisorTab, navigateToAlerts, navigateToMainTab, navigateToScreensMain, navigateToSignals} from '@nav/navigationHelpers';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {DashboardScreen} from '@features/dashboard/DashboardScreen';
 import {StocksHubScreen} from '@features/stocks/StocksHubScreen';
 import {ScreensHubScreen} from '@features/screens/ScreensHubScreen';
 import {SignalsScreen} from '@features/signals/SignalsScreen';
 import {AdvisorHubScreen} from '@features/advisor/AdvisorHubScreen';
+import {useBackgroundWeeklyCrossSync} from '@hooks/useBackgroundWeeklyCrossSync';
 
 const Tab = createBottomTabNavigator();
 
@@ -43,6 +44,7 @@ export function MainTabNavigator({navigation}) {
   const insets = useSafeAreaInsets();
   const {user} = useAuth();
   const isSuperAdmin = Boolean(user?.is_super_admin);
+  useBackgroundWeeklyCrossSync(Boolean(user));
   const {
     entryHint: setupEntryHint,
     entryNavTarget: setupEntryNavTarget,
@@ -130,7 +132,9 @@ export function MainTabNavigator({navigation}) {
       });
     } else if (target.type === 'screens' && target.screensMain) {
       navigateToScreensMain(navigation, target.screensMain);
-    } else if (target.type === 'stocks_alerts' || target.type === 'signals') {
+    } else if (target.type === 'alerts' || target.type === 'stocks_alerts') {
+      navigateToAlerts(navigation);
+    } else if (target.type === 'signals') {
       navigateToSignals(navigation);
     } else {
       navigateToMainTab(navigation, 'Signals');

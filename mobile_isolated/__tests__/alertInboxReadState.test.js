@@ -96,17 +96,17 @@ describe('notification inbox read state', () => {
     });
   });
 
-  it('routes live advisor alerts to Signals tab', () => {
-    expect(resolveInboxNavigationTarget(liveItem)).toEqual({type: 'signals'});
+  it('routes live advisor alerts to Alerts screen', () => {
+    expect(resolveInboxNavigationTarget(liveItem)).toEqual({type: 'alerts'});
   });
 
-  it('routes price alerts to Signals tab (not Stocks alerts)', () => {
+  it('routes price alerts to Alerts screen (not Signals)', () => {
     expect(
       resolveInboxNavigationTarget({
         id: 'price:1',
         source: INBOX_SOURCES.PRICE,
         title: 'RELIANCE crossed threshold',
       }),
-    ).toEqual({type: 'signals'});
+    ).toEqual({type: 'alerts'});
   });
 });

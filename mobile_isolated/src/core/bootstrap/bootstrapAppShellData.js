@@ -340,6 +340,9 @@ export async function warmAppShellInBackground({onProgress} = {}) {
     } catch {
       /* advisor warm is best-effort */
     }
+    for (const batch of PARALLEL_WARM_BATCHES) {
+      await Promise.allSettled(batch.map(job => job({onProgress})));
+    }
     return {ok: true};
   })().finally(() => {
     inflightWarm = null;

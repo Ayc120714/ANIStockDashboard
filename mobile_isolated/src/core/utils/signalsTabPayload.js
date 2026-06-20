@@ -141,13 +141,17 @@ export function buildSignalsTabRows(signals = [], liveAlerts = []) {
   return [...liveList, ...rest].sort(compareSignalsTabRows);
 }
 
+/** Scanned advisor signals only — live entry/exit alerts belong on the Alerts screen. */
 export async function fetchSignalsTabPayload() {
-  const [signals, liveRes] = await Promise.all([
-    fetchMobileSignalsTabRows(),
-    alertsService
-      .fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT, timeoutMs: API_TIMEOUT_MS.advisor})
-      .catch(() => []),
-  ]);
+  const signals = await fetchMobileSignalsTabRows();
+  return buildSignalsTabRows(signals, []);
+}
+
+/** Today's live entry/exit advisor alerts with Entry / SL / targets. */
+export async function fetchAlertsTabPayload() {
+  const liveRes = await alertsService
+    .fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT, timeoutMs: API_TIMEOUT_MS.advisor})
+    .catch(() => []);
   const liveAlerts = Array.isArray(liveRes) ? liveRes : extractApiRows(liveRes);
-  return buildSignalsTabRows(signals, liveAlerts);
+  return buildSignalsTabRows([], liveAlerts);
 }

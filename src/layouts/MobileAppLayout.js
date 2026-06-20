@@ -4,6 +4,7 @@ import Drawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
+import SessionCacheWarmup from '../components/SessionCacheWarmup';
 import {BootstrapReadyProvider} from '../context/BootstrapReadyContext';
 import {MobileNavDrawerProvider} from '../context/MobileNavDrawerContext';
 import {MOBILE_APP_TABS, activeMobileAppTab, tabMatchesPath} from '../utils/deviceView';
@@ -55,6 +56,7 @@ function MobileAppLayout() {
 
           <MainColumn>
             <Header showMenuButton onMenuOpen={() => setDrawerOpen(true)} />
+            <SessionCacheWarmup />
             <AppContent>
               <Outlet />
             </AppContent>

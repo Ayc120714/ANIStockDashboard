@@ -83,14 +83,18 @@ export function navigateToStocksBrokers(navigation, brokersParams = {}) {
   navigateToStocksOutlookTab(navigation, 'brokers', {brokersParams});
 }
 
-/** Web `/alerts` monitoring surfaces on the Signals tab — not Stocks → Alerts. */
+/** Open the dedicated Live Alerts stack screen (entry / target / trade). */
+export function navigateToAlerts(navigation) {
+  navigateToRootScreen(navigation, 'Alerts');
+}
+
 export function navigateToSignals(navigation) {
   navigateToMainTab(navigation, 'Signals');
 }
 
-/** @deprecated Use navigateToSignals — web alerts map to the Signals tab. */
+/** @deprecated Use navigateToAlerts for live advisor alerts. */
 export function navigateToStocksAlerts(navigation) {
-  navigateToSignals(navigation);
+  navigateToAlerts(navigation);
 }
 
 export function navigateToAdvisorTab(navigation, advisorTab = 'sig', extraParams = {}) {
@@ -134,8 +138,8 @@ export function navigateFromInboxItem(navigation, item, target) {
     navigateToMainTab(navigation, 'Signals');
     return;
   }
-  if (target?.type === 'stocks_alerts' || target?.type === 'signals') {
-    navigateToSignals(navigation);
+  if (target?.type === 'alerts' || target?.type === 'stocks_alerts') {
+    navigateToAlerts(navigation);
     return;
   }
   navigateToSignals(navigation);
@@ -163,7 +167,7 @@ export function navigateFromMenu(navigation, screen, params) {
     return;
   }
   if (screen === 'Alerts') {
-    navigateToSignals(navigation);
+    navigateToAlerts(navigation);
     return;
   }
   if (screen === 'Signals') {

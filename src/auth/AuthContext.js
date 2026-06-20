@@ -3,6 +3,7 @@ import { configureAuthHandlers, clearApiGetCache } from '../api/apiClient';
 import { fetchMe, logoutSession, refreshSession } from '../api/auth';
 import { clearBrokerSession } from '../api/brokers';
 import { resolveOutlookPremiumAccess } from '../utils/outlookPremiumAccess';
+import { clearAllSessionPageCaches } from '../utils/pageDataCache';
 import { beginLogout, isLogoutActive, resetLogoutState } from './authSessionControl';
 
 const ACCESS_KEY = 'auth_access_token';
@@ -187,6 +188,7 @@ export function AuthProvider({ children }) {
 
     clearAuth();
     clearApiGetCache();
+    clearAllSessionPageCaches();
     setBootstrapping(false);
     resetLogoutState();
 

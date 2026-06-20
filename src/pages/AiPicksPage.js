@@ -5,6 +5,18 @@ import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.s
 import { fetchWeeklyPicks, triggerWeeklyPicks, generateWeeklyPicks } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
 import TradingViewLink from '../components/TradingViewLink';
+import { AI_PICKS_CACHE_KEY } from '../bootstrap/prefetchAppShellData';
+import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+
+const applyPicksPayload = (resp, setData) => {
+  setData({
+    bullish: resp?.bullish ?? [],
+    bearish: resp?.bearish ?? [],
+    fno_bullish: resp?.fno_bullish ?? [],
+    fno_bearish: resp?.fno_bearish ?? [],
+    pick_date: resp?.pick_date ?? null,
+  });
+};
 
 const gradeColor = { A: '#1b5e20', B: '#2e7d32', C: '#f57f17', D: '#c62828' };
 const gradeBg = { A: '#e8f5e9', B: '#f1f8e9', C: '#fff8e1', D: '#ffebee' };
@@ -66,22 +78,34 @@ function AiPicksPage() {
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const autoGenerateAttemptedRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ forceNetwork = false } = {}) => {
     setError(null);
+    const cached = readPageCache(AI_PICKS_CACHE_KEY);
+    let hydrated = false;
+    if (!forceNetwork && cached?.data && (cached.data.bullish?.length || cached.data.bearish?.length)) {
+      applyPicksPayload(cached.data, setData);
+      hydrated = true;
+      setLoading(false);
+    }
+    if (!forceNetwork && hydrated && (await shouldUseCachedPageDataOnly(AI_PICKS_CACHE_KEY))) {
+      return cached.data;
+    }
+    if (!hydrated) setLoading(true);
     try {
       const resp = await fetchWeeklyPicks();
-      setData({
+      const payload = {
         bullish: resp?.bullish ?? [],
         bearish: resp?.bearish ?? [],
         fno_bullish: resp?.fno_bullish ?? [],
         fno_bearish: resp?.fno_bearish ?? [],
         pick_date: resp?.pick_date ?? null,
-      });
+      };
+      writePageCache(AI_PICKS_CACHE_KEY, payload);
+      applyPicksPayload(payload, setData);
       return resp;
     } catch (e) {
-      setError(e?.message || 'Failed to load weekly picks');
-      return null;
+      if (!hydrated) setError(e?.message || 'Failed to load weekly picks');
+      return hydrated ? cached?.data ?? null : null;
     } finally {
       setLoading(false);
     }

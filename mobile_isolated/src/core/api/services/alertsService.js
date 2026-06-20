@@ -52,4 +52,13 @@ export const alertsService = {
     const data = await tradeApiGet(`/price-alerts/triggers${q}`, {timeoutMs: timeoutMs ?? T.screen});
     return extractApiRows(data, ['data']);
   },
+  syncLatestEodWeeklyCrossAlerts: ({limitSymbols = 3000, maxStaleDays = 14, timeoutMs} = {}) =>
+    apiPost(
+      `/advisor/alerts/sync-latest-eod-weekly-cross${toQuery({
+        limit_symbols: limitSymbols,
+        max_stale_days: maxStaleDays,
+      })}`,
+      {},
+      {timeoutMs: timeoutMs ?? T.heavy, cache: 'no-store'},
+    ),
 };

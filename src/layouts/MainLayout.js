@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Header/Header';
+import SessionCacheWarmup from '../components/SessionCacheWarmup';
 import { BootstrapReadyProvider } from '../context/BootstrapReadyContext';
 import { MobileNavDrawerProvider } from '../context/MobileNavDrawerContext';
 import { mobileNavBreakpoint } from '../components/Sidebar/Sidebar.styles';
@@ -129,6 +130,7 @@ function MainLayout() {
 
           <MainContent>
             <Header />
+            <SessionCacheWarmup />
             <ContentArea>
               <DesktopOnlyNote>
                 Note: Some analytics tables are easiest to read on a larger monitor; the app is fully usable on

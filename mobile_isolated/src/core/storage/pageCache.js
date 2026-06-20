@@ -76,6 +76,26 @@ export async function clearPageCache(key) {
   }
 }
 
+const MOBILE_PAGE_CACHE_PREFIX = '@ani/mobile/page-cache/';
+
+export function isSessionPageCacheKey(key) {
+  return typeof key === 'string' && key.includes(MOBILE_PAGE_CACHE_PREFIX);
+}
+
+/** Remove all warmed tab caches when the user signs out. */
+export async function clearAllSessionPageCaches() {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const pageKeys = allKeys.filter(isSessionPageCacheKey);
+    if (pageKeys.length) {
+      await AsyncStorage.multiRemove(pageKeys);
+    }
+    return pageKeys.length;
+  } catch {
+    return 0;
+  }
+}
+
 /** True when off-market and an existing cache is fresh enough to avoid refetch. */
 export async function shouldUseCachedPageDataOnly(cacheKey) {
   if (ALWAYS_FETCH_FROM_DB) return false;

@@ -1,5 +1,46 @@
 import { CLOSED_PAGE_CACHE_MS, ensureMarketSession, shouldSkipNetworkForClosedMarket } from './marketSession';
 
+/** sessionStorage keys cleared on logout (substring match). */
+export const SESSION_PAGE_CACHE_MARKERS = [
+  'dashboard_overview_cache',
+  'marketOutlook',
+  'sectorOutlook',
+  'subsectorOutlook',
+  'shortTermWatchlist',
+  'longTermWatchlist',
+  'trendingStocksData',
+  'priceShockersData',
+  'volumeShockersData',
+  'relativePerformanceData',
+  'advisor_',
+  'mf_',
+  'ani:fno',
+  'trendReversal',
+  'broker_holdings',
+  'aiWeeklyPicks',
+  'ipoListing',
+];
+
+export function isSessionPageCacheKey(key) {
+  if (!key || typeof key !== 'string') return false;
+  return SESSION_PAGE_CACHE_MARKERS.some((marker) => key.includes(marker));
+}
+
+export function clearAllSessionPageCaches() {
+  if (typeof sessionStorage === 'undefined') return 0;
+  try {
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (isSessionPageCacheKey(key)) keys.push(key);
+    }
+    keys.forEach((key) => sessionStorage.removeItem(key));
+    return keys.length;
+  } catch (_) {
+    return 0;
+  }
+}
+
 export function cacheHasUsableData(data) {
   if (data == null) return false;
   if (Array.isArray(data)) return data.length > 0;

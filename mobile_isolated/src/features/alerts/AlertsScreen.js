@@ -12,6 +12,8 @@ import {formatAlertTimeIST} from '@core/utils/alertInboxUtils';
 import {formatNowTimeIST} from '@core/utils/istTime';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
+import {isLiveEntryExitAlert, liveAlertToSignalRow} from '@core/utils/signalsTabPayload';
+import {isTodayInIST} from '@core/utils/alertInboxUtils';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
 const POLL_MS = 15000;
@@ -69,7 +71,11 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
         retries: 2,
         label: 'Alerts',
       });
-      const list = normalizeList(resp);
+      const list = normalizeList(resp)
+        .filter(row => isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time))
+        .filter(isLiveEntryExitAlert)
+        .map(liveAlertToSignalRow)
+        .filter(row => row.symbol);
       setAlerts(prev => {
         const prevIds = new Set((prev || []).map(item => String(item?.id || '')));
         const incomingIds = list.map(item => String(item?.id || ''));
@@ -176,9 +182,9 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
             <Text style={styles.symbol}>{item?.symbol || 'N/A'}</Text>
             <Text style={styles.severity}>{String(item?.severity || 'info').toUpperCase()}</Text>
           </View>
-          <Text style={styles.message}>{item?.message || item?.alert_type || 'Alert'}</Text>
+          <Text style={styles.message}>{item?._alertMessage || item?.message || item?._alertType || 'Alert'}</Text>
           <Text style={styles.signalLine}>{renderSignalLine(item)}</Text>
-          <Text style={styles.time}>{formatAlertTimeIST(item?.timestamp)}</Text>
+          <Text style={styles.time}>{formatAlertTimeIST(item?._alertAt || item?.timestamp)}</Text>
           <Pressable
             style={styles.tradeBtn}
             onPress={() => setTradePickerAlert(item)}>

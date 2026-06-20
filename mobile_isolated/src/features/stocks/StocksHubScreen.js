@@ -1,7 +1,7 @@
 import React, {useEffect} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
-import {navigateToSignals} from '@nav/navigationHelpers';
+import {navigateToAlerts} from '@nav/navigationHelpers';
 import {mobilePad, mobileStyles} from '@core/theme/mobileStyles';
 import {StocksOverviewSection} from './StocksOverviewSection';
 
@@ -12,7 +12,7 @@ export function StocksHubScreen({navigation, route}) {
 
   useEffect(() => {
     if (outlookTab === 'alerts') {
-      navigateToSignals(navigation);
+      navigateToAlerts(navigation);
     }
   }, [navigation, outlookTab]);
 

@@ -36,3 +36,16 @@ export function buildSignalNotificationPayload(freshSignals = []) {
     totalCount: fresh.length,
   };
 }
+
+export function buildLiveAlertNotificationPayload(freshAlerts = []) {
+  const payload = buildSignalNotificationPayload(freshAlerts);
+  if (!payload) {
+    return null;
+  }
+  return {
+    ...payload,
+    title: payload.title.replace(/\bsignal\b/gi, 'alert'),
+    entryHint: payload.entryHint.replace(/\bsignal\b/gi, 'alert'),
+    navTarget: {type: 'alerts'},
+  };
+}

@@ -7,6 +7,7 @@ import {env} from '@core/config/env';
 import {beginLogout, isLogoutActive, resetLogoutState} from '@core/auth/authSessionControl';
 import {sessionStorage} from '@core/storage/sessionStorage';
 import {tokenStorage} from '@core/storage/tokenStorage';
+import {clearAllSessionPageCaches} from '@core/storage/pageCache';
 
 const isLocalDevToken = token =>
   typeof token === 'string' && /^local-(access|refresh)-/.test(token);
@@ -61,6 +62,7 @@ export const AuthProvider = ({children}) => {
     resetLogoutState();
 
     void (async () => {
+      await clearAllSessionPageCaches();
       let refreshToken = null;
       try {
         refreshToken = await tokenStorage.getRefreshToken();

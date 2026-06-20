@@ -28,11 +28,14 @@ export async function downloadAndInstallAppUpdate(apkUrl) {
 }
 
 export function showUpdateDownloadError(error) {
+  const code = String(error?.code || error?.userInfo?.code || '').trim();
   const message =
     String(error?.message || error || '').trim() ||
     'Could not download the update. Check your connection and try again.';
+  const title =
+    code === 'INSTALL_PERMISSION' ? 'Allow app installs' : 'Update failed';
   Alert.alert(
-    'Update failed',
+    title,
     `${message}\n\nYou can also download manually from:\n${APP_DIRECT_APK_URL}`,
     [
       {text: 'Cancel', style: 'cancel'},

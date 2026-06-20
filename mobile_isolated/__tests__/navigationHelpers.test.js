@@ -3,6 +3,7 @@ import {
   isInsideMainTabs,
   navigateFromInboxItem,
   navigateFromMenu,
+  navigateToAlerts,
   navigateToMainTab,
   navigateToSignals,
 } from '@nav/navigationHelpers';
@@ -81,13 +82,19 @@ describe('navigationHelpers', () => {
     });
   });
 
-  it('routes legacy Alerts menu entries to the Signals tab', () => {
-    const navigation = mockTabNavigation();
-    navigateFromMenu(navigation, 'Alerts');
-    expect(navigation.navigate).toHaveBeenCalledWith('Signals');
+  it('routes legacy Alerts menu entries to the Alerts stack screen', () => {
+    const {tabNav, rootNavigate} = mockStackNavigation();
+    navigateFromMenu(tabNav, 'Alerts');
+    expect(rootNavigate).toHaveBeenCalledWith('Alerts');
   });
 
-  it('maps navigateToStocksAlerts to the Signals tab', () => {
+  it('maps navigateToStocksAlerts to the Alerts stack screen', () => {
+    const {tabNav, rootNavigate} = mockStackNavigation();
+    navigateToAlerts(tabNav);
+    expect(rootNavigate).toHaveBeenCalledWith('Alerts');
+  });
+
+  it('navigates to the Signals tab via navigateToSignals', () => {
     const navigation = mockTabNavigation();
     navigateToSignals(navigation);
     expect(navigation.navigate).toHaveBeenCalledWith('Signals');

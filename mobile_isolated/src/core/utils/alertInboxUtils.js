@@ -392,10 +392,10 @@ export function resolveInboxNavigationTarget(item) {
     };
   }
   if (item?.source === INBOX_SOURCES.LIVE) {
-    return {type: 'signals'};
+    return {type: 'alerts'};
   }
   if (item?.source === INBOX_SOURCES.PRICE) {
-    return {type: 'signals'};
+    return {type: 'alerts'};
   }
   return {type: 'signals'};
 }

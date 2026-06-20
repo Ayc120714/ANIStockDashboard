@@ -19,14 +19,61 @@ export function extractRowArray(data) {
   return [];
 }
 
-export async function shouldSkipScreenFetch(cacheKey) {
+export async function shouldSkipScreenFetch(cacheKey, cachedWrap = null) {
   await ensureMarketSession();
   const session = getCachedMarketSession();
   if (shouldPollLiveMarket(session)) return false;
-  const cached = readPageCache(cacheKey);
+  const cached = cachedWrap || readPageCache(cacheKey);
   if (!cached || !cacheHasUsableData(cached.data)) return false;
   if (isPageCacheStale(cached.updatedAt, session)) return false;
   return shouldSkipNetworkForClosedMarket(cached.updatedAt, true);
+}
+
+function scheduleBackgroundTableRefresh({
+  cacheKey,
+  fetcher,
+  setRows,
+  setError,
+  forceNetwork = false,
+  mapRows = (rows) => rows,
+}) {
+  void (async () => {
+    try {
+      const session = getCachedMarketSession();
+      if (forceNetwork && shouldPollLiveMarket(session)) {
+        clearApiGetCache();
+      }
+      const fresh = await fetcher();
+      const raw = extractRowArray(fresh);
+      writePageCache(cacheKey, Array.isArray(fresh) ? fresh : raw);
+      setRows(mapRows(raw));
+      if (setError) setError(null);
+    } catch (_) {
+      if (setError) setError(null);
+    }
+  })();
+}
+
+function scheduleBackgroundPayloadRefresh({
+  cacheKey,
+  fetcher,
+  applyPayload,
+  setError,
+  hasUsable,
+  forceNetwork = false,
+}) {
+  void (async () => {
+    try {
+      const fresh = await fetcher();
+      if (hasUsable(fresh)) {
+        writePageCache(cacheKey, fresh);
+        applyPayload(fresh);
+      }
+      if (setError) setError(null);
+    } catch (_) {
+      if (setError) setError(null);
+    }
+  })();
 }
 
 /**
@@ -59,8 +106,20 @@ export async function runScreenTableFetch({
     await ensureMarketSession();
   }
 
-  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey))) {
+  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey, cached))) {
     setLoading(false);
+    return;
+  }
+
+  if (!forceNetwork && hydrated) {
+    scheduleBackgroundTableRefresh({
+      cacheKey,
+      fetcher,
+      setRows,
+      setError,
+      forceNetwork,
+      mapRows,
+    });
     return;
   }
 
@@ -112,8 +171,20 @@ export async function runScreenPayloadFetch({
     await ensureMarketSession();
   }
 
-  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey))) {
+  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey, cached))) {
     setLoading(false);
+    return;
+  }
+
+  if (!forceNetwork && hydrated) {
+    scheduleBackgroundPayloadRefresh({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setError,
+      hasUsable,
+      forceNetwork,
+    });
     return;
   }
 

@@ -3,8 +3,10 @@ import {
   bootstrapCriticalDashboard,
   startAppShellAutoRefresh,
   stopAppShellAutoRefresh,
+  warmAppShellInBackground,
 } from '@core/bootstrap/bootstrapAppShellData';
 import {registerMobileInstall} from '@core/api/services/mobileService';
+import {prefetchAppShellData} from '@core/bootstrap/prefetchAppShellData';
 import {readPageCache} from '@core/storage/pageCache';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {readDashboardCache} from '@core/storage/dashboardCache';
@@ -41,6 +43,8 @@ export function AppStartupLoader({onReady}) {
       // Never block the UI on network — tabs hydrate from cache and refresh in background.
       finishStartup();
       bootstrapCriticalDashboard().catch(() => {});
+      prefetchAppShellData().catch(() => {});
+      warmAppShellInBackground().catch(() => {});
     })();
 
     return () => {

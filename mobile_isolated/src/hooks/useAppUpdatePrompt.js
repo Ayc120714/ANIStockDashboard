@@ -27,10 +27,10 @@ async function rememberHandledUpdate(remoteCode) {
 }
 
 async function startAppUpdate(apkUrl, targetVersion, remoteCode) {
-  await rememberHandledUpdate(remoteCode);
   await trackApkDownload({targetVersion, source: 'update_prompt'});
   try {
     await downloadAndInstallAppUpdate(apkUrl);
+    await rememberHandledUpdate(remoteCode);
   } catch (error) {
     showUpdateDownloadError(error);
   }

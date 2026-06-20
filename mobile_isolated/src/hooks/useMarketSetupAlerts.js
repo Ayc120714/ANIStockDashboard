@@ -25,7 +25,7 @@ import {
   getCachedMarketSession,
   shouldPollLiveMarket,
 } from '@core/utils/marketSession';
-import {buildSignalNotificationPayload} from '@core/utils/signalNotificationCopy';
+import {buildLiveAlertNotificationPayload, buildSignalNotificationPayload} from '@core/utils/signalNotificationCopy';
 import {diffNewSignals, signalsDigest} from '@core/utils/signalsDigest';
 import {
   ensureNotificationPermission,
@@ -103,6 +103,19 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
   const timerRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
 
+  const applyLiveAlertBanner = useCallback(async fresh => {
+    const payload = buildLiveAlertNotificationPayload(fresh);
+    if (!payload) return;
+    setEntryHint(payload.entryHint);
+    setEntryNavTarget(payload.navTarget || {type: 'alerts'});
+    setSignalsBadge(fresh.length > 99 ? '99+' : String(fresh.length));
+    await queueInAppEntryBanner({
+      entryHint: payload.entryHint,
+      navTarget: payload.navTarget || {type: 'alerts'},
+    });
+    await notifyNewSignals(fresh, {vibrateInApp: appStateRef.current === 'active'});
+  }, []);
+
   const applySignalBanner = useCallback(async fresh => {
     const payload = buildSignalNotificationPayload(fresh);
     if (!payload) return;
@@ -160,18 +173,18 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
       if (actionable.length) {
         const entryReady = actionable.filter(row => String(row.status) === 'entry_ready');
         if (entryReady.length) {
-          await applySignalBanner(entryReady);
+          await applyLiveAlertBanner(entryReady);
         } else {
           const names = actionable
             .slice(0, 4)
             .map(row => row.symbol)
             .join(', ');
-          setEntryHint(`New live signal${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`);
-          setEntryNavTarget({type: 'signals'});
+          setEntryHint(`New live alert${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`);
+          setEntryNavTarget({type: 'alerts'});
           setSignalsBadge(prevBadge => prevBadge || (actionable.length > 99 ? '99+' : String(actionable.length)));
           await queueInAppEntryBanner({
-            entryHint: `New live signal${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`,
-            navTarget: {type: 'signals'},
+            entryHint: `New live alert${actionable.length > 1 ? 's' : ''}: ${names}. Tap to open.`,
+            navTarget: {type: 'alerts'},
           });
         }
         await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
@@ -182,7 +195,7 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
 
     await AsyncStorage.setItem(STORAGE_KEYS.liveAdvisorAlertsDigest, digest);
     firstLiveAlertPoll.current = false;
-  }, [applySignalBanner]);
+  }, [applyLiveAlertBanner]);
 
   const pollTableChanges = useCallback(async () => {
     const snapshots = await fetchAdvisorTableSnapshots().catch(() => null);
