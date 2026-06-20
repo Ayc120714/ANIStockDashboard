@@ -1,12 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { configureAuthHandlers } from '../api/apiClient';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { configureAuthHandlers, clearApiGetCache } from '../api/apiClient';
 import { fetchMe, logoutSession, refreshSession } from '../api/auth';
 import { clearBrokerSession } from '../api/brokers';
 import { resolveOutlookPremiumAccess } from '../utils/outlookPremiumAccess';
+import { beginLogout, isLogoutActive, resetLogoutState } from './authSessionControl';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY = 'auth_user';
+const LOGOUT_BROKERS = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
 const DEFAULT_ADMIN_EMAILS = ['gvc1990@gmail.com', 'admin@aycindustries.com'];
 
 const AuthContext = createContext(null);
@@ -56,6 +58,7 @@ export function AuthProvider({ children }) {
     }
   });
   const [bootstrapping, setBootstrapping] = useState(true);
+  const authRunRef = useRef(0);
 
   const clearAuth = useCallback(() => {
     setAccessToken('');
@@ -79,13 +82,15 @@ export function AuthProvider({ children }) {
   }, []);
 
   const hydrateMe = useCallback(async () => {
+    if (isLogoutActive()) return;
     // After login, tokens are written to localStorage before React state updates; read storage so
     // /auth/me still runs (avoids treating user as basic/premium from stale partial login payloads).
     const token =
       accessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem(ACCESS_KEY) || '' : '');
-    if (!token) return;
+    if (!token || isLogoutActive()) return;
     try {
       const data = await fetchMe();
+      if (isLogoutActive()) return;
       if (data?.user) {
         setUser(data.user);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
@@ -96,12 +101,14 @@ export function AuthProvider({ children }) {
   }, [accessToken]);
 
   const tryRefresh = useCallback(async () => {
+    if (isLogoutActive()) return false;
     if (!refreshToken) {
       clearAuth();
       return false;
     }
     try {
       const data = await refreshSession(refreshToken);
+      if (isLogoutActive()) return false;
       if (!data?.access_token || !data?.refresh_token) {
         clearAuth();
         return false;
@@ -116,14 +123,16 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     configureAuthHandlers({
-      getAccessToken: () => localStorage.getItem(ACCESS_KEY) || '',
-      onUnauthorized: () => tryRefresh(),
+      getAccessToken: () => (isLogoutActive() ? '' : localStorage.getItem(ACCESS_KEY) || ''),
+      onUnauthorized: () => (isLogoutActive() ? false : tryRefresh()),
     });
   }, [tryRefresh]);
 
   useEffect(() => {
     let mounted = true;
+    const runId = authRunRef.current;
     (async () => {
+      if (isLogoutActive()) return;
       if (!accessToken && !refreshToken) {
         if (mounted) setBootstrapping(false);
         return;
@@ -133,7 +142,9 @@ export function AuthProvider({ children }) {
       } else {
         await tryRefresh();
       }
-      if (mounted) setBootstrapping(false);
+      if (mounted && authRunRef.current === runId && !isLogoutActive()) {
+        setBootstrapping(false);
+      }
     })();
     return () => {
       mounted = false;
@@ -142,50 +153,46 @@ export function AuthProvider({ children }) {
 
   // Re-fetch /auth/me so paid-premium expiry updates outlook_premium without a full reload (paywall on).
   useEffect(() => {
-    if (!accessToken) return undefined;
+    if (!accessToken || isLogoutActive()) return undefined;
     const tick = () => {
-      hydrateMe();
+      if (!isLogoutActive()) hydrateMe();
     };
     const id = window.setInterval(tick, 120000);
     return () => window.clearInterval(id);
   }, [accessToken, hydrateMe]);
 
   useEffect(() => {
-    if (!accessToken) return undefined;
+    if (!accessToken || isLogoutActive()) return undefined;
     const onVis = () => {
-      if (document.visibilityState === 'visible') hydrateMe();
+      if (document.visibilityState === 'visible' && !isLogoutActive()) hydrateMe();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [accessToken, hydrateMe]);
 
-  const logout = useCallback(async () => {
-    const userId = String(user?.id || user?.user_id || user?.email || '');
-    try {
-      if (userId) {
-        // Run before /auth/logout: logout revokes the access session immediately, so broker
-        // disconnect would otherwise see 401 (and trigger refresh noise in logs).
-        await Promise.allSettled([
-          clearBrokerSession({ user_id: userId, broker: 'dhan' }),
-          clearBrokerSession({ user_id: userId, broker: 'angelone' }),
-          clearBrokerSession({ user_id: userId, broker: 'samco' }),
-          clearBrokerSession({ user_id: userId, broker: 'upstox' }),
-          clearBrokerSession({ user_id: userId, broker: 'kotak' }),
-          clearBrokerSession({ user_id: userId, broker: 'fyers' }),
-          clearBrokerSession({ user_id: userId, broker: 'zerodha' }),
-        ]);
-      }
-    } catch (_) {
-      // noop
+  const logout = useCallback(() => {
+    if (isLogoutActive()) return;
+
+    beginLogout();
+    authRunRef.current += 1;
+
+    const capturedRefresh = refreshToken || localStorage.getItem(REFRESH_KEY) || '';
+    const capturedUserId = String(user?.id || user?.user_id || user?.email || '');
+
+    if (capturedUserId) {
+      LOGOUT_BROKERS.forEach((broker) => {
+        void clearBrokerSession({ user_id: capturedUserId, broker }).catch(() => {});
+      });
     }
-    try {
-      if (refreshToken) {
-        await logoutSession(refreshToken);
-      }
-    } catch (_) {
-      // noop
-    }
+
     clearAuth();
+    clearApiGetCache();
+    setBootstrapping(false);
+    resetLogoutState();
+
+    if (capturedRefresh) {
+      void logoutSession(capturedRefresh).catch(() => {});
+    }
   }, [clearAuth, refreshToken, user]);
 
   const outlookPremium = useMemo(() => resolveOutlookPremiumAccess(user), [user]);

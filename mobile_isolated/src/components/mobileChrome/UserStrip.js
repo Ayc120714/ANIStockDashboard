@@ -34,7 +34,7 @@ export function UserStrip({user}) {
   const name = displayName(user);
   return (
     <View style={styles.wrap}>
-      <Text style={styles.name} numberOfLines={1}>
+      <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
         {name}
       </Text>
       <View style={styles.badge}>
@@ -49,14 +49,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
     backgroundColor: AYC.userStripBg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: AYC.cardBorder,
   },
-  name: {flex: 1, fontSize: 14, fontWeight: '700', color: AYC.text},
+  name: {flex: 1, minWidth: 0, fontSize: 14, fontWeight: '700', color: AYC.text, marginRight: 4},
   badge: {
+    flexShrink: 0,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useScrollActiveTabIntoView } from '../hooks/useScrollActiveTabIntoView';
 import AiPicksPage from './AiPicksPage';
 import IPOsPage from './IPOsPage';
 import PriceShockersPage from './PriceShockersPage';
@@ -7,31 +8,27 @@ import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './Scree
 import TrendingPage from './TrendingPage';
 import VolumeShockersPage from './VolumeShockersPage';
 
+const SCREEN_TABS = ['AI Picks', 'Trending', 'Top Movers', 'Volume Movers', 'Alpha Tracker', 'IPOs'];
+
 function ScreensPage() {
   const [activeTab, setActiveTab] = useState('AI Picks');
+  const setTabRef = useScrollActiveTabIntoView(activeTab);
 
   return (
     <PageContainer>
       <PageTitle>Screens</PageTitle>
       <TabContainer>
-        <Tab active={activeTab === 'AI Picks'} onClick={() => setActiveTab('AI Picks')}>
-          AI Picks
-        </Tab>
-        <Tab active={activeTab === 'Trending'} onClick={() => setActiveTab('Trending')}>
-          Trending
-        </Tab>
-        <Tab active={activeTab === 'Top Movers'} onClick={() => setActiveTab('Top Movers')}>
-          Top Movers
-        </Tab>
-        <Tab active={activeTab === 'Volume Movers'} onClick={() => setActiveTab('Volume Movers')}>
-          Volume Movers
-        </Tab>
-        <Tab active={activeTab === 'Alpha Tracker'} onClick={() => setActiveTab('Alpha Tracker')}>
-          Alpha Tracker
-        </Tab>
-        <Tab active={activeTab === 'IPOs'} onClick={() => setActiveTab('IPOs')} last>
-          IPOs
-        </Tab>
+        {SCREEN_TABS.map((label, index) => (
+          <Tab
+            key={label}
+            ref={setTabRef(label)}
+            active={activeTab === label}
+            onClick={() => setActiveTab(label)}
+            last={index === SCREEN_TABS.length - 1}
+          >
+            {label}
+          </Tab>
+        ))}
       </TabContainer>
 
       <TabContent active={activeTab === 'AI Picks'}>

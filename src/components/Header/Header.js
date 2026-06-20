@@ -1,5 +1,16 @@
 import React, { useMemo } from 'react';
-import { HeaderContainer } from './Header.styles';
+import {
+  HeaderContainer,
+  MobileActions,
+  MobileBrand,
+  MobileBrandTag,
+  MobileBrandTitle,
+  MobileHeaderShell,
+  MobilePlanBadge,
+  MobileTopRow,
+  MobileUserName,
+  MobileUserStrip,
+} from './Header.styles';
 import { Box, Button, IconButton } from '@mui/material';
 import { MdMenu } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
@@ -14,18 +25,12 @@ function Header({ showMenuButton, onMenuOpen }) {
     return 'Basic';
   }, [user?.premium_lifetime, outlookPremium]);
 
-  return (
-    <HeaderContainer>
-      <Box
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-        }}
-      >
-        {showMenuButton ? (
+  const displayName = user?.full_name || user?.email || '';
+
+  if (showMenuButton) {
+    return (
+      <MobileHeaderShell>
+        <MobileTopRow>
           <IconButton
             color="primary"
             aria-label="Open navigation menu"
@@ -40,7 +45,42 @@ function Header({ showMenuButton, onMenuOpen }) {
           >
             <MdMenu size={24} />
           </IconButton>
-        ) : null}
+          <MobileBrand aria-label="AYC Industries">
+            <MobileBrandTitle>AYC INDUSTRIES</MobileBrandTitle>
+            <MobileBrandTag>Analyze • Yield • Conquer</MobileBrandTag>
+          </MobileBrand>
+          <MobileActions>
+            <UserNotificationBell />
+            <Button
+              size="small"
+              variant="outlined"
+              type="button"
+              onClick={logout}
+              sx={{ flexShrink: 0, minWidth: 0, px: 1.2, fontSize: 11, whiteSpace: 'nowrap' }}
+            >
+              Logout
+            </Button>
+          </MobileActions>
+        </MobileTopRow>
+        <MobileUserStrip>
+          <MobileUserName title={displayName}>{displayName}</MobileUserName>
+          <MobilePlanBadge $variant={planLabel}>{planLabel}</MobilePlanBadge>
+        </MobileUserStrip>
+      </MobileHeaderShell>
+    );
+  }
+
+  return (
+    <HeaderContainer>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+        }}
+      >
         <Box
           aria-label="AYC Industries logo"
           sx={{
@@ -75,7 +115,7 @@ function Header({ showMenuButton, onMenuOpen }) {
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <span style={{ color: '#555', fontSize: 13 }}>
-            {user?.full_name || user?.email || ''}
+            {displayName}
           </span>
           <Box
             component="span"
@@ -99,7 +139,7 @@ function Header({ showMenuButton, onMenuOpen }) {
           </Box>
         </Box>
         <UserNotificationBell />
-        <Button size="small" variant="outlined" onClick={logout}>
+        <Button size="small" variant="outlined" type="button" onClick={logout}>
           Logout
         </Button>
       </Box>

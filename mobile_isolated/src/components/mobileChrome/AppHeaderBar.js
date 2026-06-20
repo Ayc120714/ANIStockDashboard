@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   },
   ham: {padding: 6, minWidth: 40},
   hamIcon: {color: AYC.appBarText, fontSize: 22, fontWeight: '600'},
-  brand: {flex: 1},
+  brand: {flex: 1, minWidth: 0},
   title: {color: AYC.appBarText, fontSize: 15, fontWeight: '800', letterSpacing: 0.5},
   tag: {color: AYC.appBarMuted, fontSize: 11, marginTop: 2},
   avatar: {

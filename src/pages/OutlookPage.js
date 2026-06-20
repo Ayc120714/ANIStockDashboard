@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useScrollActiveTabIntoView } from '../hooks/useScrollActiveTabIntoView';
 import MarketOutlookPage from './MarketOutlookPage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './OutlookPage.style';
 import SectorOutlookPage from './SectorOutlookPage';
@@ -9,6 +10,7 @@ function OutlookPage() {
   const [activeTab, setActiveTab] = useState('market');
   const [selectedSector, setSelectedSector] = useState(null);
   const [mappedGroups, setMappedGroups] = useState(null);
+  const setTabRef = useScrollActiveTabIntoView(activeTab);
 
   const handleSectorClick = (sectorName) => {
     setSelectedSector(sectorName);
@@ -22,11 +24,18 @@ function OutlookPage() {
     <PageContainer>
       <PageTitle>Overview</PageTitle>
       <TabContainer>
-        <Tab active={activeTab === 'market'} onClick={() => setActiveTab('market')}>Market Insights</Tab>
-        <Tab active={activeTab === 'sector'} onClick={() => setActiveTab('sector')}>
+        <Tab ref={setTabRef('market')} active={activeTab === 'market'} onClick={() => setActiveTab('market')}>
+          Market Insights
+        </Tab>
+        <Tab ref={setTabRef('sector')} active={activeTab === 'sector'} onClick={() => setActiveTab('sector')}>
           Sector Insights
         </Tab>
-        <Tab active={activeTab === 'subsector'} onClick={() => { setSelectedSector(null); setMappedGroups(null); setActiveTab('subsector'); }} last>
+        <Tab
+          ref={setTabRef('subsector')}
+          active={activeTab === 'subsector'}
+          onClick={() => { setSelectedSector(null); setMappedGroups(null); setActiveTab('subsector'); }}
+          last
+        >
           SubSector Insights
         </Tab>
       </TabContainer>
