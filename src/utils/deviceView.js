@@ -1,4 +1,4 @@
-/** Phone → app shell; tablet & desktop → full desktop layout (sidebar rail). */
+/** Phone → app shell; tablet & desktop/laptop → web layout with sidebar. */
 
 export const PHONE_MAX_WIDTH_PX = 767;
 
@@ -14,20 +14,26 @@ export function readUserAgentDataMobile() {
 
 export function getViewportWidth() {
   if (typeof window === 'undefined') return 1280;
-  return Math.round(window.visualViewport?.width ?? window.innerWidth);
+  const vv = window.visualViewport?.width;
+  const cw = document.documentElement?.clientWidth;
+  const iw = window.innerWidth;
+  return Math.round(Math.min(vv ?? iw, cw ?? iw, iw));
 }
 
 export function getViewportMinSide() {
   if (typeof window === 'undefined') return 1280;
-  const w = window.visualViewport?.width ?? window.innerWidth;
-  const h = window.visualViewport?.height ?? window.innerHeight;
-  return Math.round(Math.min(w, h));
+  const w = getViewportWidth();
+  const h = Math.round(window.visualViewport?.height ?? window.innerHeight);
+  return Math.min(w, h);
 }
 
-export function isTouchPrimaryDevice() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-  if (window.matchMedia?.('(pointer: coarse)').matches) return true;
-  return (navigator.maxTouchPoints ?? 0) > 0;
+export function matchMediaQuery(query) {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia(query).matches;
+}
+
+export function isCoarsePointerEnvironment() {
+  return matchMediaQuery('(pointer: coarse)') || matchMediaQuery('(hover: none)');
 }
 
 export function readClientPlatformHints() {
@@ -50,7 +56,6 @@ export function buildDeviceViewContext(overrides = {}) {
     userAgentDataMobile: hints.userAgentDataMobile,
     platform: hints.platform,
     maxTouchPoints: hints.maxTouchPoints,
-    touchPrimary: isTouchPrimaryDevice(),
     ...overrides,
   };
 }
@@ -69,7 +74,7 @@ export function isTabletUserAgent(ua = readUserAgent(), options = {}) {
   const platform = options.platform ?? (typeof navigator !== 'undefined' ? navigator.platform : '');
   const maxTouchPoints = options.maxTouchPoints
     ?? (typeof navigator !== 'undefined' ? navigator.maxTouchPoints ?? 0 : 0);
-  if (platform === 'MacIntel' && maxTouchPoints > 1) return true;
+  if (platform === 'MacIntel' && maxTouchPoints > 1 && !/iPhone|iPod/i.test(agent)) return true;
 
   return false;
 }
@@ -83,54 +88,73 @@ export function isPhoneUserAgent(ua = readUserAgent(), options = {}) {
   if (/Android/i.test(agent) && (/Mobile/i.test(agent) || /Mobi/i.test(agent))) return true;
   if (/Windows Phone/i.test(agent)) return true;
   if (/EdgA\/|EdgiOS\//i.test(agent)) return true;
+  if (/Mobile/i.test(agent) && !/iPad|Tablet/i.test(agent)) return true;
   if (/Mobi/i.test(agent) && !/iPad|Tablet/i.test(agent)) return true;
 
   return false;
 }
 
+/** Laptop/desktop OS — always web layout, even with touch or a narrow window. */
 export function isDesktopUserAgent(ua = readUserAgent(), options = {}) {
   if (options.userAgentDataMobile === true) return false;
-  if (options.userAgentDataMobile === false) return true;
+
   const agent = String(ua || '');
   if (isPhoneUserAgent(agent, options)) return false;
   if (isTabletUserAgent(agent, options)) return false;
+
   if (/Windows NT/i.test(agent)) return true;
   if (/Macintosh/i.test(agent) && !/iPhone|iPad|iPod/i.test(agent)) return true;
   if (/CrOS/i.test(agent)) return true;
   if (/X11; Linux x86_64/i.test(agent) && !/Android/i.test(agent)) return true;
+
+  if (options.userAgentDataMobile === false) return true;
+
   return false;
 }
 
-/** Coarse device bucket used before viewport fallback. */
-export function detectDeviceClass(options = {}) {
+export function isNarrowPhoneViewport(options = {}) {
+  const width = options.width ?? getViewportWidth();
+  const minSide = options.minViewportSide ?? getViewportMinSide();
+  const narrowMq = matchMediaQuery(`(max-width: ${PHONE_MAX_WIDTH_PX}px)`);
+  return narrowMq || width <= PHONE_MAX_WIDTH_PX || minSide <= PHONE_MAX_WIDTH_PX;
+}
+
+/**
+ * True when the browser should use the mobile app shell (bottom tabs).
+ * Laptops/desktops are excluded first; phones match UA, Client Hints, or phone viewport.
+ */
+export function shouldUseAppShell(options = {}) {
   const agent = options.ua ?? readUserAgent();
   const userAgentDataMobile = options.userAgentDataMobile ?? null;
-  const width = options.width ?? getViewportWidth();
-  const minViewportSide = options.minViewportSide ?? width;
-  const tabletOptions = {
-    userAgentDataMobile,
-    platform: options.platform,
-    maxTouchPoints: options.maxTouchPoints,
-  };
 
-  if (userAgentDataMobile === true) return 'phone';
-  if (isPhoneUserAgent(agent, {userAgentDataMobile})) return 'phone';
-  if (isTabletUserAgent(agent, tabletOptions)) return 'tablet';
+  if (isDesktopUserAgent(agent, options)) return false;
+  if (userAgentDataMobile === true) return true;
+  if (isPhoneUserAgent(agent, {userAgentDataMobile})) return true;
 
-  if (isDesktopUserAgent(agent, options)) {
-    return width <= 1024 ? 'tablet' : 'desktop';
+  // Phone-sized touch viewport before tablet heuristics (Android UAs may omit "Mobile")
+  if (isNarrowPhoneViewport(options) && isCoarsePointerEnvironment()) {
+    return true;
   }
 
-  if (width <= PHONE_MAX_WIDTH_PX || minViewportSide <= PHONE_MAX_WIDTH_PX) return 'phone';
+  if (isTabletUserAgent(agent, options)) return false;
 
+  return false;
+}
+
+/** Coarse device bucket (phone | tablet | desktop). */
+export function detectDeviceClass(options = {}) {
+  if (shouldUseAppShell(options)) return 'phone';
+  if (isTabletUserAgent(options.ua ?? readUserAgent(), options)) return 'tablet';
+  if (isDesktopUserAgent(options.ua ?? readUserAgent(), options)) return 'desktop';
+  if (isNarrowPhoneViewport(options)) return 'phone';
+  const width = options.width ?? getViewportWidth();
   if (width <= 1024) return 'tablet';
   return 'desktop';
 }
 
-/** `app` = mobile app shell; `desktop` = sidebar rail layout (tablet + desktop). */
+/** `app` = mobile app shell; `desktop` = sidebar web layout (tablet + laptop). */
 export function resolveViewMode(options = {}) {
-  const deviceClass = detectDeviceClass(options);
-  return deviceClass === 'phone' ? 'app' : 'desktop';
+  return shouldUseAppShell(options) ? 'app' : 'desktop';
 }
 
 export const MOBILE_APP_TABS = [

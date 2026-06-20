@@ -5,6 +5,7 @@ import {
   isPhoneUserAgent,
   isTabletUserAgent,
   resolveViewMode,
+  shouldUseAppShell,
   tabMatchesPath,
 } from '../utils/deviceView';
 
@@ -16,10 +17,12 @@ const EDGE_ANDROID_MOBILE =
   'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 EdgA/120.0.0.0';
 const WINDOWS_CHROME_LAPTOP =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
+const IPHONE_SAFARI =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 describe('deviceView', () => {
   it('detects phone vs tablet user agents', () => {
-    expect(isPhoneUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe(true);
+    expect(isPhoneUserAgent(IPHONE_SAFARI)).toBe(true);
     expect(isTabletUserAgent('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)')).toBe(true);
     expect(isPhoneUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile Safari')).toBe(true);
     expect(isTabletUserAgent('Mozilla/5.0 (Linux; Android 14; SM-X900)')).toBe(true);
@@ -30,19 +33,19 @@ describe('deviceView', () => {
     expect(isPhoneUserAgent(CHROME_ANDROID_MOBILE)).toBe(true);
     expect(isPhoneUserAgent(FIREFOX_ANDROID_MOBILE)).toBe(true);
     expect(isPhoneUserAgent(EDGE_ANDROID_MOBILE)).toBe(true);
-    expect(resolveViewMode({ua: CHROME_ANDROID_MOBILE, width: 412, userAgentDataMobile: true})).toBe('app');
-    expect(resolveViewMode({ua: FIREFOX_ANDROID_MOBILE, width: 412})).toBe('app');
+    expect(shouldUseAppShell({ua: CHROME_ANDROID_MOBILE, width: 412, userAgentDataMobile: true})).toBe(true);
+    expect(shouldUseAppShell({ua: FIREFOX_ANDROID_MOBILE, width: 412})).toBe(true);
     expect(resolveViewMode({ua: EDGE_ANDROID_MOBILE, width: 412})).toBe('app');
   });
 
-  it('uses User-Agent Client Hints mobile flag before tablet heuristics', () => {
+  it('uses User-Agent Client Hints mobile flag', () => {
     expect(
-      resolveViewMode({
+      shouldUseAppShell({
         ua: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36',
         width: 412,
         userAgentDataMobile: true,
       }),
-    ).toBe('app');
+    ).toBe(true);
     expect(
       isTabletUserAgent('Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36', {
         userAgentDataMobile: true,
@@ -53,38 +56,59 @@ describe('deviceView', () => {
   it('keeps laptops on desktop web layout even with touch and narrow windows', () => {
     expect(isDesktopUserAgent(WINDOWS_CHROME_LAPTOP, {userAgentDataMobile: false})).toBe(true);
     expect(
-      resolveViewMode({
+      shouldUseAppShell({
         ua: WINDOWS_CHROME_LAPTOP,
         width: 1440,
         userAgentDataMobile: false,
-        touchPrimary: true,
         maxTouchPoints: 10,
       }),
-    ).toBe('desktop');
+    ).toBe(false);
     expect(
       resolveViewMode({
         ua: WINDOWS_CHROME_LAPTOP,
         width: 600,
         userAgentDataMobile: false,
-        touchPrimary: true,
+        maxTouchPoints: 10,
       }),
     ).toBe('desktop');
-    expect(detectDeviceClass({width: 600, ua: WINDOWS_CHROME_LAPTOP, userAgentDataMobile: false})).toBe('tablet');
+    expect(detectDeviceClass({width: 600, ua: WINDOWS_CHROME_LAPTOP, userAgentDataMobile: false})).toBe('desktop');
   });
 
   it('uses phone landscape viewport for mobile Chrome', () => {
     expect(
-      resolveViewMode({
+      shouldUseAppShell({
         ua: CHROME_ANDROID_MOBILE,
         width: 915,
         minViewportSide: 412,
         userAgentDataMobile: true,
       }),
-    ).toBe('app');
+    ).toBe(true);
+  });
+
+  it('falls back to narrow coarse-pointer viewport when UA is ambiguous', () => {
+    expect(
+      shouldUseAppShell({
+        ua: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/143.0.0.0 Mobile Safari/537.36',
+        width: 390,
+        minViewportSide: 390,
+        userAgentDataMobile: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not treat desktop-site mode on phone as app shell when desktop UA is sent', () => {
+    expect(
+      shouldUseAppShell({
+        ua: WINDOWS_CHROME_LAPTOP,
+        width: 390,
+        minViewportSide: 390,
+        userAgentDataMobile: false,
+      }),
+    ).toBe(false);
   });
 
   it('maps phones to app view and tablets/desktops to desktop view', () => {
-    expect(resolveViewMode({ua: 'Mozilla/5.0 (iPhone)', width: 390})).toBe('app');
+    expect(resolveViewMode({ua: IPHONE_SAFARI, width: 390})).toBe('app');
     expect(resolveViewMode({ua: 'Mozilla/5.0 (iPad)', width: 820})).toBe('desktop');
     expect(resolveViewMode({ua: 'Mozilla/5.0 (Windows NT 10.0)', width: 1440})).toBe('desktop');
     expect(resolveViewMode({ua: 'Mozilla/5.0 (Macintosh)', width: 800})).toBe('desktop');
