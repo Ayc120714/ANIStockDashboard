@@ -4,7 +4,7 @@ import { MdRefresh } from 'react-icons/md';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { fetchWeeklyPicks, triggerWeeklyPicks, generateWeeklyPicks } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { AI_PICKS_CACHE_KEY } from '../bootstrap/prefetchAppShellData';
 import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 
@@ -270,17 +270,20 @@ function AiPicksPage() {
                 return (
                   <tr key={r.symbol}>
                     <td style={{ ...compact, fontWeight: 600, color: '#888' }}>{String(i + 1).padStart(2, '0')}</td>
-                    <td style={{ ...compact, fontWeight: 700 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <TradingViewLink symbol={r.symbol} />
-                        <span>{r.symbol}</span>
-                        {r.is_fno && (
+                    <td style={symbolCellTdStyle({ ...compact, fontWeight: 700 }, 150)}>
+                      <SymbolWithTradingView
+                        symbol={r.symbol}
+                        iconFirst
+                        gap={6}
+                        trailing={r.is_fno ? (
                           <span style={{
                             fontSize: 8, padding: '1px 3px', borderRadius: 2,
                             background: '#0d47a1', color: '#fff', fontWeight: 600,
                           }}>F&O</span>
-                        )}
-                      </span>
+                        ) : null}
+                      >
+                        {r.symbol}
+                      </SymbolWithTradingView>
                     </td>
                     <td style={compact}>
                       <span style={{

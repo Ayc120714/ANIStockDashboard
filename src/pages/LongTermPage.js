@@ -4,6 +4,7 @@ import { Alert, Box, TextField, Button, IconButton, Chip, CircularProgress, Auto
 import Pagination from '@mui/material/Pagination';
 import { MdClose, MdDeleteSweep, MdSelectAll, MdRefresh, MdContentCopy, MdCheck } from 'react-icons/md';
 import { fetchWatchlist, fetchWatchlistSignals, addToWatchlist, bulkDeleteFromWatchlist, removeFromWatchlist, backfillWatchlistMarketData, refreshWatchlistFundamentals } from '../api/watchlist';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel';
 import { apiGet, clearApiGetCache } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
@@ -930,27 +931,13 @@ function LongTermPage() {
                       checked={checkedSymbols.has(row.symbol)}
                       onChange={() => toggleCheck(row.symbol)} />
                   </td>
-                  <td style={{ fontWeight: 600 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ textDecoration: detailSymbol === row.symbol ? 'underline' : 'none' }}>{row.symbol}</span>
-                      <a
-                        href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(row.symbol)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title={`View ${row.symbol} on TradingView`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 18, height: 18, borderRadius: '50%', background: '#131722',
-                          textDecoration: 'none', flexShrink: 0,
-                        }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 36 28" fill="none">
-                          <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF"/>
-                          <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF"/>
-                        </svg>
-                      </a>
-                    </span>
+                  <td style={symbolCellTdStyle({ fontWeight: 600 }, 140)}>
+                    <SymbolWithTradingView
+                      symbol={row.symbol}
+                      labelStyle={{ textDecoration: detailSymbol === row.symbol ? 'underline' : 'none' }}
+                    >
+                      {row.symbol}
+                    </SymbolWithTradingView>
                   </td>
                   <td>{row.price ? `₹${Number(row.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
                   <td style={{ fontWeight: 600, color: (row.day1d || 0) > 0 ? '#2e7d32' : (row.day1d || 0) < 0 ? '#c62828' : undefined }}>

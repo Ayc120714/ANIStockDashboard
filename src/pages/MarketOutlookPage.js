@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import {
   CardContainer,
@@ -697,11 +697,14 @@ function MarketOutlookContent({ apiReady, timedOut }) {
               {paginatedTableRows.map((row) => (
                 <tr key={row.id} className={getMarketIndexRowClass(row)}>
                   <td className="index">{row.id}</td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <TradingViewLink chartSymbol={getTradingViewChartSymbol(row.name)} />
-                      <span>{row.name}</span>
-                    </span>
+                  <td style={symbolCellTdStyle({}, 160)}>
+                    <SymbolWithTradingView
+                      chartSymbol={getTradingViewChartSymbol(row.name)}
+                      iconFirst
+                      gap={6}
+                    >
+                      {row.name}
+                    </SymbolWithTradingView>
                   </td>
                   <td className={getMarketIndexTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>

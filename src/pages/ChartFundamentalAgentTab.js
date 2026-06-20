@@ -18,7 +18,7 @@ import { MdRefresh } from 'react-icons/md';
 import { TableWrapperCompact, TableCompact } from './SectorOutlook.styles';
 import { fetchChartFundamentalAgent } from '../api/advisor';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView } from '../components/TradingViewLink';
 
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -171,10 +171,9 @@ function AgentResultsTable({
   const renderCell = (r, col) => {
     if (col.key === 'symbol') {
       return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <SymbolWithTradingView symbol={r.symbol}>
           {r.symbol || '—'}
-          <TradingViewLink symbol={r.symbol} />
-        </span>
+        </SymbolWithTradingView>
       );
     }
     if (col.key === 'sector') {
@@ -224,7 +223,13 @@ function AgentResultsTable({
   };
 
   return (
-    <Box sx={{ minWidth: 280, flex: '1 1 0', width: 0 }}>
+    <Box
+      sx={{
+        minWidth: { xs: '100%', md: 360, lg: 280 },
+        flex: { xs: '1 1 100%', md: '1 1 calc(50% - 8px)', lg: '1 1 0' },
+        width: { xs: '100%', lg: 'auto' },
+      }}
+    >
       <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1a3c5e', mb: 0.25, fontSize: 14 }}>
         {title}
       </Typography>
@@ -315,9 +320,9 @@ function AgentResultsTable({
                         fontWeight: col.key === 'symbol' ? 700 : col.numeric ? 600 : undefined,
                         textAlign: col.numeric ? 'right' : 'left',
                         width: col.width,
-                        maxWidth: col.key === 'sector' ? col.width : undefined,
-                        overflow: col.key === 'sector' ? 'hidden' : undefined,
-                        textOverflow: col.key === 'sector' ? 'ellipsis' : undefined,
+                        maxWidth: col.key === 'symbol' ? col.width : col.key === 'sector' ? col.width : undefined,
+                        overflow: col.key === 'symbol' || col.key === 'sector' ? 'hidden' : undefined,
+                        textOverflow: col.key === 'symbol' || col.key === 'sector' ? 'ellipsis' : undefined,
                         fontSize: col.key === 'sector' ? 11 : undefined,
                         color: col.key === 'horizon' ? '#37474f' : undefined,
                       }}
@@ -537,7 +542,12 @@ export default function ChartFundamentalAgentTab() {
           startIcon={loading ? <CircularProgress size={14} /> : <MdRefresh />}
           onClick={() => load(true)}
           disabled={loading}
-          sx={{ textTransform: 'none', ml: 'auto', borderColor: '#1a3c5e', color: '#1a3c5e' }}
+          sx={{
+            textTransform: 'none',
+            ml: { xs: 0, md: 'auto' },
+            borderColor: '#1a3c5e',
+            color: '#1a3c5e',
+          }}
         >
           Refresh scan
         </Button>
@@ -558,11 +568,11 @@ export default function ChartFundamentalAgentTab() {
           sx={{
             display: 'flex',
             flexDirection: 'row',
-            flexWrap: 'nowrap',
+            flexWrap: { xs: 'wrap', lg: 'nowrap' },
             gap: 2,
             alignItems: 'flex-start',
             width: '100%',
-            overflowX: 'auto',
+            overflowX: { xs: 'hidden', lg: 'auto' },
           }}
         >
           <AgentResultsTable

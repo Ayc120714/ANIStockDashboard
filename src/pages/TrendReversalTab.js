@@ -20,7 +20,7 @@ import { MdArrowDownward, MdArrowUpward, MdBolt, MdRefresh } from 'react-icons/m
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { fetchAnalysisBrief, fetchBatchAnalysisContext, fetchBuyTierCardGrid } from '../api/advisor';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 
 const TF_BLUE = '#1565c0';
 const BORDER = '1px solid #e0e0e0';
@@ -640,11 +640,10 @@ export default function TrendReversalTab() {
                     const chg = formatChg(r.chg_pct);
                     return (
                       <tr key={`${r.symbol}-${r.date}-${sig}`}>
-                        <td style={{ ...compact, fontWeight: 700 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {r.symbol}
-                            <TradingViewLink symbol={r.symbol} />
-                            {isBuy ? (
+                        <td style={symbolCellTdStyle({ ...compact, fontWeight: 700 }, 120)}>
+                          <SymbolWithTradingView
+                            symbol={r.symbol}
+                            trailing={isBuy ? (
                               <Tooltip title="AI company context (popup)">
                                 <IconButton
                                   size="small"
@@ -658,7 +657,9 @@ export default function TrendReversalTab() {
                                 </IconButton>
                               </Tooltip>
                             ) : null}
-                          </span>
+                          >
+                            {r.symbol}
+                          </SymbolWithTradingView>
                         </td>
                         <td style={{ ...compact, fontWeight: 700, color: isBuy ? '#1b5e20' : '#b71c1c' }}>
                           {r.hold_months || fallbackHoldMonths(r, timeframe)}

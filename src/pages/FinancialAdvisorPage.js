@@ -19,7 +19,7 @@ import {
 import TrendReversalTab from './TrendReversalTab';
 import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
 import { addToWatchlist } from '../api/watchlist';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
@@ -213,7 +213,7 @@ function FinancialAdvisorPage() {
 
   return (
     <TableSection>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <TableTitle style={{ margin: 0 }}>Financial Advisor</TableTitle>
         <Button size="small" variant="outlined" onClick={() => refreshAdvisor()} sx={{ textTransform: 'none', ml: 'auto' }}>
           Refresh All
@@ -1518,11 +1518,10 @@ function SignalsAlertsTab() {
                           ) : null}
                         </span>
                       </td>
-                      <td style={{ ...compact, fontWeight: 700 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <td style={symbolCellTdStyle(compact, 128)}>
+                        <SymbolWithTradingView symbol={r.symbol}>
                           {r.symbol}
-                          <TradingViewLink symbol={r.symbol} />
-                        </span>
+                        </SymbolWithTradingView>
                       </td>
                       <td style={{ ...compact, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sector || '—'}</td>
                       <td style={{ ...compact, fontWeight: 600 }}>{r.trigger_date ? String(r.trigger_date).slice(0, 10) : '—'}</td>
@@ -1888,17 +1887,18 @@ function SignalsAlertsTab() {
                             }}
                           />
                         </td>
-                        <td style={{ ...compact, fontWeight: 700 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {sym}
-                            <TradingViewLink symbol={sym} />
-                            {s?.high_conviction && (
+                        <td style={symbolCellTdStyle(compact, 140)}>
+                          <SymbolWithTradingView
+                            symbol={sym}
+                            trailing={s?.high_conviction ? (
                               <span style={{
                                 fontSize: 8, padding: '1px 4px', borderRadius: 2,
                                 background: '#1b5e20', color: '#fff', fontWeight: 700, verticalAlign: 'super',
                               }}>HC</span>
-                            )}
-                          </span>
+                            ) : null}
+                          >
+                            {sym}
+                          </SymbolWithTradingView>
                         </td>
                         <td style={{ ...compact, fontWeight: 700, color: s?.conviction_score >= 100 ? '#1b5e20' : s?.conviction_score >= 80 ? '#2e7d32' : '#333' }}>
                           {s?.conviction_score != null ? s.conviction_score.toFixed(0) : '—'}
@@ -2312,30 +2312,16 @@ function SignalsAlertsTab() {
                         return next;
                       })} />
                   </td>
-                  <td style={{ ...compact, fontWeight: 700 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {s.symbol}
-                      <a
-                        href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(s.symbol)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`View ${s.symbol} on TradingView`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 18, height: 18, borderRadius: '50%', background: '#131722',
-                          textDecoration: 'none', flexShrink: 0,
-                        }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 36 28" fill="none">
-                          <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF"/>
-                          <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF"/>
-                        </svg>
-                      </a>
-                      {s.high_conviction && (
+                  <td style={symbolCellTdStyle(compact, 140)}>
+                    <SymbolWithTradingView
+                      symbol={s.symbol}
+                      trailing={s.high_conviction ? (
                         <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2,
                           background: '#1b5e20', color: '#fff', fontWeight: 700, verticalAlign: 'super' }}>HC</span>
-                      )}
-                    </span>
+                      ) : null}
+                    >
+                      {s.symbol}
+                    </SymbolWithTradingView>
                   </td>
                   <td style={{ ...compact, fontWeight: 700, color: s.conviction_score >= 100 ? '#1b5e20' : s.conviction_score >= 80 ? '#2e7d32' : '#333' }}>
                     {s.conviction_score?.toFixed(0)}

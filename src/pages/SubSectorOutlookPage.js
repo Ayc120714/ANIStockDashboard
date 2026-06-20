@@ -43,6 +43,7 @@ import {
 } from '../utils/marketSession';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
+import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { MdLock } from 'react-icons/md';
 const SUBSECTOR_REFRESH_MS = 30000;
 const SUBSECTOR_MAIN_ROWS_OPTIONS = [15, 25, 50, 100];
@@ -747,33 +748,12 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
                 {sortedModalStocks.length > 0 ? (
                   sortedModalStocks.map((stock, idx) => (
                     <TableRow key={stock.symbol} className={stock.chg && stock.chg.startsWith('-') ? 'row-down' : 'row-up'}>
-                      <TableCell>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {(modalPage - 1) * modalPageSize + idx + 1}
-                          <a
-                            href={`https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(stock.symbol)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={`View ${stock.symbol} on TradingView`}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: 20,
-                              height: 20,
-                              borderRadius: '50%',
-                              background: '#131722',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            <svg width="12" height="12" viewBox="0 0 36 28" fill="none">
-                              <path d="M14 22H7V11h7v11zm11 0h-7V6h7v16zm11 0h-7V0h7v22z" fill="#2962FF"/>
-                              <rect y="25" width="36" height="3" rx="1.5" fill="#2962FF"/>
-                            </svg>
-                          </a>
-                        </span>
+                      <TableCell>{(modalPage - 1) * modalPageSize + idx + 1}</TableCell>
+                      <TableCell style={symbolCellTdStyle({ fontWeight: 700 }, 140)}>
+                        <SymbolWithTradingView symbol={stock.symbol}>
+                          {stock.symbol}
+                        </SymbolWithTradingView>
                       </TableCell>
-                      <TableCell>{stock.symbol}</TableCell>
                       <TableCell>{stock.mc}</TableCell>
                       <TableCell>{stock.ema21}</TableCell>
                       <TableCell>{stock.cmp}</TableCell>

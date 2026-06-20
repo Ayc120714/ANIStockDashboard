@@ -13,7 +13,7 @@ import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { useAuth } from '../auth/AuthContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
-import TradingViewLink from '../components/TradingViewLink';
+import { SymbolWithTradingView } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import {
   ensureMarketSession,
@@ -193,10 +193,14 @@ const extractNumeric = (value) => {
                     style={{ cursor: 'pointer' }}
                     onClick={() => onSectorClick && onSectorClick(row.name)}
                   >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <TradingViewLink chartSymbol={getTradingViewChartSymbol(row.name)} />
-                      <span style={{ color: '#007bff', textDecoration: 'underline' }}>{row.name}</span>
-                    </span>
+                    <SymbolWithTradingView
+                      chartSymbol={getTradingViewChartSymbol(row.name)}
+                      iconFirst
+                      gap={6}
+                      labelStyle={{ color: '#007bff', textDecoration: 'underline' }}
+                    >
+                      {row.name}
+                    </SymbolWithTradingView>
                   </td>
                   <td className={getSectorTrendCellClass(row)}>{row.trend}</td>
                   <td>{row.value}</td>

@@ -34,3 +34,64 @@ export default function TradingViewLink({ symbol, chartSymbol }) {
     </a>
   );
 }
+
+/** Table cell style that keeps symbol + icon from spilling into adjacent columns on narrow widths. */
+export function symbolCellTdStyle(baseStyle = {}, maxWidth = 140) {
+  return {
+    ...baseStyle,
+    maxWidth,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
+}
+
+/**
+ * Symbol label with TradingView chart link — truncates long names on tablet/narrow layouts.
+ * Use `trailing` for badges (HC, F&O) or extra icons; `iconFirst` for sector/index name cells.
+ */
+export function SymbolWithTradingView({
+  symbol,
+  chartSymbol,
+  children,
+  trailing,
+  iconFirst = false,
+  gap = 4,
+  labelStyle,
+  title,
+}) {
+  const label = children ?? symbol ?? '—';
+  const text = (
+    <span
+      title={title ?? (typeof label === 'string' ? label : undefined)}
+      style={{
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        minWidth: 0,
+        flex: '1 1 auto',
+        ...labelStyle,
+      }}
+    >
+      {label}
+    </span>
+  );
+  const icon = <TradingViewLink symbol={symbol} chartSymbol={chartSymbol} />;
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap,
+        minWidth: 0,
+        maxWidth: '100%',
+        width: '100%',
+      }}
+    >
+      {iconFirst ? icon : null}
+      {text}
+      {!iconFirst ? icon : null}
+      {trailing ? <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>{trailing}</span> : null}
+    </span>
+  );
+}

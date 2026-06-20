@@ -14,7 +14,9 @@ export const TableTitle = styled.h3`
 
 export const TableWrapper = styled.div`
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: white;
   border-radius: 8px;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
@@ -30,6 +32,10 @@ export const TableWrapperCompact = styled(TableWrapper)`
   width: fit-content;
   max-width: 100%;
   vertical-align: top;
+  @media (max-width: 1200px) {
+    display: block;
+    width: 100%;
+  }
 `;
 
 export const Table = styled.table`
