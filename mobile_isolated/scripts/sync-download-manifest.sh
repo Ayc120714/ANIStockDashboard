@@ -39,7 +39,7 @@ const out = {
   version: process.env.SYNC_VERSION_NAME,
   versionCode: Number(process.env.SYNC_VERSION_CODE),
   builtAt: process.env.SYNC_BUILT_AT,
-  apkUrl: `https://www.aycindustries.com/api/mobile/apk-download?source=download_json&v=${process.env.SYNC_VERSION_NAME}`,
+  apkUrl: `https://www.aycindustries.com/mobile/ani-stock-release.apk`,
   sha256: process.env.SYNC_SHA,
   sizeBytes: Number(process.env.SYNC_SIZE),
 };

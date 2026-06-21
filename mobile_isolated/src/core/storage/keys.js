@@ -12,8 +12,10 @@ export const STORAGE_KEYS = {
   entryReadyDigest: '@ani/mobile/entry-ready-digest',
   /** Pending approval user ids digest (super-admin registration alerts). */
   pendingApprovalDigest: '@ani/mobile/pending-approval-digest',
-  /** Remote versionCode the user dismissed or already tried to install from the update popup. */
+  /** Remote versionCode the user dismissed from the update popup ("Later"). */
   dismissedUpdateCode: '@ani/mobile/dismissed-update-code',
+  /** In-flight update waiting for install permission or system install confirmation. */
+  pendingAppUpdate: '@ani/mobile/pending-app-update',
   /** @deprecated migrated to notificationInboxReadKeys(userId) */
   notificationInboxDigest: '@ani/mobile/notification-inbox-digest',
   /** Per-table symbol digests for advisor/screens change detection. */
