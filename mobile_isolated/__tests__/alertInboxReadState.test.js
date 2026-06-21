@@ -1,6 +1,8 @@
 import {
   INBOX_SOURCES,
+  buildInboxSections,
   countUnreadInboxItems,
+  filterUnreadInboxSections,
   inboxItemKey,
   isAdvisorDbAlertItem,
   isInboxItemRead,
@@ -33,6 +35,29 @@ describe('notification inbox read state', () => {
     const keys = new Set([inboxItemKey(liveItem)]);
     expect(isInboxItemRead(liveItem, keys)).toBe(true);
     expect(countUnreadInboxItems([liveItem], keys)).toBe(0);
+  });
+
+  it('hides read notifications from the inbox tab (local keys and server is_read)', () => {
+    const unread = {...liveItem, id: '99', isRead: false, raw: {is_read: false}};
+    const readViaKey = {...liveItem, id: '100', isRead: false, raw: {is_read: false}};
+    const readViaServer = {...liveItem, id: '101', isRead: false, raw: {is_read: true}};
+    const sections = buildInboxSections({
+      live: [
+        {id: 99, alert_type: 'entry_long', message: 'Unread', timestamp: '2026-06-15T09:00:00Z', is_read: false},
+        {id: 100, alert_type: 'entry_long', message: 'Marked read', timestamp: '2026-06-15T08:00:00Z', is_read: false},
+        {id: 101, alert_type: 'entry_long', message: 'Server read', timestamp: '2026-06-15T07:00:00Z', is_read: true},
+      ],
+    });
+    const readKeys = new Set([inboxItemKey(readViaKey)]);
+    const display = filterUnreadInboxSections(sections, readKeys);
+
+    expect(display.all).toHaveLength(1);
+    expect(display.all[0].id).toBe('99');
+    expect(display[INBOX_SOURCES.LIVE]).toHaveLength(1);
+    expect(display[INBOX_SOURCES.LIVE][0].id).toBe('99');
+    expect(isInboxItemRead(unread, readKeys)).toBe(false);
+    expect(isInboxItemRead(readViaKey, readKeys)).toBe(true);
+    expect(isInboxItemRead(readViaServer, readKeys)).toBe(true);
   });
 
   it('merges stored and in-memory read keys without dropping newer marks', () => {

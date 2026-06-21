@@ -4,7 +4,7 @@ import { fetchAdminNotifications, markAdminNotificationRead } from '../api/auth'
 import { fetchPriceAlertTriggers } from '../api/priceAlerts';
 import {
   INBOX_SOURCES,
-  applyInboxReadStateToSections,
+  filterUnreadInboxSections,
   buildInboxSections,
   countUnreadInboxItems,
   inboxItemKey,
@@ -70,7 +70,7 @@ export function useNotificationInbox({ enabled = true, userId = '', isSuperAdmin
   }, []);
 
   const displaySections = useMemo(
-    () => applyInboxReadStateToSections(sections, readKeys),
+    () => filterUnreadInboxSections(sections, readKeys),
     [readKeys, sections],
   );
 

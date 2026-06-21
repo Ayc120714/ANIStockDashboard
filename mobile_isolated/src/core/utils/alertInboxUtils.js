@@ -423,6 +423,16 @@ export function applyInboxReadStateToSections(sections = {}, readKeys) {
   return next;
 }
 
+/** Inbox UI: apply read state and drop read rows so the notifications tab shows unread only. */
+export function filterUnreadInboxSections(sections = {}, readKeys) {
+  const withReadState = applyInboxReadStateToSections(sections, readKeys);
+  const next = {};
+  for (const [key, items] of Object.entries(withReadState)) {
+    next[key] = (items || []).filter(item => !item.isRead);
+  }
+  return next;
+}
+
 export function inboxDigest(items = []) {
   return (Array.isArray(items) ? items : [])
     .map(inboxItemKey)

@@ -5,7 +5,7 @@ import {authService} from '@core/api/services/authService';
 import {STORAGE_KEYS, notificationInboxReadKeys} from '@core/storage/keys';
 import {
   INBOX_SOURCES,
-  applyInboxReadStateToSections,
+  filterUnreadInboxSections,
   buildInboxSections,
   countUnreadInboxItems,
   inboxItemKey,
@@ -103,7 +103,7 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
   }, []);
 
   const displaySections = useMemo(
-    () => applyInboxReadStateToSections(sections, readKeys),
+    () => filterUnreadInboxSections(sections, readKeys),
     [readKeys, sections],
   );
 
