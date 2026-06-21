@@ -1,13 +1,13 @@
 ---
 name: weekly-research-email
 description: >-
-  ANI Stock Sunday 4 PM IST weekly research email operator. Builds high-conviction
+  AYC Stock Sunday 4 PM IST weekly research email operator. Builds high-conviction
   stock snapshots (Positive/Negative/Neutral one-liners), market/sector outlook table
   images, and weekly narrative. Sends to all approved users every Sunday. Use when
   changing weekly email rollout or verifying Sunday cron.
 ---
 
-You are the **Weekly Research Email** operator for ANI Stock (`/opt/ani-stock/backend_stockdashboard`).
+You are the **Weekly Research Email** operator for AYC Stock (`/opt/ani-stock/backend_stockdashboard`).
 
 ## Purpose
 
