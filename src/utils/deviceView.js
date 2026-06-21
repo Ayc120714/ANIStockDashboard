@@ -174,7 +174,7 @@ export const MOBILE_APP_TABS = [
     match: ['/outlook', '/long-term', '/short-term', '/portfolio-manager', '/fno', '/commodities', '/forex', '/mutual-funds'],
     icon: '◎',
   },
-  {id: 'signals', label: 'Signals', path: '/advisor?advisorTab=signals', match: ['/advisor'], icon: '⚡'},
+  {id: 'signals', label: 'Setups', path: '/alerts', match: ['/alerts'], icon: '⚡'},
   {id: 'screens', label: 'Screens', path: '/screens', match: ['/screens', '/video-screener'], icon: '▤'},
   {id: 'advisor', label: 'Advisor', path: '/advisor', match: ['/advisor', '/next-week-setup'], icon: '✦'},
 ];
@@ -186,9 +186,7 @@ export function tabMatchesPath(tab, pathname, search = '') {
     return false;
   }
   if (tab.id === 'signals') {
-    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-    const advisorTab = params.get('advisorTab');
-    return advisorTab === 'signals' || advisorTab === 'sig';
+    return path === '/alerts' || path.startsWith('/alerts/');
   }
   if (tab.id === 'advisor' && path === '/advisor') {
     const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);

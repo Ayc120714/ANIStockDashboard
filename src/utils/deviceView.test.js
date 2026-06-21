@@ -115,11 +115,12 @@ describe('deviceView', () => {
     expect(resolveViewMode({ua: 'Mozilla/5.0 (Macintosh)', width: 800})).toBe('desktop');
   });
 
-  it('highlights signals vs advisor tabs on /advisor routes', () => {
-    expect(activeMobileAppTab('/advisor', '?advisorTab=signals')).toBe('signals');
+  it('highlights setups tab on /alerts and advisor tab on /advisor', () => {
+    expect(activeMobileAppTab('/alerts')).toBe('signals');
+    expect(activeMobileAppTab('/alerts', '?symbol=RELIANCE')).toBe('signals');
     expect(activeMobileAppTab('/advisor', '')).toBe('advisor');
-    expect(tabMatchesPath({id: 'signals', match: ['/advisor']}, '/advisor', '?advisorTab=signals')).toBe(true);
-    expect(tabMatchesPath({id: 'advisor', match: ['/advisor']}, '/advisor', '')).toBe(true);
+    expect(tabMatchesPath({ id: 'signals', match: ['/alerts'] }, '/alerts', '')).toBe(true);
+    expect(tabMatchesPath({ id: 'advisor', match: ['/advisor'] }, '/advisor', '')).toBe(true);
     expect(activeMobileAppTab('/outlook')).toBe('stocks');
     expect(activeMobileAppTab('/')).toBe('dashboard');
   });

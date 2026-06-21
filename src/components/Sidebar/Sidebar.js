@@ -124,9 +124,9 @@ function Sidebar({ variant = 'rail' }) {
             <span className="label">Portfolio Manager</span>
           </SidebarItem>
 
-          <SidebarItem to="/alerts" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} locked={moduleLocked} title={navCollapsed ? 'Alerts' : undefined}>
+          <SidebarItem to="/alerts" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} locked={moduleLocked} title={navCollapsed ? 'Live Setups' : undefined}>
             <MdNotifications />
-            <span className="label">Alerts</span>
+            <span className="label">Live Setups</span>
           </SidebarItem>
 
           {isAdmin ? (

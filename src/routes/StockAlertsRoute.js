@@ -1,18 +1,12 @@
 import React from 'react';
-import {Navigate} from 'react-router-dom';
-import useDeviceViewMode from '../hooks/useDeviceViewMode';
-import StockAlertsPage from '../pages/StockAlertsPage';
+import LiveSetupsPage from '../pages/LiveSetupsPage';
 import PremiumModuleRoute from './PremiumModuleRoute';
 
-/** Phone app shell: web `/alerts` maps to Advisor → Signals; desktop keeps full alerts page. */
+/** Live setup board: today + this week generated setups with trade actions. */
 function StockAlertsRoute() {
-  const viewMode = useDeviceViewMode();
-  if (viewMode === 'app') {
-    return <Navigate to="/advisor?advisorTab=signals" replace />;
-  }
   return (
     <PremiumModuleRoute>
-      <StockAlertsPage />
+      <LiveSetupsPage />
     </PremiumModuleRoute>
   );
 }

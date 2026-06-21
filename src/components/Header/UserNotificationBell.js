@@ -94,7 +94,8 @@ function UserNotificationBell() {
       });
       return;
     }
-    navigate('/alerts');
+    const symbol = String(item.symbol || item.raw?.symbol || '').trim().toUpperCase();
+    navigate(symbol ? `/alerts?symbol=${encodeURIComponent(symbol)}` : '/alerts');
   };
 
   return (
@@ -225,7 +226,7 @@ function UserNotificationBell() {
             Refresh
           </Button>
           <Button size="small" onClick={() => { handleClose(); navigate('/alerts'); }}>
-            All alerts
+            Live setups
           </Button>
         </Box>
       </Menu>
