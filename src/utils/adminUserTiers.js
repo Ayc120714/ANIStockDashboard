@@ -27,3 +27,15 @@ export function tierForUser(row) {
 export function adminTierSectionId(tier) {
   return `admin-tier-${tier}`;
 }
+
+/** Access column labels in Admin user directory tables. */
+export function formatAdminUserAccessHints(row) {
+  const parts = [];
+  if (row?.premium_lifetime) parts.push('Life.');
+  if (row?.premium_complimentary) parts.push('Compl.');
+  if (row?.on_premium_allowlist) parts.push('List');
+  if (row?.paid_premium_active && !row?.premium_lifetime) {
+    parts.push(row.premium_plan === 'monthly' ? 'Monthly' : 'Yearly');
+  }
+  return parts.length ? parts.join(' ') : '—';
+}

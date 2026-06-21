@@ -23,6 +23,7 @@ import {
   setUserPaidPremium,
 } from '../api/auth';
 import AdminUserDirectoryTables from '../components/AdminUserDirectoryTables';
+import AdminMobileInstallStats from '../components/AdminMobileInstallStats';
 import AdminPageVisitStats from '../components/AdminPageVisitStats';
 import {
   isBasicUser,
@@ -278,6 +279,7 @@ function AdminUsersPage() {
       <TableTitle>Admin User Management</TableTitle>
 
       <AdminPageVisitStats />
+      <AdminMobileInstallStats />
 
       <Box sx={{ fontSize: 13, color: 'text.secondary', mb: 2, lineHeight: 1.5 }}>
         Creating or approving a user grants <strong>one month</strong> of premium on first approval (then basic after expiry).

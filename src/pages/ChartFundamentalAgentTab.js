@@ -27,8 +27,6 @@ const DAILY_COLS = [
   { key: 'symbol', label: 'Symbol', width: 88 },
   { key: 'sector', label: 'Sector', width: 100 },
   { key: 'close', label: 'Close', numeric: true, width: 80 },
-  { key: 'rs_daily_123', label: 'RS', numeric: true, pct: true, width: 68 },
-  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
 ];
@@ -38,8 +36,6 @@ const WEEKLY_COLS = [
   { key: 'sector', label: 'Sector', width: 96 },
   { key: 'weekly_close', label: 'Wk Close', numeric: true, width: 80 },
   { key: 'weekly_close_prev', label: 'Prev Wk', numeric: true, width: 80 },
-  { key: 'rs_weekly_52', label: 'RS', numeric: true, pct: true, width: 68 },
-  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
 ];
@@ -49,8 +45,6 @@ const MONTHLY_COLS = [
   { key: 'sector', label: 'Sector', width: 96 },
   { key: 'monthly_close', label: 'Mo Close', numeric: true, width: 80 },
   { key: 'monthly_close_prev', label: 'Prev Mo', numeric: true, width: 80 },
-  { key: 'rs_monthly_11', label: 'RS', numeric: true, pct: true, width: 68 },
-  { key: 'di_plus', label: 'DI+', numeric: true, width: 56 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
 ];

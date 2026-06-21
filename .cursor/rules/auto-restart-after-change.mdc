@@ -1,0 +1,14 @@
+---
+description: After deployable code changes, automatically restart backend and/or frontend on the VPS without waiting for the user to ask.
+globs:
+  - stockdashboard/src/**/*
+  - stockdashboard/mobile_isolated/**/*
+  - backend_stockdashboard/**/*
+alwaysApply: false
+---
+
+Read and follow `.cursor/skills/auto-restart-after-change/SKILL.md` when finishing any task that changes app code.
+
+- Run tests first (`fix-regression-guard`), then restart the required server(s).
+- Use `scripts/restart-for-changes.sh` or exact commands from `vps-restart`.
+- Do not mark work complete until restart is verified.

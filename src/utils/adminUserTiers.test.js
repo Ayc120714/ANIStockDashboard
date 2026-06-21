@@ -1,4 +1,5 @@
 import {
+  formatAdminUserAccessHints,
   isBasicUser,
   isMonthlyPremiumUser,
   isYearlyPremiumUser,
@@ -33,5 +34,21 @@ describe('adminUserTiers', () => {
 
   it('maps tier keys to scroll section element ids', () => {
     expect(adminTierSectionId('monthly')).toBe('admin-tier-monthly');
+  });
+
+  it('access hints hide paid monthly/yearly when user has lifetime premium', () => {
+    expect(
+      formatAdminUserAccessHints({
+        premium_lifetime: true,
+        paid_premium_active: true,
+        premium_plan: 'monthly',
+      }),
+    ).toBe('Life.');
+    expect(
+      formatAdminUserAccessHints({
+        paid_premium_active: true,
+        premium_plan: 'monthly',
+      }),
+    ).toBe('Monthly');
   });
 });

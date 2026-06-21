@@ -13,20 +13,10 @@ import {
   setUserLifetimePremium,
 } from '../api/auth';
 import { Table, TableTitle, TableWrapper } from '../pages/SectorOutlook.styles';
+import { formatAdminUserAccessHints } from '../utils/adminUserTiers';
 
 const compact = { fontSize: 12, padding: '6px 8px', whiteSpace: 'nowrap' };
 const checkboxCompact = { ...compact, width: 36, textAlign: 'center' };
-
-function accessHints(row) {
-  const parts = [];
-  if (row.premium_lifetime) parts.push('Life.');
-  if (row.premium_complimentary) parts.push('Compl.');
-  if (row.on_premium_allowlist) parts.push('List');
-  if (row.paid_premium_active) {
-    parts.push(row.premium_plan === 'monthly' ? 'Monthly' : 'Yearly');
-  }
-  return parts.length ? parts.join(' ') : '—';
-}
 
 function UserRows({
   rows,
@@ -99,7 +89,7 @@ function UserRows({
         {row.is_pending_approval ? 'Pending Approval' : row.is_active ? 'Active' : 'Blocked'}
       </td>
       <td style={compact}>{row.created_at || '—'}</td>
-      <td style={compact}>{accessHints(row)}</td>
+      <td style={compact}>{formatAdminUserAccessHints(row)}</td>
       <td style={{ ...compact, maxWidth: 130 }}>
         {row.paid_premium_active ? (
           <span style={{ color: '#2e7d32', fontWeight: 700 }}>Active</span>

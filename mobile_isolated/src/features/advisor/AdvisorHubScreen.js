@@ -180,8 +180,6 @@ function ChartFundamentalTable({block, pageSize = ADVISOR_PAGE_SIZE}) {
               <Text style={[styles.th, styles.cfSector]}>Sector</Text>
               <Text style={[styles.th, styles.cfNum]}>{block.closeHeader}</Text>
               {hasPrev ? <Text style={[styles.th, styles.cfNum]}>{block.prevHeader}</Text> : null}
-              <Text style={[styles.th, styles.cfRs]}>{block.rsHeader}</Text>
-              <Text style={[styles.th, styles.cfDi]}>DI+</Text>
               <Text style={[styles.th, styles.cfRating]}>Rating</Text>
               <Text style={[styles.th, styles.cfHorizon]}>Horizon</Text>
             </View>
@@ -204,8 +202,6 @@ function ChartFundamentalTable({block, pageSize = ADVISOR_PAGE_SIZE}) {
                 </Text>
                 <Text style={[styles.td, styles.cfNum]}>{formatChartCell(row, 'close')}</Text>
                 {hasPrev ? <Text style={[styles.td, styles.cfNum]}>{formatChartCell(row, 'prevClose')}</Text> : null}
-                <Text style={[styles.td, styles.cfRs, styles.rsPos]}>{formatChartCell(row, 'rs')}</Text>
-                <Text style={[styles.td, styles.cfDi]}>{formatChartCell(row, 'diPlus')}</Text>
                 <Text style={[styles.td, styles.cfRating]} numberOfLines={1}>
                   {row.rating}
                 </Text>

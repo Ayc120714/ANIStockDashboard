@@ -75,6 +75,9 @@ export const approveAdminUserAccessLink = (userId) =>
 export const rejectAdminUserRequest = (userId, reason = '') =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, { reason });
 
+/** Super-admin mobile APK download and install summary. */
+export const fetchAdminMobileInstallStats = () => apiGet('/auth/admin/mobile-install-stats');
+
 export const fetchPremiumEmails = () => apiGet('/auth/admin/premium-emails');
 
 export const addPremiumEmail = (email) => apiPost('/auth/admin/premium-emails', { email: String(email || '').trim() });
