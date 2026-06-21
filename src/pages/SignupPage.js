@@ -164,7 +164,7 @@ function SignupPage() {
             ) : null}
             {existingUser ? (
               <Alert severity="info" sx={{ mb: 2 }}>
-                Account already exists. Please login or use forgot password.
+                Account already exists. Please login or contact your administrator if you need a new activation link.
               </Alert>
             ) : null}
             {emailHint ? <Alert severity={emailHint.includes('valid') ? 'success' : 'info'} sx={{ mb: 2 }}>{emailHint}</Alert> : null}

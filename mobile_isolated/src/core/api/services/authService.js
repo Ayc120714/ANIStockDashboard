@@ -103,6 +103,8 @@ export const authService = {
     apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/block`, {blocked: Boolean(blocked)}),
   approveAdminUserAccessLink: userId =>
     apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/approve-access-link`, {}),
+  resendAdminUserAccessLink: userId =>
+    apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/resend-access-link`, {}),
   rejectAdminUserRequest: (userId, reason = '') =>
     apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, {reason: String(reason || '')}),
   deleteAdminUser: userId =>

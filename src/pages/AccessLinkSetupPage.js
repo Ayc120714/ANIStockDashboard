@@ -26,6 +26,7 @@ function AccessLinkSetupPage() {
   const flowId = String(params.get('flow_id') || '').trim();
   const token = String(params.get('token') || '').trim();
   const linkReady = Boolean(flowId && token);
+  const linkExpired = Boolean(error && String(error).toLowerCase().includes('expired'));
 
   const canSubmit = useMemo(() => {
     return (
@@ -93,11 +94,17 @@ function AccessLinkSetupPage() {
           </Alert>
           {!linkReady ? (
             <Alert severity="error" sx={{ mb: 2 }}>
-              Access link is missing required parameters. Ask admin to resend the link.
+              Access link is missing required parameters. Ask your administrator to resend the activation link.
             </Alert>
           ) : null}
-          {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+          {linkExpired ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              This activation link has expired. Ask your administrator to resend a new link from Admin Users.
+            </Alert>
+          ) : null}
+          {error && !linkExpired ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
           {message ? <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert> : null}
+          {linkReady && !linkExpired ? (
           <Box component="form" onSubmit={onSubmit} sx={{ display: 'grid', gap: 1.2 }}>
             <TextField
               label="New Password"
@@ -154,6 +161,11 @@ function AccessLinkSetupPage() {
               Back to login
             </Button>
           </Box>
+          ) : (
+            <Button variant="text" onClick={() => navigate('/login')} sx={{ textTransform: 'none' }}>
+              Back to login
+            </Button>
+          )}
         </CardContent>
       </Card>
     </Box>

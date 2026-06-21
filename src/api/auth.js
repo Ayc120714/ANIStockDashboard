@@ -72,6 +72,9 @@ export const blockAdminUser = (userId, blocked = true) =>
 export const approveAdminUserAccessLink = (userId) =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/approve-access-link`, {});
 
+export const resendAdminUserAccessLink = (userId) =>
+  apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/resend-access-link`, {});
+
 export const rejectAdminUserRequest = (userId, reason = '') =>
   apiPost(`/auth/admin/users/${encodeURIComponent(String(userId))}/reject`, { reason });
 

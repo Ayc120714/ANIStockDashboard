@@ -314,6 +314,10 @@ function AdminUsersPage() {
           <strong>Move selected to complimentary</strong>. Or use <strong>Move to complimentary</strong> on a single row.
         </Box>
         <Box component="li">
+          <strong>Activation link:</strong> for approved users who never finished password setup, status shows{' '}
+          <strong>Awaiting setup</strong>. Use <strong>Resend activation link</strong> in that row&apos;s Action column.
+        </Box>
+        <Box component="li">
           Single-row actions (Block, Record payment, etc.) stay in each row’s <strong>Action</strong> column.
         </Box>
       </Box>

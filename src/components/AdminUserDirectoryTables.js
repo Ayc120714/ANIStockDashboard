@@ -9,6 +9,7 @@ import {
   clearUserPaidPremium,
   moveUserLifetimeToComplimentary,
   rejectAdminUserRequest,
+  resendAdminUserAccessLink,
   setUserComplimentaryPremium,
   setUserLifetimePremium,
 } from '../api/auth';
@@ -54,7 +55,7 @@ function UserRows({
   if (!rows.length) {
     return (
       <tr>
-        <td colSpan={selectable ? 10 : 9} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
+        <td colSpan={selectable ? 11 : 10} style={{ textAlign: 'center', padding: 24, color: '#888' }}>
           No users in this list.
         </td>
       </tr>
@@ -85,10 +86,25 @@ function UserRows({
       <td style={compact}>{row.email}</td>
       <td style={compact}>{row.mobile || '—'}</td>
       <td style={compact}>{row.full_name || '—'}</td>
-      <td style={{ ...compact, fontWeight: 700, color: row.is_active ? '#2e7d32' : '#c62828' }}>
-        {row.is_pending_approval ? 'Pending Approval' : row.is_active ? 'Active' : 'Blocked'}
+      <td style={{ ...compact, fontWeight: 700, color: row.is_pending_approval ? '#ed6c02' : row.is_pending_access_setup ? '#1565c0' : row.is_active ? '#2e7d32' : '#c62828' }}>
+        {row.is_pending_approval
+          ? 'Pending Approval'
+          : row.is_pending_access_setup
+            ? 'Awaiting setup'
+            : row.is_active
+              ? 'Active'
+              : 'Blocked'}
       </td>
       <td style={compact}>{row.created_at || '—'}</td>
+      <td style={compact}>
+        {row.first_login_at ? (
+          <span style={{ color: '#2e7d32', fontWeight: 600 }}>Logged in</span>
+        ) : row.is_pending_access_setup ? (
+          <span style={{ color: '#1565c0' }}>Not yet</span>
+        ) : (
+          '—'
+        )}
+      </td>
       <td style={compact}>{formatAdminUserAccessHints(row)}</td>
       <td style={{ ...compact, maxWidth: 130 }}>
         {row.paid_premium_active ? (
@@ -138,20 +154,48 @@ function UserRows({
               </Button>
             </>
           ) : row.is_active ? (
-            <Button
-              size="small"
-              color="warning"
-              variant="outlined"
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await blockAdminUser(row.id, true);
-                  setMessage(`User ${row.email} blocked successfully.`);
-                }, row.id)
-              }
-            >
-              Block
-            </Button>
+            <>
+              <Button
+                size="small"
+                color="primary"
+                variant="contained"
+                disabled={busy || !row.is_pending_access_setup || Boolean(row.first_login_at)}
+                title={
+                  row.first_login_at
+                    ? 'User has already logged in — activation link not needed'
+                    : !row.is_pending_access_setup
+                      ? 'User has already completed access setup'
+                      : 'Send a new activation email link'
+                }
+                onClick={() =>
+                  run(async () => {
+                    const res = await resendAdminUserAccessLink(row.id);
+                    setMessage(res?.message || `Activation link resent to ${row.email}.`);
+                  }, row.id)
+                }
+                sx={
+                  !row.is_pending_access_setup || row.first_login_at
+                    ? { opacity: 0.55 }
+                    : undefined
+                }
+              >
+                Resend activation link
+              </Button>
+              <Button
+                size="small"
+                color="warning"
+                variant="outlined"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await blockAdminUser(row.id, true);
+                    setMessage(`User ${row.email} blocked successfully.`);
+                  }, row.id)
+                }
+              >
+                Block
+              </Button>
+            </>
           ) : (
             <Button
               size="small"
@@ -519,6 +563,7 @@ export default function AdminUserDirectoryTables({
         <th style={compact}>Name</th>
         <th style={compact}>Status</th>
         <th style={compact}>Created</th>
+        <th style={compact}>Login</th>
         <th style={compact}>Access</th>
         <th style={compact}>Paid premium</th>
         <th style={compact}>Action</th>

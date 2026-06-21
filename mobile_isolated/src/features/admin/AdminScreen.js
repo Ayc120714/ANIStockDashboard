@@ -47,6 +47,7 @@ const accessHints = row => {
 
 const userStatus = row => {
   if (row?.is_pending_approval) return {label: 'Pending Approval', style: styles.statusPending};
+  if (row?.is_pending_access_setup) return {label: 'Awaiting setup', style: styles.statusPending};
   if (row?.is_active) return {label: 'Active', style: styles.statusActive};
   return {label: 'Blocked', style: styles.statusBlocked};
 };
@@ -82,6 +83,7 @@ function AdminUserCard({
   highlighted,
   onApprove,
   onReject,
+  onResendActivation,
   onBlock,
   onUnblock,
   onGrantMonthly,
@@ -133,12 +135,26 @@ function AdminUserCard({
             </Pressable>
           </>
         ) : row?.is_active ? (
-          <Pressable
-            disabled={busy}
-            style={[styles.actionBtn, styles.actionBtnWarn, busy ? styles.actionBtnDisabled : null]}
-            onPress={onBlock}>
-            <Text style={styles.actionBtnWarnText}>Block</Text>
-          </Pressable>
+          <>
+            <Pressable
+              disabled={busy || !row?.is_pending_access_setup || Boolean(row?.first_login_at)}
+              style={[
+                styles.actionBtn,
+                styles.actionBtnPrimary,
+                busy || !row?.is_pending_access_setup || row?.first_login_at
+                  ? styles.actionBtnDisabled
+                  : null,
+              ]}
+              onPress={onResendActivation}>
+              <Text style={styles.actionBtnPrimaryText}>Resend activation link</Text>
+            </Pressable>
+            <Pressable
+              disabled={busy}
+              style={[styles.actionBtn, styles.actionBtnWarn, busy ? styles.actionBtnDisabled : null]}
+              onPress={onBlock}>
+              <Text style={styles.actionBtnWarnText}>Block</Text>
+            </Pressable>
+          </>
         ) : (
           <Pressable
             disabled={busy}
@@ -415,6 +431,9 @@ export const AdminScreen = () => {
         runAction('User rejected', () => authService.rejectAdminUserRequest(row.id, 'rejected_by_admin'), {
           userId: row.id,
         })
+      }
+      onResendActivation={() =>
+        runAction('Activation link resent', () => authService.resendAdminUserAccessLink(row.id), {userId: row.id})
       }
       onBlock={() => runAction('User blocked', () => authService.blockAdminUser(row.id, true), {userId: row.id})}
       onUnblock={() => runAction('User unblocked', () => authService.blockAdminUser(row.id, false), {userId: row.id})}
