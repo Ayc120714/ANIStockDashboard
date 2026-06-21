@@ -31,8 +31,6 @@ export const alertsService = {
         cache: 'no-store',
       }),
     ),
-  createDummyDemoAlert: (opts = {}) =>
-    apiPost('/advisor/alerts/dummy-demo', {}, {timeoutMs: opts.timeoutMs ?? T.screen}),
   markAlertRead: alertId =>
     apiRequest(`/advisor/alerts/${encodeURIComponent(String(alertId))}/read`, {method: 'PUT'}),
   fetchSpecialAlerts: ({

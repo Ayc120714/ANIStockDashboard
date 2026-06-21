@@ -96,6 +96,23 @@ const dateKeyIST = d =>
     day: '2-digit',
   }).format(d);
 
+/** True for mobile notification test rows — never push or show in live UI. */
+export function isDemoAlert(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row._demo === true) return true;
+  const source = String(row?.source || '').trim().toLowerCase();
+  if (source === 'demo') return true;
+  const symbol = String(row?.symbol || '').trim().toUpperCase();
+  if (symbol === 'DEMO') return true;
+  const alertType = String(row?.alert_type || '').trim().toLowerCase();
+  if (alertType.includes('demo')) return true;
+  const detail = row?.signal_detail;
+  if (detail && typeof detail === 'object' && detail.demo === true) return true;
+  const message = String(row?.message || '').trim().toUpperCase();
+  if (message.startsWith('[DEMO]')) return true;
+  return false;
+}
+
 export function parseAdvisorAlertMs(ts) {
   if (ts == null || ts === '') return 0;
   const s = String(ts).trim();
@@ -160,6 +177,7 @@ function normalizeAdvisorRow(row, source) {
 export function normalizeLiveAdvisorRows(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .filter(row => {
+      if (isDemoAlert(row)) return false;
       const t = String(row?.alert_type || '').toLowerCase();
       return !t.startsWith('weekly_cross_') && !t.startsWith('rsi_divergence_');
     })

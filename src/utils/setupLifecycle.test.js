@@ -97,6 +97,21 @@ describe('liveSetupsPayload', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it('excludes demo test alerts from live setup board', () => {
+    const rows = buildLiveSetupRows(
+      [],
+      [{
+        id: 99,
+        symbol: 'DEMO',
+        alert_type: 'demo_mobile_test',
+        source: 'demo',
+        message: '[DEMO] test alert',
+        timestamp: today,
+      }],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it('partitions today and week buckets', () => {
     const rows = buildLiveSetupRows(
       [{

@@ -108,28 +108,3 @@ export async function consumePendingEntryHint() {
   }
   return {hint: raw, navTarget: {type: 'signals'}};
 }
-
-/** Create backend demo alert + fire mobile notification + queue in-app banner. */
-export async function fireDemoSignalAlert({signal} = {}) {
-  const row =
-    signal && typeof signal === 'object'
-      ? signal
-      : {
-          symbol: 'RELIANCE',
-          status: 'entry_ready',
-          entry_price: 2850,
-          stop_loss: 2780,
-          target_1: 2950,
-          target_2: 3020,
-          trend: 'bullish',
-          high_conviction: true,
-          updated_at: new Date().toISOString(),
-          _demo: true,
-        };
-  const payload = buildSignalNotificationPayload([row]);
-  if (payload) {
-    await queueInAppSignalBanner(payload);
-  }
-  const result = await notifyNewSignals([row], {vibrateInApp: true});
-  return {payload, result, signal: row};
-}

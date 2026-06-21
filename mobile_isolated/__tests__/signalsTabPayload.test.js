@@ -83,4 +83,23 @@ describe('signalsTabPayload', () => {
     expect(isLiveEntryExitAlert({alert_type: 'ENTRY_READY'})).toBe(true);
     expect(isLiveEntryExitAlert({alert_type: 'EXIT_READY'})).toBe(true);
   });
+
+  it('excludes demo test alerts from live signals merge', () => {
+    const merged = buildSignalsTabRows(
+      [],
+      [
+        {
+          id: 99,
+          symbol: 'DEMO',
+          alert_type: 'demo_mobile_test',
+          source: 'demo',
+          message: '[DEMO] test alert',
+          timestamp: today,
+        },
+        {id: 1, symbol: 'RELIANCE', alert_type: 'ENTRY_READY', timestamp: today},
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].symbol).toBe('RELIANCE');
+  });
 });

@@ -5,10 +5,12 @@ import {APP_VERSION_CODE, APP_VERSION_NAME} from '@core/config/appVersion';
 import {STORAGE_KEYS} from '@core/storage/keys';
 import {trackApkDownload} from '@core/api/services/mobileService';
 import {fetchAppUpdateManifest, isAppUpdateAvailable} from '@core/utils/appUpdateCheck';
-import {shouldAutoResumePendingUpdate} from '@core/utils/appUpdatePending';
+import {
+  reconcilePendingAppUpdate,
+  shouldAutoResumePendingUpdate,
+} from '@core/utils/appUpdatePending';
 import {
   clearPendingAppUpdate,
-  loadPendingAppUpdate,
   savePendingAppUpdate,
 } from '@core/utils/appUpdatePendingStorage';
 import {
@@ -139,16 +141,15 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
   }, [runAppUpdate]);
 
   const resumePendingUpdate = useCallback(async () => {
-    if (!pendingUpdateRef.current) {
-      pendingUpdateRef.current = await loadPendingAppUpdate();
-    }
+    const pending = await reconcilePendingAppUpdate(APP_VERSION_CODE);
+    pendingUpdateRef.current = pending;
 
-    const pending = pendingUpdateRef.current;
     const canInstall = await canInstallApkPackages();
     if (!shouldAutoResumePendingUpdate({
       pendingUpdate: pending,
       canInstall,
       updating: updatingRef.current,
+      installedVersionCode: APP_VERSION_CODE,
     })) {
       return;
     }
@@ -221,9 +222,9 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
   useEffect(() => {
     if (!enabled) return undefined;
 
-    loadPendingAppUpdate().then(pending => {
+    reconcilePendingAppUpdate(APP_VERSION_CODE).then(pending => {
+      pendingUpdateRef.current = pending;
       if (pending) {
-        pendingUpdateRef.current = pending;
         scheduleResumePendingUpdate();
       }
     });

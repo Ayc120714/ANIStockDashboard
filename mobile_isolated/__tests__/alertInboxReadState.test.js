@@ -5,6 +5,7 @@ import {
   filterUnreadInboxSections,
   inboxItemKey,
   isAdvisorDbAlertItem,
+  isDemoAlert,
   isInboxItemRead,
   isTableChangeInboxItem,
   mergeInboxReadKeys,
@@ -133,5 +134,13 @@ describe('notification inbox read state', () => {
         title: 'RELIANCE crossed threshold',
       }),
     ).toEqual({type: 'alerts'});
+  });
+
+  it('detects demo test alerts and drops them from live inbox rows', () => {
+    expect(isDemoAlert({source: 'demo', symbol: 'DEMO', alert_type: 'demo_mobile_test'})).toBe(true);
+    expect(normalizeLiveAdvisorRows([
+      {id: 1, symbol: 'RELIANCE', alert_type: 'ENTRY_READY', timestamp: '2026-06-21 10:00:00'},
+      {id: 2, symbol: 'DEMO', alert_type: 'demo_mobile_test', source: 'demo', timestamp: '2026-06-21 10:01:00'},
+    ])).toHaveLength(1);
   });
 });

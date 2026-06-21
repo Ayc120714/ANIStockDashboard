@@ -1,5 +1,5 @@
 import { fetchAlerts, fetchLatestSignals } from '../api/advisor';
-import { isTodayInIST, parseAdvisorAlertMs } from './alertInboxUtils';
+import { isDemoAlert, isTodayInIST, parseAdvisorAlertMs } from './alertInboxUtils';
 import { shouldRemoveSetupRow } from './setupLifecycle';
 
 function normalizeSymbol(value) {
@@ -17,7 +17,6 @@ export function isLiveEntryExitAlert(alert) {
     || t.startsWith('EARLY_ENTRY_')
     || t.includes('ENTRY')
     || t.includes('EXIT')
-    || t.includes('DEMO')
   );
 }
 
@@ -83,7 +82,8 @@ export function isThisWeekSetupRow(row) {
 export function buildLiveSetupRows(signals = [], liveAlerts = []) {
   const todayLive = (Array.isArray(liveAlerts) ? liveAlerts : [])
     .filter((row) => isThisWeekSetupRow({ setup_at: row?.timestamp || row?.created_at || row?.alert_time }))
-    .filter((row) => isLiveEntryExitAlert(row) || String(row?.alert_type || '').toLowerCase().includes('demo'))
+    .filter((row) => !isDemoAlert(row))
+    .filter((row) => isLiveEntryExitAlert(row))
     .map(liveAlertToSetupRow)
     .filter((row) => row.symbol);
 

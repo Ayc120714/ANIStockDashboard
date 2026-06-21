@@ -15,7 +15,7 @@ import {alertsService} from '@core/api/services/alertsService';
 import {MOBILE_ALERTS_LIMIT, MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {isTodayInIST} from '@core/utils/alertInboxUtils';
+import {isDemoAlert, isTodayInIST} from '@core/utils/alertInboxUtils';
 import {
   isLiveEntryExitAlert,
   isActionableTodaySignalRow,
@@ -420,7 +420,8 @@ export function AdvisorSignalsSection({
       const raw = Array.isArray(res) ? res : extractApiRows(res);
       const todayEntryExit = raw.filter(row => {
         if (!isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time)) return false;
-        return isLiveEntryExitAlert(row) || String(row?.source || '').toLowerCase() === 'demo';
+        if (isDemoAlert(row)) return false;
+        return isLiveEntryExitAlert(row);
       });
       setAlertRows(dedupeAlertsBySymbol(todayEntryExit));
     } catch {

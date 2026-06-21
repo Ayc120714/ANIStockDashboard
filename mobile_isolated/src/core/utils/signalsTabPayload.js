@@ -1,7 +1,7 @@
 import {alertsService} from '@core/api/services/alertsService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {isTodayInIST, parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
+import {isDemoAlert, isTodayInIST, parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
 import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
 import {fetchMobileSignalsTabRows} from '@core/utils/advisorHubCache';
 
@@ -120,7 +120,8 @@ export function liveAlertToSignalRow(alert) {
 export function buildSignalsTabRows(signals = [], liveAlerts = []) {
   const todayLive = (Array.isArray(liveAlerts) ? liveAlerts : [])
     .filter(row => isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time))
-    .filter(row => isLiveEntryExitAlert(row) || String(row?.alert_type || '').toLowerCase().includes('demo'))
+    .filter(row => !isDemoAlert(row))
+    .filter(row => isLiveEntryExitAlert(row))
     .map(liveAlertToSignalRow)
     .filter(row => row.symbol)
     .sort((a, b) => parseAdvisorAlertMs(b._alertAt) - parseAdvisorAlertMs(a._alertAt));

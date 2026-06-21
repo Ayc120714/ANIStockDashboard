@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Pressable,
@@ -16,8 +15,6 @@ import {TradeProductPicker} from '@components/TradeProductPicker';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {alertsService} from '@core/api/services/alertsService';
-import {fireDemoSignalAlert} from '@core/utils/signalNotifications';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {fetchSignalsTabPayload, isActionableTodaySignalRow} from '@core/utils/signalsTabPayload';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
@@ -144,7 +141,6 @@ export function SignalsScreen({navigation}) {
   const [error, setError] = useState('');
   const [rows, setRows] = useState([]);
   const [tradePickerSignal, setTradePickerSignal] = useState(null);
-  const [demoBusy, setDemoBusy] = useState(false);
   const initialLoadDone = useRef(false);
 
   const load = useCallback(async ({silent = false, forceRefresh = false} = {}) => {
@@ -227,27 +223,6 @@ export function SignalsScreen({navigation}) {
     load({silent: true, forceRefresh: true});
   }, [load]);
 
-  const onDemoAlert = useCallback(async () => {
-    if (demoBusy) return;
-    setDemoBusy(true);
-    try {
-      const res = await alertsService.createDummyDemoAlert();
-      const signal = res?.signal;
-      await fireDemoSignalAlert({signal});
-      if (signal) {
-        setRows(prev => [signal, ...prev.filter(r => !r?._demo)]);
-      }
-      Alert.alert(
-        'Demo alert sent',
-        'Check your notification shade, the banner above the tabs, and this Signals list.',
-      );
-    } catch (e) {
-      Alert.alert('Demo alert failed', String(e?.message || e));
-    } finally {
-      setDemoBusy(false);
-    }
-  }, [demoBusy]);
-
   const header = (
     <View style={styles.headBlock}>
       <View style={styles.headerCard}>
@@ -268,17 +243,6 @@ export function SignalsScreen({navigation}) {
           </Pressable>
         ))}
       </View>
-      <Pressable
-        style={[styles.demoBtn, demoBusy && styles.demoBtnBusy]}
-        onPress={onDemoAlert}
-        disabled={demoBusy}
-      >
-        {demoBusy ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.demoBtnText}>Try demo alert</Text>
-        )}
-      </Pressable>
       {error ? (
         <View style={styles.errWrap}>
           <Text style={styles.err}>{error}</Text>
@@ -386,18 +350,6 @@ const styles = StyleSheet.create({
   chipTxt: {fontSize: AYC.type.body, fontWeight: '700'},
   chipTxtOn: {color: '#fff'},
   chipTxtOff: {color: AYC.text},
-  demoBtn: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    backgroundColor: '#6366f1',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minWidth: 140,
-    alignItems: 'center',
-  },
-  demoBtnBusy: {opacity: 0.7},
-  demoBtnText: {color: '#fff', fontWeight: '800', fontSize: AYC.type.body},
   listPad: {...mobilePad, paddingHorizontal: 16, paddingBottom: 24},
   card: {...mobileStyles.card, borderRadius: 14, padding: 14, marginBottom: 4},
   cardTop: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6},

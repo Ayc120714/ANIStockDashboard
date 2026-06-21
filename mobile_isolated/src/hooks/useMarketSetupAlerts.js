@@ -9,7 +9,7 @@ import {STORAGE_KEYS} from '@core/storage/keys';
 import {clearPageCache} from '@core/storage/pageCache';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {isTodayInIST} from '@core/utils/alertInboxUtils';
+import {isDemoAlert, isTodayInIST} from '@core/utils/alertInboxUtils';
 import {
   isLiveEntryExitAlert,
   liveAlertToSignalRow,
@@ -153,13 +153,14 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
       .catch(() => null);
     if (!rows) return;
 
-    const list = Array.isArray(rows) ? rows : extractApiRows(rows);
+    const list = (Array.isArray(rows) ? rows : extractApiRows(rows)).filter(row => !isDemoAlert(row));
     const digest = liveAlertsDigest(list);
     const prev = await AsyncStorage.getItem(STORAGE_KEYS.liveAdvisorAlertsDigest);
 
     if (!firstLiveAlertPoll.current && prev && digest !== prev) {
       const fresh = diffNewLiveAlerts(prev, list).filter(row => {
         if (row?.is_read) return false;
+        if (isDemoAlert(row)) return false;
         return isTodayInIST(row?.created_at || row?.alert_time || row?.updated_at);
       });
       for (const alert of fresh.slice(0, 5)) {
