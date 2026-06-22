@@ -89,8 +89,13 @@ function isPublicAuthEndpoint(endpoint) {
   return path === 'auth' || path.startsWith('auth/');
 }
 
-export const apiRequest = async (endpoint, options = {}) =>
-  withRequestGate(async () => {
+/** Liveness probes must not queue behind dashboard fan-out on a single uvicorn worker. */
+function isLivenessEndpoint(endpoint) {
+  const path = String(endpoint || '').split('?')[0].replace(/^\//, '');
+  return path === 'health' || path === 'system/status' || path === 'system/readiness';
+}
+
+const apiRequestCore = async (endpoint, options = {}) => {
   if (isLogoutActive() && !isPublicAuthEndpoint(endpoint)) {
     throw new Error('Signed out.');
   }
@@ -178,7 +183,14 @@ export const apiRequest = async (endpoint, options = {}) =>
     }
     return intercepted.text();
   }
-  });
+};
+
+export const apiRequest = async (endpoint, options = {}) => {
+  if (isLivenessEndpoint(endpoint)) {
+    return apiRequestCore(endpoint, options);
+  }
+  return withRequestGate(() => apiRequestCore(endpoint, options));
+};
 
 export const apiGet = (endpoint, options = {}) => apiRequest(endpoint, {...options, method: 'GET'});
 export const apiPost = (endpoint, body, options = {}) =>

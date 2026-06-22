@@ -20,6 +20,21 @@ export const MOBILE_PAGE_CACHE_KEYS = {
     `@ani/mobile/page-cache/subsector-stocks-v2-${encodeURIComponent(String(subsector || ''))}-p${page}`,
 };
 
+/** Keep last-good rows visible when a live refresh fails or times out. */
+export function buildDashboardRefreshFallback(cached) {
+  if (!cached || typeof cached !== 'object') return {};
+  const payload = cached.data || cached;
+  if (!payload || typeof payload !== 'object') return {};
+  return {...payload};
+}
+
+/** Prefer fresh rows; otherwise retain the previous snapshot for this section. */
+export function pickDashboardSectionRows(section, fetched, fallbackPayload) {
+  if (Array.isArray(fetched) && fetched.length > 0) return fetched;
+  const prev = fallbackPayload?.[section];
+  return Array.isArray(prev) ? prev : [];
+}
+
 /** Dashboard has both top gainers and top losers (required for Market Movers card). */
 export function hasDashboardMovers(payload) {
   if (!payload || typeof payload !== 'object') return false;

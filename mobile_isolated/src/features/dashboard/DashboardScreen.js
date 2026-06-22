@@ -8,14 +8,16 @@ import {brokersService} from '@core/api/services/brokersService';
 import {advisorService} from '@core/api/services/advisorService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {useAuth} from '@core/auth/AuthContext';
-import {readPageCache, clearPageCache} from '@core/storage/pageCache';
+import {readPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
 import {
   applyLiveSessionRefreshPolicy,
   applyPullRefreshPolicy,
+  buildDashboardRefreshFallback,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
   MOBILE_PAGE_CACHE_KEYS,
+  pickDashboardSectionRows,
   dashboardSectionsToRefresh,
 } from '@core/utils/dashboardCachePolicy';
 import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
@@ -189,19 +191,14 @@ export const DashboardScreen = ({navigation}) => {
       liveSession = shouldPollLiveMarket(session);
       const cacheIncomplete = isDashboardCacheIncomplete(cachedPayload);
       const cacheStale = forceRefresh || isPageCacheStale(cachedWrap?.updatedAt, session) || cacheIncomplete;
-
-      if (cacheStale && !forceRefresh) {
-        await clearPageCache(DASHBOARD_CACHE_KEY);
-        cachedPayload = {};
-        cacheHydrated.current = false;
-      }
+      const refreshFallback = buildDashboardRefreshFallback(cachedWrap?.data ? cachedWrap : cachedPayload);
 
       if (!forceRefresh && cacheHydrated.current && !liveSession && !cacheStale) {
         refreshBrokerHoldings({silent: true});
         return;
       }
 
-      const need = dashboardSectionsToRefresh(cachedPayload);
+      const need = dashboardSectionsToRefresh({...refreshFallback, ...cachedPayload});
       applyLiveSessionRefreshPolicy(need, liveSession);
       if (!liveSession && cacheHydrated.current && !forceRefresh) {
         need.weekly = false;
@@ -220,42 +217,42 @@ export const DashboardScreen = ({navigation}) => {
         }
       };
 
-      let partial = {...cachedPayload};
+      let partial = {...refreshFallback, ...cachedPayload};
 
       const rCore = await Promise.allSettled([
         fetchSection(
-          need.indices || forceRefresh || !cachedPayload.indices?.length,
+          need.indices || forceRefresh || !partial.indices?.length,
           () => dashboardService.fetchMarketIndicesCards({timeoutMs: DASH_MS}),
-          cachedPayload.indices ?? [],
+          partial.indices ?? [],
         ),
         fetchSection(
           need.movers || forceRefresh,
           () => dashboardService.fetchPriceShockers({type: 'gainers', period: 'day', limit: 8, timeoutMs: DASH_MS}),
-          cachedPayload.gainers ?? [],
+          partial.gainers ?? [],
         ),
         fetchSection(
           need.movers || forceRefresh,
           () => dashboardService.fetchPriceShockers({type: 'losers', period: 'day', limit: 8, timeoutMs: DASH_MS}),
-          cachedPayload.losers ?? [],
+          partial.losers ?? [],
         ),
         fetchSection(
           need.watchlist || forceRefresh,
           () => dashboardService.fetchWatchlist({timeoutMs: DASH_MS}),
-          cachedPayload.watchlist ?? [],
+          partial.watchlist ?? [],
         ),
         fetchSection(
           need.signals || forceRefresh,
           () => dashboardService.fetchWatchlistSignals({timeframe: 'intraday', timeoutMs: DASH_MS}),
-          cachedPayload.signals ?? [],
+          partial.signals ?? [],
         ),
       ]);
 
-      const indicesRaw = settledValue(rCore[0], cachedPayload.indices ?? []);
-      partial.indices = Array.isArray(indicesRaw) && indicesRaw.length ? indicesRaw : cachedPayload.indices ?? [];
-      partial.gainers = parseStockList(settledValue(rCore[1], cachedPayload.gainers ?? []));
-      partial.losers = parseStockList(settledValue(rCore[2], cachedPayload.losers ?? []));
-      partial.watchlist = parseWatchlist(settledValue(rCore[3], cachedPayload.watchlist ?? []));
-      partial.signals = parseSignals(settledValue(rCore[4], cachedPayload.signals ?? []));
+      const indicesRaw = settledValue(rCore[0], partial.indices ?? []);
+      partial.indices = pickDashboardSectionRows('indices', indicesRaw, refreshFallback);
+      partial.gainers = parseStockList(pickDashboardSectionRows('gainers', settledValue(rCore[1], partial.gainers ?? []), refreshFallback));
+      partial.losers = parseStockList(pickDashboardSectionRows('losers', settledValue(rCore[2], partial.losers ?? []), refreshFallback));
+      partial.watchlist = parseWatchlist(pickDashboardSectionRows('watchlist', settledValue(rCore[3], partial.watchlist ?? []), refreshFallback));
+      partial.signals = parseSignals(pickDashboardSectionRows('signals', settledValue(rCore[4], partial.signals ?? []), refreshFallback));
       mergePartial({
         indices: partial.indices,
         gainers: partial.gainers,

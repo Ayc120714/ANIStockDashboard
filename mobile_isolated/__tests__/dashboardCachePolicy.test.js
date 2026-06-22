@@ -1,12 +1,14 @@
 import {
   applyLiveSessionRefreshPolicy,
   applyPullRefreshPolicy,
+  buildDashboardRefreshFallback,
   dashboardSectionsToRefresh,
   LEGACY_ADVISOR_TREND_CACHE_KEYS,
   LEGACY_DASHBOARD_CACHE_KEYS,
   MOBILE_PAGE_CACHE_KEYS,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
+  pickDashboardSectionRows,
   shouldForceAdvisorTrendNetwork,
   shouldRefreshAdvisorTrendCache,
 } from '@core/utils/dashboardCachePolicy';
@@ -138,5 +140,18 @@ describe('dashboard cache policy fixes', () => {
     expect(shouldForceAdvisorTrendNetwork({stale: false, trendHasData: false})).toBe(true);
     expect(shouldForceAdvisorTrendNetwork({stale: true, trendHasData: true})).toBe(true);
     expect(shouldForceAdvisorTrendNetwork({stale: false, trendHasData: true})).toBe(false);
+  });
+
+  it('keeps prior dashboard rows when live refresh returns empty (stale-while-revalidate)', () => {
+    const fallback = buildDashboardRefreshFallback({
+      data: {
+        indices: [{name: 'NIFTY', value: 24000}],
+        gainers: [{symbol: 'A'}],
+        losers: [{symbol: 'B'}],
+      },
+    });
+    expect(pickDashboardSectionRows('indices', [], fallback)).toEqual([{name: 'NIFTY', value: 24000}]);
+    expect(pickDashboardSectionRows('gainers', [], fallback)).toEqual([{symbol: 'A'}]);
+    expect(pickDashboardSectionRows('indices', [{name: 'SENSEX'}], fallback)).toEqual([{name: 'SENSEX'}]);
   });
 });
