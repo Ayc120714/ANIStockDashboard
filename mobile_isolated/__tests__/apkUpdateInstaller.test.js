@@ -3,6 +3,7 @@ import {
   isInstallPermissionError,
   isNativeApkUpdateAvailable,
   resolveApkDownloadUrl,
+  tryInstallCachedApkUpdate,
 } from '@core/utils/apkUpdateInstaller';
 import {APP_DIRECT_APK_URL} from '@core/config/appVersion';
 
@@ -23,5 +24,9 @@ describe('apkUpdateInstaller', () => {
 
   it('reports native in-app update availability from the bridge module', () => {
     expect(typeof isNativeApkUpdateAvailable()).toBe('boolean');
+  });
+
+  it('returns false when no cached APK installer bridge is available', async () => {
+    await expect(tryInstallCachedApkUpdate()).resolves.toBe(false);
   });
 });

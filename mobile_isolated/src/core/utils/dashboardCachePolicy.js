@@ -57,6 +57,24 @@ export function hasDashboardUsableContent(cached) {
   return (hasIndices && hasDashboardMovers(payload)) || hasWatchlist;
 }
 
+/** Minimum rows to leave the full-screen loading state (indices or watchlist alone is enough). */
+export function hasDashboardMinimumVisibleContent(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  const data = payload.data || payload;
+  if (!data || typeof data !== 'object') return false;
+  const hasIndices = Array.isArray(data.indices) && data.indices.length > 0;
+  const hasWatchlist = Array.isArray(data.watchlist) && data.watchlist.length > 0;
+  return hasIndices || hasWatchlist;
+}
+
+/**
+ * Heavy dashboard sections (weekly, alerts, broker holdings) must not block the tab shell.
+ * Core indices/movers/watchlist render first; extras always load in the background.
+ */
+export function shouldDeferDashboardExtrasLoad() {
+  return true;
+}
+
 export function isDashboardCacheIncomplete(cached) {
   if (!cached) return true;
   const payload = cached.data || cached;

@@ -14,11 +14,13 @@ import {
   applyLiveSessionRefreshPolicy,
   applyPullRefreshPolicy,
   buildDashboardRefreshFallback,
+  hasDashboardMinimumVisibleContent,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
   MOBILE_PAGE_CACHE_KEYS,
   pickDashboardSectionRows,
   dashboardSectionsToRefresh,
+  shouldDeferDashboardExtrasLoad,
 } from '@core/utils/dashboardCachePolicy';
 import {resolveDashboardBrokerHoldings} from '@core/utils/loadBrokerHoldings';
 import {dedupeWatchlistBySymbol} from '@core/utils/watchlistPayload';
@@ -101,9 +103,7 @@ function watchlistDayPct(row) {
 }
 
 function hasDashboardContent(payload) {
-  if (!payload || typeof payload !== 'object') return false;
-  const hasIndices = Array.isArray(payload.indices) && payload.indices.length > 0;
-  return hasIndices && hasDashboardMovers(payload);
+  return hasDashboardMinimumVisibleContent(payload);
 }
 
 function isAuthFailureMessage(message) {
@@ -212,7 +212,7 @@ export const DashboardScreen = ({navigation}) => {
       const mergePartial = partial => {
         setData(prev => ({...prev, ...partial}));
         cacheHydrated.current = true;
-        if (hasDashboardMovers(partial) || hasDashboardContent(partial)) {
+        if (hasDashboardMinimumVisibleContent(partial)) {
           setLoading(false);
         }
       };
@@ -260,6 +260,9 @@ export const DashboardScreen = ({navigation}) => {
         watchlist: partial.watchlist,
         signals: partial.signals,
       });
+      if (hasDashboardMinimumVisibleContent(partial)) {
+        setLoading(false);
+      }
 
       const coreAuthRejected = rCore.every(
         r => r.status === 'rejected' && isAuthFailureMessage(r.reason?.message),
@@ -364,6 +367,8 @@ export const DashboardScreen = ({navigation}) => {
 
       if (forceRefresh) {
         setRefreshing(false);
+      }
+      if (shouldDeferDashboardExtrasLoad()) {
         refreshEndedEarly = true;
         void loadDashboardExtras();
       } else {

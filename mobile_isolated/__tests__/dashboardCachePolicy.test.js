@@ -7,8 +7,10 @@ import {
   LEGACY_DASHBOARD_CACHE_KEYS,
   MOBILE_PAGE_CACHE_KEYS,
   hasDashboardMovers,
+  hasDashboardMinimumVisibleContent,
   isDashboardCacheIncomplete,
   pickDashboardSectionRows,
+  shouldDeferDashboardExtrasLoad,
   shouldForceAdvisorTrendNetwork,
   shouldRefreshAdvisorTrendCache,
 } from '@core/utils/dashboardCachePolicy';
@@ -153,5 +155,22 @@ describe('dashboard cache policy fixes', () => {
     expect(pickDashboardSectionRows('indices', [], fallback)).toEqual([{name: 'NIFTY', value: 24000}]);
     expect(pickDashboardSectionRows('gainers', [], fallback)).toEqual([{symbol: 'A'}]);
     expect(pickDashboardSectionRows('indices', [{name: 'SENSEX'}], fallback)).toEqual([{name: 'SENSEX'}]);
+  });
+
+  it('clears dashboard loading when indices or watchlist exist without full movers (v1.2.44)', () => {
+    expect(hasDashboardMinimumVisibleContent({indices: [{name: 'NIFTY'}]})).toBe(true);
+    expect(hasDashboardMinimumVisibleContent({watchlist: [{symbol: 'RELIANCE'}]})).toBe(true);
+    expect(
+      hasDashboardMinimumVisibleContent({
+        indices: [{name: 'NIFTY'}],
+        gainers: [{symbol: 'A'}],
+        losers: [],
+      }),
+    ).toBe(true);
+    expect(hasDashboardMinimumVisibleContent({gainers: [{symbol: 'A'}], losers: [{symbol: 'B'}]})).toBe(false);
+  });
+
+  it('always defers heavy dashboard extras so the tab shell is not blocked on broker/weekly APIs', () => {
+    expect(shouldDeferDashboardExtrasLoad()).toBe(true);
   });
 });

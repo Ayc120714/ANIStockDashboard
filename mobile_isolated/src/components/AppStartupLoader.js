@@ -42,9 +42,13 @@ export function AppStartupLoader({onReady}) {
 
       // Never block the UI on network — tabs hydrate from cache and refresh in background.
       finishStartup();
-      bootstrapCriticalDashboard().catch(() => {});
-      prefetchAppShellData().catch(() => {});
-      warmAppShellInBackground().catch(() => {});
+      bootstrapCriticalDashboard()
+        .catch(() => {})
+        .finally(() => {
+          if (cancelled) return;
+          prefetchAppShellData().catch(() => {});
+          warmAppShellInBackground().catch(() => {});
+        });
     })();
 
     return () => {

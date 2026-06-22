@@ -47,6 +47,33 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun installDownloadedApkIfPresent(promise: Promise) {
+    val activity = reactContext.currentActivity
+    if (activity == null) {
+      promise.resolve(false)
+      return
+    }
+
+    val apkFile =
+        File(
+            reactContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            "ani-stock-release.apk",
+        )
+    if (!apkFile.exists() || apkFile.length() < 1024) {
+      promise.resolve(false)
+      return
+    }
+
+    try {
+      validateApkMagic(apkFile)
+      launchPackageInstallerIntent(activity, apkFile)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
   fun openApkInBrowser(apkUrl: String, promise: Promise) {
     try {
       val activity = reactContext.currentActivity

@@ -16,6 +16,18 @@ export function isNativeApkUpdateAvailable() {
   return Platform.OS === 'android' && Boolean(ApkUpdate?.downloadAndInstall);
 }
 
+/** Launch the package installer when a prior in-app download left an APK on disk. */
+export async function tryInstallCachedApkUpdate() {
+  if (Platform.OS !== 'android' || !ApkUpdate?.installDownloadedApkIfPresent) {
+    return false;
+  }
+  try {
+    return Boolean(await ApkUpdate.installDownloadedApkIfPresent());
+  } catch {
+    return false;
+  }
+}
+
 /** Always use the static release APK URL (no API redirect). */
 export function resolveApkDownloadUrl(apkUrl) {
   const raw = String(apkUrl || '').trim();

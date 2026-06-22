@@ -8,6 +8,7 @@ import {fetchAppUpdateManifest, isAppUpdateAvailable} from '@core/utils/appUpdat
 import {
   reconcilePendingAppUpdate,
   shouldAutoResumePendingUpdate,
+  shouldShowUpdatePrompt,
 } from '@core/utils/appUpdatePending';
 import {
   clearPendingAppUpdate,
@@ -22,6 +23,7 @@ import {
   showInstallPromptAlert,
   showUpdateDownloadError,
   showUpdateStartingFeedback,
+  tryInstallCachedApkUpdate,
 } from '@core/utils/apkUpdateInstaller';
 
 const UPDATE_POLL_MS = 15 * 60 * 1000;
@@ -32,10 +34,24 @@ function buildUpdateMessage(manifest) {
   const lines = [
     `A new version of ANI Stock (${manifest.version}) is available.`,
     `You are on v${APP_VERSION_NAME} (build ${APP_VERSION_CODE}).`,
-    'Tap Update now to download and install the latest APK.',
+    'Tap Install now when you are ready — you can finish the setup later.',
   ];
   if (manifest.releaseNotes) {
     lines.push('', manifest.releaseNotes);
+  }
+  return lines.join('\n');
+}
+
+function buildPendingInstallMessage(pending, manifest) {
+  const version = pending?.version || manifest?.version || 'latest';
+  const lines = [
+    `ANI Stock v${version} is ready to install.`,
+    `You are on v${APP_VERSION_NAME} (build ${APP_VERSION_CODE}).`,
+    'Tap Install now to open the update installer, or Later to continue using the app.',
+  ];
+  const notes = manifest?.releaseNotes;
+  if (notes) {
+    lines.push('', notes);
   }
   return lines.join('\n');
 }
@@ -49,27 +65,12 @@ function buildPendingUpdate(manifest) {
   };
 }
 
-async function rememberDismissedUpdate(remoteCode) {
-  if (!Number.isFinite(remoteCode) || remoteCode <= 0) return;
-  await AsyncStorage.setItem(STORAGE_KEYS.dismissedUpdateCode, String(remoteCode));
-  await clearPendingAppUpdate();
-}
-
-function shouldPromptForManifest(manifest, dismissedCode, lastPromptedCode) {
-  if (!manifest || !isAppUpdateAvailable(manifest)) {
-    return false;
+function pendingFromManifestOrSaved(pending, manifest) {
+  if (pending?.apkUrl) return pending;
+  if (manifest && isAppUpdateAvailable(manifest)) {
+    return buildPendingUpdate(manifest);
   }
-  const remoteCode = Number(manifest.versionCode);
-  if (!Number.isFinite(remoteCode) || remoteCode <= 0) {
-    return false;
-  }
-  if (Number.isFinite(dismissedCode) && dismissedCode >= remoteCode) {
-    return false;
-  }
-  if (lastPromptedCode === remoteCode) {
-    return false;
-  }
-  return true;
+  return null;
 }
 
 async function syncDismissedUpdateState(manifest) {
@@ -84,7 +85,8 @@ async function syncDismissedUpdateState(manifest) {
 
 /**
  * Checks DOWNLOAD.json and shows an update popup whenever the published APK
- * versionCode is newer than the installed build. Only "Later" snoozes the prompt.
+ * versionCode is newer than the installed build. "Later" defers install but
+ * re-prompts the next time the user opens or returns to the app.
  */
 export function useAppUpdatePrompt({enabled = true} = {}) {
   const checkingRef = useRef(false);
@@ -106,6 +108,12 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
     if (!pending?.apkUrl) {
       showUpdateDownloadError(new Error('Update link is missing. Try again or download manually.'));
       return false;
+    }
+
+    const launchedCached = await tryInstallCachedApkUpdate();
+    if (launchedCached) {
+      showInstallPromptAlert();
+      return true;
     }
 
     showUpdateStartingFeedback();
@@ -144,6 +152,14 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
     const pending = await reconcilePendingAppUpdate(APP_VERSION_CODE);
     pendingUpdateRef.current = pending;
 
+    if (pending) {
+      const launchedCached = await tryInstallCachedApkUpdate();
+      if (launchedCached) {
+        showInstallPromptAlert();
+        return;
+      }
+    }
+
     const canInstall = await canInstallApkPackages();
     if (!shouldAutoResumePendingUpdate({
       pendingUpdate: pending,
@@ -175,24 +191,28 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
     });
   }, [startAppUpdate]);
 
-  const showUpdateAlert = useCallback(manifest => {
-    const remoteCode = Number(manifest.versionCode);
+  const showInstallAlert = useCallback((pending, manifest, {deferred = false} = {}) => {
+    const remoteCode = Number(pending?.remoteCode || manifest?.versionCode);
+    if (!Number.isFinite(remoteCode) || remoteCode <= 0) return;
+
     lastPromptedCodeRef.current = remoteCode;
-    const pending = buildPendingUpdate(manifest);
+    const message = deferred
+      ? buildPendingInstallMessage(pending, manifest)
+      : buildUpdateMessage(manifest || {version: pending.version, releaseNotes: ''});
 
     Alert.alert(
-      'App update available',
-      buildUpdateMessage(manifest),
+      deferred ? 'Finish app update' : 'App update available',
+      message,
       [
         {
           text: 'Later',
           style: 'cancel',
           onPress: () => {
-            rememberDismissedUpdate(remoteCode).catch(() => {});
+            setPendingUpdate(pending).catch(() => {});
           },
         },
         {
-          text: 'Update now',
+          text: 'Install now',
           onPress: () => {
             queueAppUpdateFromAlert(pending);
           },
@@ -200,24 +220,37 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
       ],
       {cancelable: false},
     );
-  }, [queueAppUpdateFromAlert]);
+  }, [queueAppUpdateFromAlert, setPendingUpdate]);
 
   const checkForUpdate = useCallback(async () => {
     if (!enabled || checkingRef.current) return;
     checkingRef.current = true;
     try {
+      const pending = await reconcilePendingAppUpdate(APP_VERSION_CODE);
+      pendingUpdateRef.current = pending;
+
       const manifest = await fetchAppUpdateManifest();
-      if (!manifest) return;
-
       const dismissedCode = await syncDismissedUpdateState(manifest);
+      const installPending = pendingFromManifestOrSaved(pending, manifest);
 
-      if (shouldPromptForManifest(manifest, dismissedCode, lastPromptedCodeRef.current)) {
-        showUpdateAlert(manifest);
+      if (
+        !shouldShowUpdatePrompt({
+          manifest,
+          pendingUpdate: pending,
+          dismissedCode,
+          lastPromptedCode: lastPromptedCodeRef.current,
+          installedVersionCode: APP_VERSION_CODE,
+        })
+        || !installPending
+      ) {
+        return;
       }
+
+      showInstallAlert(installPending, manifest, {deferred: Boolean(pending)});
     } finally {
       checkingRef.current = false;
     }
-  }, [enabled, showUpdateAlert]);
+  }, [enabled, showInstallAlert]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -239,6 +272,9 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
     }, UPDATE_POLL_MS);
 
     const sub = AppState.addEventListener('change', state => {
+      if (state === 'background' || state === 'inactive') {
+        lastPromptedCodeRef.current = 0;
+      }
       if (state === 'active') {
         scheduleResumePendingUpdate();
         checkForUpdate();
