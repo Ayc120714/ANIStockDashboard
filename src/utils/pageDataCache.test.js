@@ -1,4 +1,5 @@
 import {
+  chartFundamentalPayloadUsable,
   clearAllSessionPageCaches,
   isSessionPageCacheKey,
   readPageCache,
@@ -22,5 +23,31 @@ describe('pageDataCache session scope', () => {
     expect(clearAllSessionPageCaches()).toBe(2);
     expect(readPageCache('marketOutlookData_v3')).toBeNull();
     expect(sessionStorage.getItem('auth_user')).toBe('{"id":1}');
+  });
+});
+
+describe('chartFundamentalPayloadUsable', () => {
+  it('rejects empty-universe cached payloads', () => {
+    expect(
+      chartFundamentalPayloadUsable({
+        agent: 'chart_fundamental',
+        data: [],
+        weekly_data: [],
+        monthly_data: [],
+        scan_symbols: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts scanned payloads even when all gate tables are empty', () => {
+    expect(
+      chartFundamentalPayloadUsable({
+        agent: 'chart_fundamental',
+        data: [],
+        weekly_data: [],
+        monthly_data: [],
+        scan_symbols: 800,
+      }),
+    ).toBe(true);
   });
 });

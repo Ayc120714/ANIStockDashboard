@@ -434,7 +434,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     <>
       {timedOut && !apiReady && (
         <div style={{ marginBottom: '12px', color: '#b45309', fontWeight: 600, fontSize: 14 }}>
-          Could not reach the API within 60s — check that the backend is running on port 8000, then refresh.
+          Could not reach the API within 60s — the server may be busy during market hours. Wait a moment and refresh.
         </div>
       )}
       {loadError && (
@@ -746,7 +746,7 @@ function MarketOutlookPage() {
           Connecting to API…
         </div>
         <div style={{ color: '#666', fontSize: 14, lineHeight: 1.5 }}>
-          Waiting for <code style={{ fontSize: 13 }}>GET /api/system/status</code> (backend on port 8000).
+          Waiting for <code style={{ fontSize: 13 }}>GET /api/health</code> (lightweight API liveness).
         </div>
       </div>
     );

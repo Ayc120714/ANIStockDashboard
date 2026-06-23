@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../api/apiClient';
+import { pingApiLiveness } from '../utils/apiLiveness';
 import { ensureMarketSession } from '../utils/marketSession';
 
 /**
@@ -20,10 +21,12 @@ export function useBootstrapReady(pollMs = 2000, maxWaitForApiMs = 60000) {
       const deadline = Date.now() + maxWaitForApiMs;
       while (!cancelled && Date.now() < deadline) {
         try {
-          await apiGet('/system/status');
-          gotApi = true;
-          if (!cancelled) setApiReady(true);
-          break;
+          const ok = await pingApiLiveness(apiGet, { timeoutMs: Math.min(8000, pollMs * 3) });
+          if (ok) {
+            gotApi = true;
+            if (!cancelled) setApiReady(true);
+            break;
+          }
         } catch (e) {
           const msg = (e && e.message) || '';
           if (/404|not found/i.test(msg)) {

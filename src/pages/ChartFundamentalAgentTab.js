@@ -16,7 +16,9 @@ import Pagination from '@mui/material/Pagination';
 import { FaSort, FaSortDown, FaSortUp } from 'react-icons/fa';
 import { MdRefresh } from 'react-icons/md';
 import { TableWrapperCompact, TableCompact } from './SectorOutlook.styles';
+import { clearApiGetCache } from '../api/apiClient';
 import { fetchChartFundamentalAgent } from '../api/advisor';
+import { chartFundamentalPayloadUsable } from '../utils/pageDataCache';
 import { runScreenPayloadFetch } from '../utils/screenPageLoader';
 import { SymbolWithTradingView } from '../components/TradingViewLink';
 
@@ -386,13 +388,14 @@ export default function ChartFundamentalAgentTab() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const CACHE_KEY = 'advisor_chart_fundamental_agent_v5';
+  const CACHE_KEY = 'advisor_chart_fundamental_agent_v6';
 
   const load = useCallback(
     async (refresh = false) => {
       await runScreenPayloadFetch({
         cacheKey: CACHE_KEY,
         fetcher: async () => {
+          if (refresh) clearApiGetCache();
           const res = await fetchChartFundamentalAgent({
             refresh,
             symbol_limit: 800,
@@ -407,9 +410,7 @@ export default function ChartFundamentalAgentTab() {
         setLoading,
         setError,
         forceNetwork: refresh,
-        hasUsable: (p) => Boolean(
-          p && (Array.isArray(p.data) || Array.isArray(p.weekly_data) || Array.isArray(p.monthly_data)),
-        ),
+        hasUsable: chartFundamentalPayloadUsable,
       });
     },
     [showNearMiss],

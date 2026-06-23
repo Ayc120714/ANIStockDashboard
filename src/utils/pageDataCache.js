@@ -41,13 +41,25 @@ export function clearAllSessionPageCaches() {
   }
 }
 
+/** Chart + Fundamental agent: valid once the backend scanned a non-empty universe. */
+export function chartFundamentalPayloadUsable(data) {
+  if (!data || typeof data !== 'object' || data.agent !== 'chart_fundamental') return false;
+  return Number(data.scan_symbols) > 0;
+}
+
 export function cacheHasUsableData(data) {
   if (data == null) return false;
   if (Array.isArray(data)) return data.length > 0;
   if (typeof data !== 'object') return false;
 
+  if (data.agent === 'chart_fundamental') {
+    return chartFundamentalPayloadUsable(data);
+  }
+
   if (Array.isArray(data.data)) {
     if (data.data.length > 0) return true;
+    if (Array.isArray(data.weekly_data) && data.weekly_data.length > 0) return true;
+    if (Array.isArray(data.monthly_data) && data.monthly_data.length > 0) return true;
     if (data.weekLabels) return false;
   }
 

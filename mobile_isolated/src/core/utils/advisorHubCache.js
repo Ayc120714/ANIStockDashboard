@@ -124,6 +124,8 @@ export function extractChartBlocks(data) {
 }
 
 export function hasUsableAdvisorChartPayload(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (data.agent === 'chart_fundamental' && Number(data.scan_symbols) > 0) return true;
   return extractChartBlocks(data).some(block => (block?.rows?.length || 0) > 0);
 }
 
