@@ -3,7 +3,7 @@ import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {isDemoAlert, isTodayInIST, parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
 import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
-import {fetchMobileSignalsTabRows} from '@core/utils/advisorHubCache';
+import {fetchLiveSetupsPayload} from '@core/utils/liveSetupsPayload';
 
 function normalizeSymbol(value) {
   return String(value || '').trim().toUpperCase();
@@ -142,10 +142,9 @@ export function buildSignalsTabRows(signals = [], liveAlerts = []) {
   return [...liveList, ...rest].sort(compareSignalsTabRows);
 }
 
-/** Scanned advisor signals only — live entry/exit alerts belong on the Alerts screen. */
+/** Live setup board — same merged signals + alerts payload as web `/alerts`. */
 export async function fetchSignalsTabPayload() {
-  const signals = await fetchMobileSignalsTabRows();
-  return buildSignalsTabRows(signals, []);
+  return fetchLiveSetupsPayload();
 }
 
 /** Today's live entry/exit advisor alerts with Entry / SL / targets. */

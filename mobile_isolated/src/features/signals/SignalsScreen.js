@@ -16,7 +16,8 @@ import {TradingViewLink} from '@components/TradingViewLink';
 import {useAuth} from '@core/auth/AuthContext';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
-import {fetchSignalsTabPayload, isActionableTodaySignalRow} from '@core/utils/signalsTabPayload';
+import {fetchLiveSetupsPayload, partitionLiveSetups} from '@core/utils/liveSetupsPayload';
+import {getSetupLifecycleState} from '@core/utils/setupLifecycle';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {
   runScreenTableFetch,
@@ -51,6 +52,11 @@ const FILTERS = [
   {id: 'high', label: 'High conviction'},
 ];
 
+const PERIODS = [
+  {id: 'today', label: 'Today'},
+  {id: 'week', label: 'This week'},
+];
+
 function formatINR(n) {
   if (n == null || Number.isNaN(Number(n))) return '—';
   const v = Number(n);
@@ -64,19 +70,22 @@ function formatINR(n) {
 function SignalCard({item, onTrade}) {
   const trend = String(item.trend || '').toLowerCase();
   const bull = trend === 'bullish';
-  const status = String(item.status || '');
+  const lifecycle = getSetupLifecycleState(item);
+  const statusLabel = lifecycle.statusLabel || String(item.status || '').replace(/_/g, ' ');
   const isLiveAlert = Boolean(item._liveAlert);
-  const isExitSignal = status === 'exit_watch' || status === 'done';
+  const isExitSignal = item.status === 'exit_watch' || item.status === 'done';
   const pct = item.pct_from_entry;
   const pctColor = pct > 0 ? '#15803d' : pct < 0 ? '#b91c1c' : '#374151';
   const statusStyle =
-    status === 'entry_ready'
+    lifecycle.statusLabel === 'ENTRY READY'
       ? styles.badgeEntry
-      : status === 'in_trade'
+      : lifecycle.statusLabel === 'IN TRADE' || lifecycle.statusLabel === 'T1 HIT'
         ? styles.badgeTrade
-        : status === 'done'
+        : lifecycle.statusLabel === 'T2 / DONE' || lifecycle.statusLabel === 'SL HIT'
           ? styles.badgeDone
-          : styles.badgeWatch;
+          : item.status === 'exit_watch'
+            ? styles.badgeWatch
+            : styles.badgeWatch;
 
   return (
     <View style={styles.card}>
@@ -90,7 +99,7 @@ function SignalCard({item, onTrade}) {
           {item.high_conviction ? <Text style={styles.tagHi}>High conviction</Text> : null}
           <Text style={styles.tagEq}>{bull ? 'Equity · Bull' : 'Equity · Bear'}</Text>
         </View>
-        <Text style={[styles.badgeStatus, statusStyle]}>{status.replace(/_/g, ' ')}</Text>
+        <Text style={[styles.badgeStatus, statusStyle]}>{statusLabel}</Text>
       </View>
       <View style={styles.symRow}>
         <TradingViewLink symbol={item.symbol} size={16} />
@@ -115,7 +124,7 @@ function SignalCard({item, onTrade}) {
           <View style={[styles.railSeg, {flex: 1, backgroundColor: '#bbf7d0'}]} />
         </View>
         <View style={styles.railLabels}>
-          <Text style={styles.railLab}>SL {formatINR(item.stop_loss)}</Text>
+          <Text style={styles.railLab}>SL {formatINR(lifecycle.effectiveStopLoss ?? item.stop_loss)}</Text>
           <Text style={styles.railLab}>Entry {formatINR(item.entry_price)}</Text>
           <Text style={styles.railLab}>T1 {formatINR(item.target_1)}</Text>
         </View>
@@ -151,7 +160,7 @@ export function SignalsScreen({navigation}) {
 
     await runScreenTableFetch({
       cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
-      fetcher: () => fetchSignalsTabPayload(),
+      fetcher: () => fetchLiveSetupsPayload(),
       setRows,
       setLoading: silent && !forceRefresh ? () => {} : setLoading,
       setError: msg => setError(msg || ''),
@@ -173,7 +182,7 @@ export function SignalsScreen({navigation}) {
       if (cancelled) return;
       pollId = await runScreenTableFetchWithLivePoll({
         cacheKey: MOBILE_PAGE_CACHE_KEYS.advisorSignals,
-        fetcher: () => fetchSignalsTabPayload(),
+        fetcher: () => fetchLiveSetupsPayload(),
         setRows,
         setLoading: hadCache ? () => {} : setLoading,
         setError: msg => setError(msg || ''),
@@ -201,10 +210,13 @@ export function SignalsScreen({navigation}) {
   );
 
   const [filter, setFilter] = useState('all');
+  const [period, setPeriod] = useState('today');
+
+  const partitioned = useMemo(() => partitionLiveSetups(rows), [rows]);
 
   const filtered = useMemo(() => {
-    const todayOnly = (rows || []).filter(isActionableTodaySignalRow);
-    const deduped = dedupeSignalsBySymbol(todayOnly);
+    const base = period === 'today' ? partitioned.today : partitioned.week;
+    const deduped = dedupeSignalsBySymbol(base);
     if (filter === 'entry_ready') {
       return deduped.filter(r => String(r.status) === 'entry_ready');
     }
@@ -212,11 +224,11 @@ export function SignalsScreen({navigation}) {
       return deduped.filter(r => r.high_conviction);
     }
     return deduped;
-  }, [rows, filter]);
+  }, [filter, partitioned, period]);
 
   const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(filtered, {
     pageSize: SIGNALS_PAGE_SIZE,
-    resetDeps: [filter],
+    resetDeps: [filter, period],
   });
 
   const onRefresh = useCallback(() => {
@@ -227,7 +239,23 @@ export function SignalsScreen({navigation}) {
     <View style={styles.headBlock}>
       <View style={styles.headerCard}>
         <Image source={require('../../assets/ayc-logo.png')} style={styles.logo} />
-        <Text style={styles.title}>Advisor signals</Text>
+        <Text style={styles.title}>Live Setups</Text>
+      </View>
+      <View style={styles.chips}>
+        {PERIODS.map(c => (
+          <Pressable
+            key={c.id}
+            onPress={() => {
+              setPeriod(c.id);
+              setPage(1);
+            }}
+            style={[styles.chip, period === c.id ? styles.chipOn : styles.chipOff]}
+          >
+            <Text style={[styles.chipTxt, period === c.id ? styles.chipTxtOn : styles.chipTxtOff]}>
+              {c.label} ({(c.id === 'today' ? partitioned.today : partitioned.week).length})
+            </Text>
+          </Pressable>
+        ))}
       </View>
       <View style={styles.chips}>
         {FILTERS.map(c => (
@@ -268,7 +296,11 @@ export function SignalsScreen({navigation}) {
         contentContainerStyle={styles.listPad}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={header}
-        ListEmptyComponent={<Text style={styles.muted}>No setups match this filter right now.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.muted}>
+            No active {period === 'today' ? 'today' : 'weekly'} setups right now.
+          </Text>
+        }
         ListFooterComponent={
           <ListPagePager
             page={page}

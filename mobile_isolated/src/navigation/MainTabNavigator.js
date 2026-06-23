@@ -203,7 +203,7 @@ export function MainTabNavigator({navigation}) {
           },
         }}
         options={{
-          tabBarLabel: 'Signals',
+          tabBarLabel: 'Setups',
           tabBarBadge: signalsBadge,
           tabBarIcon: ({focused}) => <TabIcon emoji="⚡" focused={focused} />,
         }}
