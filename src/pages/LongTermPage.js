@@ -9,8 +9,7 @@ import WatchlistSymbolDetailPanel from '../components/WatchlistSymbolDetailPanel
 import { apiGet, clearApiGetCache } from '../api/apiClient';
 import { checkPriceAlerts, fetchPriceAlerts, upsertPriceAlert } from '../api/priceAlerts';
 import { useAuth } from '../auth/AuthContext';
-import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
-import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { runLiveMarketPageMountPoll, runWatchlistPageFetch } from '../utils/screenPageLoader';
 import {
   collectWatchlistMutationSymbols,
   computeOptimisticWatchlistMutation,
@@ -19,7 +18,7 @@ import {
 } from '../utils/watchlistPageMutation';
 import OrderPanel from '../components/OrderPanel';
 
-const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v3';
+const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v4';
 
 const recColors = {
   strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
@@ -233,59 +232,50 @@ function LongTermPage() {
 
   const load = useCallback(async (options = {}) => {
     const forceRefresh = options?.forceRefresh === true;
-    const silentPoll = options?.silentPoll === true;
+    const forceNetwork = options?.forceNetwork === true || forceRefresh;
+    const silent = options?.silent === true;
     const gen = ++loadGenRef.current;
-    if (!forceRefresh && !silentPoll) {
-      const cachedWrap = readPageCache(LONG_TERM_CACHE_KEY);
-      if (cachedWrap?.data) {
-        setData(Array.isArray(cachedWrap.data.watchlist) ? cachedWrap.data.watchlist : []);
-        setSignals(Array.isArray(cachedWrap.data.signals) ? cachedWrap.data.signals : []);
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
-      if (await shouldUseCachedPageDataOnly(LONG_TERM_CACHE_KEY)) {
-        return;
-      }
-    } else if (forceRefresh) {
-      clearApiGetCache();
-      setLoading(true);
-    }
-    try {
-      const skipCache = forceRefresh || silentPoll;
-      const [wl, sigs] = await Promise.all([
-        fetchWatchlist('long_term', { skipCache }),
-        fetchWatchlistSignals({ timeframe: 'intraday' }),
-      ]);
+
+    const applyPayload = (payload) => {
       if (gen !== loadGenRef.current) return;
-      const watchlist = resolveWatchlistRowsAfterFetch(wl, LONG_TERM_CACHE_KEY, { forceRefresh });
-      const payload = { watchlist, signals: Array.isArray(sigs) ? sigs : [] };
-      writePageCache(LONG_TERM_CACHE_KEY, payload);
-      setData(payload.watchlist);
-      setSignals(payload.signals);
-    } catch (_) {
-      /* keep cache */
-    } finally {
-      if (gen === loadGenRef.current) setLoading(false);
-    }
+      setData(Array.isArray(payload?.watchlist) ? payload.watchlist : []);
+      setSignals(Array.isArray(payload?.signals) ? payload.signals : []);
+    };
+
+    if (forceRefresh) clearApiGetCache();
+
+    await runWatchlistPageFetch({
+      cacheKey: LONG_TERM_CACHE_KEY,
+      fetcher: async () => {
+        const skipCache = forceRefresh || forceNetwork;
+        const [wl, sigs] = await Promise.all([
+          fetchWatchlist('long_term', { skipCache }),
+          fetchWatchlistSignals({ timeframe: 'intraday' }),
+        ]);
+        const watchlist = resolveWatchlistRowsAfterFetch(wl, LONG_TERM_CACHE_KEY, { forceRefresh });
+        return { watchlist, signals: Array.isArray(sigs) ? sigs : [] };
+      },
+      applyPayload,
+      setLoading,
+      forceNetwork,
+      silent,
+    });
   }, []);
 
   useEffect(() => {
-    let iv;
+    let cleanup;
     let cancelled = false;
     (async () => {
-      await load();
-      await loadSymbols();
-      if (cancelled) return;
-      await ensureMarketSession();
-      const pollMs = getMarketPollingIntervalMs(60000, 0);
-      if (pollMs > 0) {
-        iv = setInterval(() => load({ silentPoll: true }), pollMs);
-      }
+      await runLiveMarketPageMountPoll({
+        load,
+        liveIntervalMs: 60_000,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
+      if (!cancelled) await loadSymbols();
     })();
     return () => {
       cancelled = true;
-      clearInterval(iv);
+      cleanup?.();
     };
   }, [load, loadSymbols]);
 

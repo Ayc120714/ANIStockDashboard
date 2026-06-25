@@ -2,6 +2,31 @@ import { clearApiGetCache } from '../api/apiClient';
 import { readPageCache, writePageCache } from './pageDataCache';
 import { applyWatchlistRowMutation, normalizeWatchlistSymbol } from './watchlistLocalMutation';
 
+function hasPresentValue(value) {
+  return value !== null && value !== undefined && value !== '';
+}
+
+/** Prefer primary (API) values; fill gaps from secondary (cache) after optimistic add. */
+export function mergeWatchlistRowFields(primary = {}, secondary = {}) {
+  const merged = { ...secondary, ...primary };
+  const keys = new Set([
+    ...Object.keys(primary || {}),
+    ...Object.keys(secondary || {}),
+  ]);
+  for (const key of keys) {
+    const p = primary[key];
+    const s = secondary[key];
+    if (hasPresentValue(p)) {
+      merged[key] = p;
+    } else if (hasPresentValue(s)) {
+      merged[key] = s;
+    }
+  }
+  const symbol = normalizeWatchlistSymbol(primary.symbol || secondary.symbol);
+  if (symbol) merged.symbol = symbol;
+  return merged;
+}
+
 export function persistWatchlistPagePayload(cacheKey, watchlist, signals) {
   writePageCache(cacheKey, {
     watchlist: Array.isArray(watchlist) ? watchlist : [],
@@ -61,8 +86,10 @@ export function mergeWatchlistMembershipFromCache(apiRows, cacheRows) {
   const uniqueSyms = [...new Set(orderedSyms)];
 
   return uniqueSyms.map((sym) => {
-    if (apiBySym.has(sym)) return apiBySym.get(sym);
+    const apiRow = apiBySym.get(sym);
     const cachedRow = cacheList.find((row) => normalizeWatchlistSymbol(row?.symbol) === sym);
+    if (apiRow && cachedRow) return mergeWatchlistRowFields(apiRow, cachedRow);
+    if (apiRow) return apiRow;
     return cachedRow || { symbol: sym };
   });
 }

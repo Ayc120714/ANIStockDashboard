@@ -8,10 +8,32 @@ import {
   shouldSkipNetworkForClosedMarket,
 } from './marketSession';
 import { cacheHasUsableData, readPageCache, writePageCache } from './pageDataCache';
+import { watchlistPayloadHasUsableMarketData } from './watchlistCachePolicy';
 import { ensureLegacyFormattedScreenCachesPurged } from './screenStockCache';
 
 /** Default refresh for screen tables while orchestrator is updating live DB rows. */
 export const SCREEN_LIVE_POLL_MS = 30_000;
+
+/**
+ * Standard mount + poll for live-market pages (cache-first navigation).
+ * Mount: forceNetwork=false. Interval polls: forceNetwork=true, silent=true.
+ */
+export async function runLiveMarketPageMountPoll({
+  load,
+  liveIntervalMs = SCREEN_LIVE_POLL_MS,
+  onCleanup,
+}) {
+  await ensureMarketSession();
+  await load({ silent: false, forceNetwork: false });
+  await ensureMarketSession();
+  const pollMs = getMarketPollingIntervalMs(liveIntervalMs, 0);
+  if (pollMs <= 0) return undefined;
+  const id = setInterval(() => {
+    load({ silent: true, forceNetwork: true });
+  }, pollMs);
+  onCleanup?.(() => clearInterval(id));
+  return id;
+}
 
 export function extractRowArray(data) {
   if (Array.isArray(data)) return data;
@@ -86,6 +108,7 @@ export async function runScreenTableFetch({
   setLoading,
   setError,
   forceNetwork = false,
+  silent = false,
   mapRows = (rows) => rows,
 }) {
   ensureLegacyFormattedScreenCachesPurged();
@@ -98,20 +121,15 @@ export async function runScreenTableFetch({
     if (rows.length > 0) {
       setRows(rows);
       hydrated = true;
-      setLoading(false);
+      if (setLoading) setLoading(false);
     }
   }
 
-  if (!forceNetwork && !hydrated) {
-    await ensureMarketSession();
-  }
-
-  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey, cached))) {
-    setLoading(false);
-    return;
-  }
-
   if (!forceNetwork && hydrated) {
+    if (await shouldSkipScreenFetch(cacheKey, cached)) {
+      if (setLoading) setLoading(false);
+      return;
+    }
     scheduleBackgroundTableRefresh({
       cacheKey,
       fetcher,
@@ -123,7 +141,11 @@ export async function runScreenTableFetch({
     return;
   }
 
-  if (!hydrated) setLoading(true);
+  if (!hydrated && setLoading && !silent) setLoading(true);
+
+  if (!forceNetwork && !hydrated) {
+    await ensureMarketSession();
+  }
 
   try {
     const session = getCachedMarketSession();
@@ -139,9 +161,11 @@ export async function runScreenTableFetch({
     if (!hydrated) {
       if (setError) setError(e?.message || 'Failed to load data.');
       setRows([]);
+    } else if (setError) {
+      setError(null);
     }
   } finally {
-    setLoading(false);
+    if (setLoading) setLoading(false);
   }
 }
 
@@ -156,6 +180,7 @@ export async function runScreenPayloadFetch({
   setError,
   forceNetwork = false,
   hasUsable = cacheHasUsableData,
+  silent = false,
 }) {
   if (setError) setError(null);
 
@@ -164,19 +189,14 @@ export async function runScreenPayloadFetch({
   if (cached?.data != null && hasUsable(cached.data)) {
     applyPayload(cached.data);
     hydrated = true;
-    setLoading(false);
-  }
-
-  if (!forceNetwork && !hydrated) {
-    await ensureMarketSession();
-  }
-
-  if (!forceNetwork && hydrated && (await shouldSkipScreenFetch(cacheKey, cached))) {
-    setLoading(false);
-    return;
+    if (setLoading) setLoading(false);
   }
 
   if (!forceNetwork && hydrated) {
+    if (await shouldSkipScreenFetch(cacheKey, cached)) {
+      if (setLoading) setLoading(false);
+      return;
+    }
     scheduleBackgroundPayloadRefresh({
       cacheKey,
       fetcher,
@@ -188,20 +208,55 @@ export async function runScreenPayloadFetch({
     return;
   }
 
-  if (!hydrated) setLoading(true);
+  if (!hydrated && setLoading && !silent) setLoading(true);
+
+  if (!forceNetwork && !hydrated) {
+    await ensureMarketSession();
+  }
 
   try {
     const fresh = await fetcher();
-    writePageCache(cacheKey, fresh);
+    if (hasUsable(fresh)) {
+      writePageCache(cacheKey, fresh);
+    }
     applyPayload(fresh);
     if (setError) setError(null);
   } catch (e) {
     if (!hydrated) {
       if (setError) setError(e?.message || 'Failed to load data.');
+    } else if (setError) {
+      setError(null);
     }
   } finally {
-    setLoading(false);
+    if (setLoading) setLoading(false);
   }
+}
+
+/** Watchlist + signals pages (Short Term / Long Term). */
+export async function runWatchlistPageFetch({
+  cacheKey,
+  fetcher,
+  applyPayload,
+  setLoading,
+  setError,
+  forceNetwork = false,
+  silent = false,
+}) {
+  return runScreenPayloadFetch({
+    cacheKey,
+    fetcher,
+    applyPayload,
+    setLoading,
+    setError,
+    forceNetwork,
+    silent,
+    hasUsable: (data) => Boolean(
+      data
+      && Array.isArray(data.watchlist)
+      && data.watchlist.length > 0
+      && watchlistPayloadHasUsableMarketData(data),
+    ),
+  });
 }
 
 /**
@@ -220,7 +275,6 @@ export async function runScreenTableFetchWithLivePoll({
   mapRows,
 }) {
   await ensureMarketSession();
-  const session = getCachedMarketSession();
 
   await runScreenTableFetch({
     cacheKey,
@@ -228,7 +282,7 @@ export async function runScreenTableFetchWithLivePoll({
     setRows,
     setLoading,
     setError,
-    forceNetwork: shouldPollLiveMarket(session),
+    forceNetwork: false,
     mapRows,
   });
 

@@ -4,6 +4,7 @@ import {
   collectWatchlistMutationSymbols,
   computeOptimisticWatchlistMutation,
   mergeWatchlistMembershipFromCache,
+  mergeWatchlistRowFields,
   resolveWatchlistRowsAfterFetch,
 } from './watchlistPageMutation';
 
@@ -34,6 +35,26 @@ describe('watchlistPageMutation', () => {
     const loadGenRef = { current: 3 };
     bumpWatchlistLoadGeneration(loadGenRef);
     expect(loadGenRef.current).toBe(4);
+  });
+
+  it('mergeWatchlistRowFields fills gaps from cache when API row is sparse', () => {
+    const apiRow = { symbol: 'HSCL' };
+    const cacheRow = { symbol: 'HSCL', price: 88.5, rsi: 52.1 };
+    const merged = mergeWatchlistRowFields(apiRow, cacheRow);
+    expect(merged).toEqual(expect.objectContaining({
+      symbol: 'HSCL',
+      price: 88.5,
+      rsi: 52.1,
+    }));
+  });
+
+  it('mergeWatchlistMembershipFromCache merges master fields from API over sparse cache', () => {
+    const apiRows = [{ symbol: 'HSCL', price: 120, day1d: 2.1, rsi: 61 }];
+    const cacheRows = [{ symbol: 'HSCL' }];
+    const merged = mergeWatchlistMembershipFromCache(apiRows, cacheRows);
+    expect(merged).toEqual([
+      expect.objectContaining({ symbol: 'HSCL', price: 120, day1d: 2.1, rsi: 61 }),
+    ]);
   });
 
   it('mergeWatchlistMembershipFromCache keeps optimistic deletes when API is stale (LT/ST)', () => {
