@@ -2,8 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TablePagination } from '@mui/material';
 import { MdLock } from 'react-icons/md';
-import { fetchMarketIndices, fetchMarketIndicesTable } from '../api/marketIndices';
-import { fetchFiiDiiActivity } from '../api/fiiDii';
 import { useAuth } from '../auth/AuthContext';
 import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
@@ -11,6 +9,14 @@ import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import { buildMarketBarChart } from '../utils/marketBarChart';
+import {
+  fetchMarketOutlookBundle,
+  loadFiiDiiWithCache,
+  marketOutlookHasUsable,
+  normalizeMarketOutlookPayload,
+  parseIsoLikeDate,
+} from '../utils/marketOutlookLoader';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import {
   CardContainer,
   Card,
@@ -33,7 +39,6 @@ import {
   Table
 } from './MarketOutlook.styles';
 
-import { clearApiGetCache } from '../api/apiClient';
 import {
   ensureMarketSession,
   formatIstTime,
@@ -43,12 +48,7 @@ import {
   isPageCacheStale,
   shouldPollLiveMarket,
 } from '../utils/marketSession';
-import {
-  clearPageCache,
-  readPageCache,
-  shouldUseCachedPageDataOnly,
-  writePageCache,
-} from '../utils/pageDataCache';
+import { readPageCache } from '../utils/pageDataCache';
 
 const MIN_FII_DII_DAYS = 20;
 const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v3';
@@ -56,66 +56,36 @@ const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v2';
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
 
-const MONTHS = {
-  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-};
-
-const parseIsoLikeDate = (value) => {
-  if (!value) return Number.NEGATIVE_INFINITY;
-  const raw = String(value).trim();
-  const dmy = raw.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
-  if (dmy) {
-    const mon = MONTHS[dmy[2].toLowerCase()];
-    if (mon != null) {
-      return new Date(Number(dmy[3]), mon, Number(dmy[1])).getTime();
-    }
-  }
-  const normalized = raw.replace(/\//g, '-');
-  const parsed = Date.parse(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
-};
-
-/** FII/DII updates after ~8 PM IST; do not freeze on 24h closed-market page cache. */
-const fiiDiiCacheIsStale = (cached) => {
-  if (!cached?.data) return true;
-  const updatedAt = Number(cached.updatedAt) || 0;
-  const latestIso = cached.data?.latest_available_iso;
-  if (!latestIso) return true;
-  const ageMs = Date.now() - updatedAt;
-  if (ageMs > 6 * 60 * 60 * 1000) return true;
-  const serverDay = cached.data?.server_date_iso;
-  if (serverDay && latestIso < serverDay) return true;
-  return false;
-};
-
 const normalizeRecentDaily = (daily, limit) => {
   if (!Array.isArray(daily)) return [];
   const sorted = [...daily].sort((a, b) => parseIsoLikeDate(b?.date) - parseIsoLikeDate(a?.date));
   return sorted.slice(0, limit);
 };
 
+const PLACEHOLDER_OUTLOOK_CARD = {
+  title: '—',
+  trend: 'SIDEWAYS',
+  value: '—',
+  change: '—',
+  percentile: '—',
+  pe: '—',
+};
+const EMPTY_OUTLOOK_CARD_ROW = [
+  PLACEHOLDER_OUTLOOK_CARD,
+  PLACEHOLDER_OUTLOOK_CARD,
+  PLACEHOLDER_OUTLOOK_CARD,
+];
+
 function MarketOutlookContent({ apiReady, timedOut }) {
   const { outlookPremium } = useAuth();
   const [searchParams] = useSearchParams();
   const miDiag = searchParams.get('mi_diag') === '1';
-  const defaultIndexCards = [
-    { title: 'Nifty 50', trend: 'UP TREND', value: '25,879', change: '+0.01%', percentile: '96%', pe: '23 PE' },
-    { title: 'Next 50', trend: 'UP TREND', value: '69,852', change: '+0.00%', percentile: '79%', pe: '20 PE' },
-    { title: 'Midcap 100', trend: 'UP TREND', value: '60,692', change: '-0.35%', percentile: '98%', pe: '34 PE' }
-  ];
 
   const [fiiDiiData, setFiiDiiData] = useState(null);
   const [fiiDiiLoadState, setFiiDiiLoadState] = useState('idle'); // idle | loading | error | done
 
-  const defaultSmallcapCards = [
-    { title: 'Smallcap 100', trend: 'UP TREND', value: '18,184', change: '-0.37%', percentile: '71%', pe: '31 PE' },
-    { title: 'Microcap 250', trend: 'SIDEWAYS', value: '23,595', change: '-0.09%', percentile: '60%', pe: '29 PE' },
-    { title: 'India VIX', trend: 'SIDEWAYS', value: '12', change: '+0.43%', percentile: '—', pe: '—' }
-  ];
-
-  const [indexCards, setIndexCards] = useState(defaultIndexCards);
-  const [smallcapCards, setSmallcapCards] = useState(defaultSmallcapCards);
+  const [indexCards, setIndexCards] = useState(EMPTY_OUTLOOK_CARD_ROW);
+  const [smallcapCards, setSmallcapCards] = useState(EMPTY_OUTLOOK_CARD_ROW);
   const [tableData, setTableData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -129,24 +99,20 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     let isMounted = true;
 
     const applyMarketCache = (payload) => {
-      if (!payload) return;
-      if (payload.indexCards?.length) setIndexCards(payload.indexCards);
-      if (payload.smallcapCards?.length) {
-        const cards = payload.smallcapCards;
-        const pad = () => ({ title: '—', trend: 'SIDEWAYS', value: '—', change: '—', percentile: '—', pe: '—' });
+      const normalized = normalizeMarketOutlookPayload(payload);
+      if (!normalized) return;
+      if (normalized.indexCards?.length) setIndexCards(normalized.indexCards);
+      if (normalized.smallcapCards?.length) {
+        const cards = normalized.smallcapCards;
+        const pad = () => ({ ...PLACEHOLDER_OUTLOOK_CARD });
         const padded = [...cards.slice(0, 3), ...Array(Math.max(0, 3 - cards.length)).fill(null).map(pad)];
         setSmallcapCards(padded.slice(0, 3));
       }
-      if (payload.tableData) setTableData(payload.tableData);
-      if (payload.lastRefreshedAt) setLastRefreshedAt(new Date(payload.lastRefreshedAt));
+      if (normalized.tableData) setTableData(normalized.tableData);
+      if (normalized.lastRefreshedAt) setLastRefreshedAt(new Date(normalized.lastRefreshedAt));
     };
 
-    const load = async ({ silent = false } = {}) => {
-      if (!silent) {
-        setIsLoading(true);
-        setLoadError(null);
-      }
-      await ensureMarketSession();
+    const syncMarketSessionFlags = () => {
       const session = getCachedMarketSession();
       const liveSession = shouldPollLiveMarket(session);
       const cachedWrap = readPageCache(MARKET_OUTLOOK_CACHE_KEY);
@@ -155,88 +121,59 @@ function MarketOutlookContent({ apiReady, timedOut }) {
         setIsLiveRefresh(liveSession);
         setDataLooksStale(cacheStale);
       }
-      if (liveSession || cacheStale) {
-        clearApiGetCache();
-        if (cacheStale) clearPageCache(MARKET_OUTLOOK_CACHE_KEY);
-      }
-      if (!silent && cachedWrap?.data && !liveSession && !cacheStale) {
-        applyMarketCache(cachedWrap.data);
-        setIsLoading(false);
-      }
-      if (!liveSession && !cacheStale && (await shouldUseCachedPageDataOnly(MARKET_OUTLOOK_CACHE_KEY))) {
-        if (cachedWrap?.data) applyMarketCache(cachedWrap.data);
-        if (!silent) setIsLoading(false);
-        return;
-      }
-      try {
-        const [normalized, tableRows] = await Promise.all([
-          fetchMarketIndices(),
-          fetchMarketIndicesTable({ diagnose1d: miDiag }),
-        ]);
-        if (!isMounted) return;
-        const payload = {
-          indexCards: normalized.indexCards?.length ? normalized.indexCards : indexCards,
-          smallcapCards: normalized.smallcapCards?.length ? normalized.smallcapCards : smallcapCards,
-          tableData: Array.isArray(tableRows) ? tableRows : [],
-          lastRefreshedAt: Date.now(),
-        };
-        applyMarketCache(payload);
-        writePageCache(MARKET_OUTLOOK_CACHE_KEY, payload);
-        setDataLooksStale(false);
-      } catch (error) {
-        if (isMounted && !silent) setLoadError(error?.message || 'Failed to load market data.');
-      } finally {
-        if (isMounted && !silent) setIsLoading(false);
-      }
     };
 
-    const loadFiiDii = async ({ silent = false } = {}) => {
-      if (!silent) setFiiDiiLoadState('loading');
-      const fiiCached = readPageCache(FII_DII_CACHE_KEY);
-      if (!silent && fiiCached?.data) {
-        setFiiDiiData(fiiCached.data);
-        setFiiDiiLoadState('done');
-      }
-      if (fiiCached?.data && !fiiDiiCacheIsStale(fiiCached) && (await shouldUseCachedPageDataOnly(FII_DII_CACHE_KEY))) {
-        setFiiDiiData(fiiCached.data);
-        setFiiDiiLoadState('done');
-        return;
-      }
-      try {
-        const data = await fetchFiiDiiActivity(MIN_FII_DII_DAYS);
-        if (isMounted && data) {
-          setFiiDiiData(data);
-          setFiiDiiLoadState('done');
-          writePageCache(FII_DII_CACHE_KEY, data);
-        } else if (isMounted && !silent) {
-          setFiiDiiLoadState('error');
-        }
-      } catch (err) {
-        console.warn('FII/DII fetch failed:', err?.message || err);
-        if (isMounted && !silent) setFiiDiiLoadState('error');
-      }
+    const load = async ({ silent = false, forceNetwork = false } = {}) => {
+      if (!silent) setLoadError(null);
+      await ensureMarketSession();
+      syncMarketSessionFlags();
+      await runScreenPayloadFetch({
+        cacheKey: MARKET_OUTLOOK_CACHE_KEY,
+        fetcher: () => fetchMarketOutlookBundle({ miDiag }),
+        applyPayload: (payload) => {
+          applyMarketCache(payload);
+          if (isMounted) setDataLooksStale(false);
+        },
+        setLoading: (v) => { if (!silent && isMounted) setIsLoading(v); },
+        setError: (msg) => { if (!silent && isMounted) setLoadError(msg); },
+        forceNetwork,
+        hasUsable: marketOutlookHasUsable,
+        silent,
+      });
     };
 
-    let marketTimer;
+    const loadFiiDii = async ({ silent = false, forceNetwork = false } = {}) => {
+      if (!isMounted) return;
+      await loadFiiDiiWithCache({
+        cacheKey: FII_DII_CACHE_KEY,
+        minDays: MIN_FII_DII_DAYS,
+        setData: setFiiDiiData,
+        setLoadState: setFiiDiiLoadState,
+        forceNetwork,
+        silent,
+      });
+    };
+
+    let marketCleanup;
     let fiiTimer;
     (async () => {
-      await load();
+      await runLiveMarketPageMountPoll({
+        load,
+        liveIntervalMs: MARKET_REFRESH_MS,
+        onCleanup: (fn) => { marketCleanup = fn; },
+      });
       await loadFiiDii();
       if (!isMounted) return;
       await ensureMarketSession();
-      const pollMs = getMarketPollingIntervalMs(MARKET_REFRESH_MS, 0);
       const fiiPollMs = getMarketPollingIntervalMs(MARKET_REFRESH_MS, 30 * 60 * 1000);
-      if (pollMs > 0) {
-        marketTimer = setInterval(() => load({ silent: true }), pollMs);
-      }
       if (fiiPollMs > 0) {
-        fiiTimer = setInterval(() => loadFiiDii({ silent: true }), fiiPollMs);
+        fiiTimer = setInterval(() => loadFiiDii({ silent: true, forceNetwork: true }), fiiPollMs);
       }
     })();
 
     return () => {
       isMounted = false;
-      clearInterval(marketTimer);
+      marketCleanup?.();
       clearInterval(fiiTimer);
     };
   }, [miDiag]);

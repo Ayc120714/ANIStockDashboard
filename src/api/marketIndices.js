@@ -90,44 +90,78 @@ const extractArray = (payload) => {
   return [];
 };
 
+export const OUTLOOK_INDEX_CARD_PRIORITIES = [
+  'nifty 50',
+  'nifty next 50',
+  'nifty midcap 100',
+  'nifty midcap 50',
+  'nifty bank',
+];
+
+export const OUTLOOK_SMALLCAP_CARD_PRIORITIES = [
+  'nifty smlcap 100',
+  'nifty smallcap 100',
+  'nifty smallcap 50',
+  'nifty microcap 250',
+  'india vix',
+];
+
+const pickRowsByPriority = (source, priorities, max = 3) => {
+  const picked = [];
+  const used = new Set();
+  for (const pattern of priorities) {
+    const hit = source.find((item) => {
+      const n = String(item?.name || item?.title || '').toLowerCase();
+      if (!n || used.has(n)) return false;
+      return n.includes(pattern);
+    });
+    if (hit) {
+      picked.push(hit);
+      used.add(String(hit?.name || hit?.title || '').toLowerCase());
+    }
+  }
+  return picked.slice(0, max);
+};
+
+const tableRowToOutlookCard = (row) => {
+  if (!row || typeof row !== 'object') return null;
+  const title = row.title ?? row.name ?? row.index ?? row.label;
+  if (!title) return null;
+  return {
+    title,
+    trend: row.trend ?? 'SIDEWAYS',
+    trendDirection: row.trendDirection ?? 'sideways',
+    value: row.value ?? '—',
+    change: row.day1d ?? row.change ?? '—',
+    percentile: row.percentile ?? '—',
+    pe: row.pe ?? '—',
+  };
+};
+
+/** Build overview cards from the same table rows so CMP never diverges from the indices table. */
+export const deriveOutlookCardsFromTable = (tableRows) => {
+  const source = Array.isArray(tableRows) ? tableRows : [];
+  if (!source.length) {
+    return { indexCards: [], smallcapCards: [] };
+  }
+  return {
+    indexCards: pickRowsByPriority(source, OUTLOOK_INDEX_CARD_PRIORITIES, 3)
+      .map(tableRowToOutlookCard)
+      .filter(Boolean),
+    smallcapCards: pickRowsByPriority(source, OUTLOOK_SMALLCAP_CARD_PRIORITIES, 3)
+      .map(tableRowToOutlookCard)
+      .filter(Boolean),
+  };
+};
+
 const normalizeMarketIndicesResponse = (payload) => {
   const source = extractArray(payload);
   let indexCards = [];
   let smallcapCards = [];
 
   if (source.length) {
-    const pickByPriority = (priorities) => {
-      const picked = [];
-      const used = new Set();
-      for (const pattern of priorities) {
-        const hit = source.find((item) => {
-          const n = (item?.name || '').toLowerCase();
-          if (!n || used.has(n)) return false;
-          return n.includes(pattern);
-        });
-        if (hit) {
-          picked.push(hit);
-          used.add((hit.name || '').toLowerCase());
-        }
-      }
-      return picked;
-    };
-
-    indexCards = pickByPriority([
-      'nifty 50',
-      'nifty next 50',
-      'nifty midcap 100',
-      'nifty midcap 50',
-      'nifty bank',
-    ]).slice(0, 3);
-
-    smallcapCards = pickByPriority([
-      'nifty smlcap 100',
-      'nifty smallcap 100',
-      'nifty smallcap 50',
-      'nifty microcap 250',
-      'india vix',
-    ]).slice(0, 3);
+    indexCards = pickRowsByPriority(source, OUTLOOK_INDEX_CARD_PRIORITIES, 3);
+    smallcapCards = pickRowsByPriority(source, OUTLOOK_SMALLCAP_CARD_PRIORITIES, 3);
   }
 
   return {
@@ -183,6 +217,7 @@ const mapTableRow = (item, idx) => {
     month6m: fmtPerf(item.perf_6m ?? item.month6m ?? item['6m']),
     year1y: fmtPerf(item.perf_1y ?? item.year1y ?? item['1y']),
     year3y: fmtPerf(item.perf_3y ?? item.year3y ?? item['3y']),
+    pe: formatPE(item.pe ?? item.pe_ratio ?? item.peRatio ?? item.peValue),
   };
 };
 
