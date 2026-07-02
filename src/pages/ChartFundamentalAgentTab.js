@@ -19,7 +19,8 @@ import { TableWrapperCompact, TableCompact } from './SectorOutlook.styles';
 import { clearApiGetCache } from '../api/apiClient';
 import { fetchChartFundamentalAgent } from '../api/advisor';
 import { chartFundamentalPayloadUsable } from '../utils/pageDataCache';
-import { runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { SymbolWithTradingView } from '../components/TradingViewLink';
 
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
@@ -388,16 +389,17 @@ export default function ChartFundamentalAgentTab() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const CACHE_KEY = 'advisor_chart_fundamental_agent_v6';
+  const CACHE_KEY = LIVE_PAGE_CACHE_KEYS.chartFundamental;
 
   const load = useCallback(
-    async (refresh = false) => {
+    async ({ forceNetwork = false, silent = false, refresh = false } = {}) => {
+      const effectiveForce = forceNetwork || refresh;
       await runScreenPayloadFetch({
         cacheKey: CACHE_KEY,
         fetcher: async () => {
-          if (refresh) clearApiGetCache();
+          if (effectiveForce) clearApiGetCache();
           const res = await fetchChartFundamentalAgent({
-            refresh,
+            refresh: effectiveForce,
             symbol_limit: 800,
             limit: 300,
             include_partial: showNearMiss,
@@ -407,9 +409,10 @@ export default function ChartFundamentalAgentTab() {
           return res ?? null;
         },
         applyPayload: (data) => setPayload(data ?? null),
-        setLoading,
+        setLoading: (v) => { if (!silent) setLoading(v); },
         setError,
-        forceNetwork: refresh,
+        forceNetwork: effectiveForce,
+        silent,
         hasUsable: chartFundamentalPayloadUsable,
       });
     },
@@ -417,7 +420,14 @@ export default function ChartFundamentalAgentTab() {
   );
 
   useEffect(() => {
-    load(false);
+    let cleanup;
+    (async () => {
+      await runLiveMarketPageMountPoll({
+        load,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
+    })();
+    return () => cleanup?.();
   }, [load]);
 
   const dailyRows = useMemo(
@@ -535,7 +545,7 @@ export default function ChartFundamentalAgentTab() {
           size="small"
           variant="outlined"
           startIcon={loading ? <CircularProgress size={14} /> : <MdRefresh />}
-          onClick={() => load(true)}
+          onClick={() => load({ refresh: true })}
           disabled={loading}
           sx={{
             textTransform: 'none',

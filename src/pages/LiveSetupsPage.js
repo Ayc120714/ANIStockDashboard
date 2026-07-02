@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Alert,
@@ -6,6 +6,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Snackbar,
   Tab,
   Tabs,
   TextField,
@@ -14,13 +15,17 @@ import {
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import AlertTradeActions from '../components/Header/AlertTradeActions';
 import OrderPanel from '../components/OrderPanel';
-import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '../utils/marketSession';
-import { formatAlertTimeIST } from '../utils/alertInboxUtils';
 import {
   fetchLiveSetupsPayload,
-  isTodaySetupRow,
-  partitionLiveSetups,
+  partitionEntryReadySetups,
 } from '../utils/liveSetupsPayload';
+import { runLiveMarketPageMountPoll, runScreenTableFetch } from '../utils/screenPageLoader';
+import { formatAlertTimeIST } from '../utils/alertInboxUtils';
+import {
+  buildEntryReadyPopupMessage,
+  detectNewEntryReadySetups,
+  notifyEntryReadyBrowser,
+} from '../utils/entryReadySetupAlerts';
 import { buildProductProfilesFromAlertDetail } from '../utils/alertTradeSetup';
 import { getSetupLifecycleState, setupRowToTradeDetail } from '../utils/setupLifecycle';
 
@@ -38,6 +43,8 @@ function statusChipColor(label) {
   return { bg: '#f3f4f6', color: '#374151' };
 }
 
+const LIVE_SETUPS_CACHE_KEY = 'liveSetupsEntryReady_v1';
+
 function LiveSetupsPage() {
   const [searchParams] = useSearchParams();
   const focusSymbol = String(searchParams.get('symbol') || '').trim().toUpperCase();
@@ -47,39 +54,44 @@ function LiveSetupsPage() {
   const [error, setError] = useState('');
   const [symbolFilter, setSymbolFilter] = useState(focusSymbol);
   const [selectedSymbol, setSelectedSymbol] = useState(focusSymbol);
+  const [popupMessage, setPopupMessage] = useState('');
+  const firstLoad = useRef(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const next = await fetchLiveSetupsPayload();
-      setRows(Array.isArray(next) ? next : []);
-    } catch (e) {
-      setError(String(e?.message || e || 'Could not load live setups'));
-    } finally {
-      setLoading(false);
+  const applyRows = useCallback((list) => {
+    const rowsList = Array.isArray(list) ? list : [];
+    const { fresh } = detectNewEntryReadySetups(rowsList, { bootstrap: firstLoad.current });
+    firstLoad.current = false;
+    if (fresh.length) {
+      const message = buildEntryReadyPopupMessage(fresh);
+      setPopupMessage(message);
+      notifyEntryReadyBrowser(fresh);
     }
+    setRows(rowsList);
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const load = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
+    setError('');
+    await runScreenTableFetch({
+      cacheKey: LIVE_SETUPS_CACHE_KEY,
+      fetcher: async () => fetchLiveSetupsPayload(),
+      setRows: applyRows,
+      setLoading: (v) => { if (!silent) setLoading(v); },
+      setError: (msg) => setError(msg || ''),
+      forceNetwork,
+      silent,
+    });
+  }, [applyRows]);
 
   useEffect(() => {
-    let timer;
-    let cancelled = false;
+    let cleanup;
     (async () => {
-      await ensureMarketSession();
-      if (cancelled) return;
-      const pollMs = shouldPollLiveMarket(getCachedMarketSession()) ? 30_000 : 120_000;
-      timer = setInterval(() => {
-        if (!cancelled) load();
-      }, pollMs);
+      await runLiveMarketPageMountPoll({
+        load,
+        liveIntervalMs: 30_000,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
     })();
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
+    return () => cleanup?.();
   }, [load]);
 
   useEffect(() => {
@@ -89,7 +101,7 @@ function LiveSetupsPage() {
     }
   }, [focusSymbol]);
 
-  const partitioned = useMemo(() => partitionLiveSetups(rows), [rows]);
+  const partitioned = useMemo(() => partitionEntryReadySetups(rows), [rows]);
 
   const visibleRows = useMemo(() => {
     const base = period === 'today' ? partitioned.today : partitioned.week;
@@ -99,13 +111,15 @@ function LiveSetupsPage() {
   }, [partitioned, period, symbolFilter]);
 
   const selectedRow = useMemo(
-    () => visibleRows.find((row) => row.symbol === selectedSymbol) || rows.find((row) => row.symbol === selectedSymbol) || null,
-    [rows, selectedSymbol, visibleRows],
+    () => visibleRows.find((row) => row.symbol === selectedSymbol)
+      || partitioned.all.find((row) => row.symbol === selectedSymbol)
+      || null,
+    [partitioned.all, selectedSymbol, visibleRows],
   );
 
   const symbolProfiles = useMemo(() => {
     const map = {};
-    for (const row of rows) {
+    for (const row of partitioned.all) {
       if (!row?.symbol) continue;
       const detail = setupRowToTradeDetail(row);
       map[row.symbol] = buildProductProfilesFromAlertDetail(detail);
@@ -115,7 +129,7 @@ function LiveSetupsPage() {
 
   const symbolPrices = useMemo(() => {
     const map = {};
-    for (const row of rows) {
+    for (const row of partitioned.all) {
       const cmp = Number(row?.cmp);
       if (row?.symbol && Number.isFinite(cmp) && cmp > 0) map[row.symbol] = cmp;
     }
@@ -125,17 +139,26 @@ function LiveSetupsPage() {
   return (
     <TableSection>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
-        <TableTitle style={{ margin: 0 }}>Live Setups</TableTitle>
+        <TableTitle style={{ margin: 0 }}>Entry Ready Alerts</TableTitle>
         <Chip size="small" label={`Today ${partitioned.today.length}`} color={period === 'today' ? 'primary' : 'default'} />
         <Chip size="small" label={`This week ${partitioned.week.length}`} color={period === 'week' ? 'primary' : 'default'} />
-        <Button size="small" variant="outlined" onClick={load} disabled={loading} sx={{ ml: 'auto', textTransform: 'none' }}>
+        <Button size="small" variant="outlined" onClick={() => load()} disabled={loading} sx={{ ml: 'auto', textTransform: 'none' }}>
           Refresh
         </Button>
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Today&apos;s and this week&apos;s generated setups stay here until stop loss or target 2 is hit. Use Buy/Sell with MIS, MTF, or Delivery to place trades.
+        Entry-ready stocks you can take as live alerts. New setups trigger a popup notification. Use Buy/Sell with MIS, MTF, or Delivery to place trades.
       </Typography>
+
+      <Snackbar
+        open={Boolean(popupMessage)}
+        autoHideDuration={12_000}
+        onClose={() => setPopupMessage('')}
+        message={popupMessage}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        ContentProps={{ sx: { bgcolor: '#1565c0', color: '#fff', fontWeight: 600 } }}
+      />
 
       {error ? <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert> : null}
 
@@ -166,7 +189,7 @@ function LiveSetupsPage() {
 
       <OrderPanel
         defaultSymbol={selectedSymbol}
-        symbolOptions={rows.map((row) => row.symbol)}
+        symbolOptions={partitioned.all.map((row) => row.symbol)}
         symbolPrices={symbolPrices}
         symbolProfiles={symbolProfiles}
         hideBrokerSelector
@@ -180,7 +203,7 @@ function LiveSetupsPage() {
 
       {!loading && !visibleRows.length ? (
         <Alert severity="info">
-          No active {period === 'today' ? 'today' : 'weekly'} setups right now. Stocks drop off automatically after SL or T2 is hit.
+          No entry-ready {period === 'today' ? 'today' : 'weekly'} alerts right now. You will get a popup when a new stock becomes entry ready.
         </Alert>
       ) : null}
 

@@ -4,6 +4,8 @@ import { CLOSED_PAGE_CACHE_MS, ensureMarketSession, shouldSkipNetworkForClosedMa
 export const SESSION_PAGE_CACHE_MARKERS = [
   'dashboard_overview_cache',
   'marketOutlook',
+  'liveSetups',
+  'stockAlertsPage',
   'sectorOutlook',
   'subsectorOutlook',
   'shortTermWatchlist',

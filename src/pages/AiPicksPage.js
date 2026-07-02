@@ -5,8 +5,9 @@ import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.s
 import { fetchWeeklyPicks, triggerWeeklyPicks, generateWeeklyPicks } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
-import { AI_PICKS_CACHE_KEY } from '../bootstrap/prefetchAppShellData';
-import { readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
+import { AI_PICKS_CACHE_KEY } from '../utils/livePageCacheKeys';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { readPageCache } from '../utils/pageDataCache';
 
 const applyPicksPayload = (resp, setData) => {
   setData({
@@ -78,80 +79,85 @@ function AiPicksPage() {
   const [checkedSymbols, setCheckedSymbols] = useState(new Set());
   const autoGenerateAttemptedRef = useRef(false);
 
-  const load = useCallback(async ({ forceNetwork = false } = {}) => {
+  const load = useCallback(async ({ forceNetwork = false, silent = false } = {}) => {
     setError(null);
-    const cached = readPageCache(AI_PICKS_CACHE_KEY);
-    let hydrated = false;
-    if (!forceNetwork && cached?.data && (cached.data.bullish?.length || cached.data.bearish?.length)) {
-      applyPicksPayload(cached.data, setData);
-      hydrated = true;
-      setLoading(false);
-    }
-    if (!forceNetwork && hydrated && (await shouldUseCachedPageDataOnly(AI_PICKS_CACHE_KEY))) {
-      return cached.data;
-    }
-    if (!hydrated) setLoading(true);
-    try {
-      const resp = await fetchWeeklyPicks();
-      const payload = {
-        bullish: resp?.bullish ?? [],
-        bearish: resp?.bearish ?? [],
-        fno_bullish: resp?.fno_bullish ?? [],
-        fno_bearish: resp?.fno_bearish ?? [],
-        pick_date: resp?.pick_date ?? null,
-      };
-      writePageCache(AI_PICKS_CACHE_KEY, payload);
-      applyPicksPayload(payload, setData);
-      return resp;
-    } catch (e) {
-      if (!hydrated) setError(e?.message || 'Failed to load weekly picks');
-      return hydrated ? cached?.data ?? null : null;
-    } finally {
-      setLoading(false);
-    }
+    return runScreenPayloadFetch({
+      cacheKey: AI_PICKS_CACHE_KEY,
+      fetcher: async () => {
+        const resp = await fetchWeeklyPicks();
+        return {
+          bullish: resp?.bullish ?? [],
+          bearish: resp?.bearish ?? [],
+          fno_bullish: resp?.fno_bullish ?? [],
+          fno_bearish: resp?.fno_bearish ?? [],
+          pick_date: resp?.pick_date ?? null,
+        };
+      },
+      applyPayload: (payload) => applyPicksPayload(payload, setData),
+      setLoading,
+      setError,
+      forceNetwork,
+      silent,
+      hasUsable: (data) => Boolean(data?.bullish?.length || data?.bearish?.length),
+    });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const init = async () => {
-      const resp = await load();
-      if (cancelled || !resp) return;
-      const empty = !resp?.bullish?.length && !resp?.bearish?.length;
-      if (empty && !autoGenerateAttemptedRef.current) {
-        autoGenerateAttemptedRef.current = true;
-        setTriggering(true);
-        try {
-          await generateWeeklyPicks();
+    let cleanup;
+    const maybeAutoGenerate = async () => {
+      if (cancelled || autoGenerateAttemptedRef.current) return;
+      const cached = readPageCache(AI_PICKS_CACHE_KEY);
+      const payload = cached?.data;
+      const empty = !payload?.bullish?.length && !payload?.bearish?.length;
+      if (!empty) return;
+      autoGenerateAttemptedRef.current = true;
+      setTriggering(true);
+      try {
+        await generateWeeklyPicks();
+        if (cancelled) return;
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          await new Promise((r) => setTimeout(r, 5000));
           if (cancelled) return;
-          for (let attempt = 0; attempt < 12; attempt += 1) {
-            await new Promise((r) => setTimeout(r, 5000));
-            if (cancelled) return;
-            try {
-              const retry = await fetchWeeklyPicks();
-              if (retry?.bullish?.length || retry?.bearish?.length) {
-                setData({
-                  bullish: retry?.bullish ?? [],
-                  bearish: retry?.bearish ?? [],
-                  fno_bullish: retry?.fno_bullish ?? [],
-                  fno_bearish: retry?.fno_bearish ?? [],
-                  pick_date: retry?.pick_date ?? null,
-                });
-                setError(null);
-                break;
-              }
-            } catch {
-              /* keep polling */
+          try {
+            const retry = await fetchWeeklyPicks();
+            if (retry?.bullish?.length || retry?.bearish?.length) {
+              setData({
+                bullish: retry?.bullish ?? [],
+                bearish: retry?.bearish ?? [],
+                fno_bullish: retry?.fno_bullish ?? [],
+                fno_bearish: retry?.fno_bearish ?? [],
+                pick_date: retry?.pick_date ?? null,
+              });
+              setError(null);
+              break;
             }
+          } catch {
+            /* keep polling */
           }
-        } catch (_) {
-          /* ignore — user can refresh manually */
-        } finally {
-          if (!cancelled) setTriggering(false);
         }
+      } catch (_) {
+        /* ignore — user can refresh manually */
+      } finally {
+        if (!cancelled) setTriggering(false);
       }
     };
-    init();
-    return () => { cancelled = true; };
+    const mountLoad = async (opts) => {
+      await load(opts);
+      if (!opts?.forceNetwork) {
+        await maybeAutoGenerate();
+      }
+    };
+    (async () => {
+      await runLiveMarketPageMountPoll({
+        load: mountLoad,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
+    })();
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
   }, [load]);
 
   const handleTrigger = async () => {

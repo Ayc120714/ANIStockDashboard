@@ -276,6 +276,23 @@ export const PAGE_CONNECTIVITY_CHECKS = [
     },
   },
   {
+    page: 'System',
+    name: 'OHLCV cache sync agent',
+    run: async () => {
+      const res = await dashboardService.fetchSystemStatus();
+      const cache = res?.orchestrator?.ohlcv_cache_sync;
+      if (!cache || typeof cache !== 'object') {
+        throw new Error('ohlcv_cache_sync missing from /system/status');
+      }
+      if (!cache.enabled) {
+        throw new Error('OHLCV cache agent disabled (OHLCV_CACHE_ENABLED=false)');
+      }
+      const sym = Number(cache.symbols_cached) || 0;
+      const state = cache.running ? 'running' : 'idle';
+      return `${state}, symbols_cached=${sym}`;
+    },
+  },
+  {
     page: 'Web portal',
     name: 'Web app URL configured',
     run: async () => {

@@ -1,0 +1,42 @@
+{
+  "folders": [
+    {
+      "name": "frontend",
+      "path": "."
+    },
+    {
+      "name": "mobile",
+      "path": "mobile_isolated",
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true
+      }
+    },
+    {
+      "name": "backend",
+      "path": "../backend_stockdashboard"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:backend}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.extraPaths": ["${workspaceFolder:backend}"],
+    "basedpyright.analysis.diagnosticMode": "workspace",
+    "basedpyright.analysis.venvPath": "${workspaceFolder:backend}",
+    "basedpyright.analysis.venv": ".venv",
+    "files.eol": "\n",
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/build": true,
+      "**/.venv": true,
+      "**/__pycache__": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "detachhead.basedpyright",
+      "dbaeumer.vscode-eslint"
+    ]
+  }
+}

@@ -35,13 +35,7 @@ import {
 import { fetchSubsectorOutlook, fetchStocksForSubsector } from '../api/subsectorOutlook';
 import { fetchStocksBySubsector } from '../api/stocks';
 import { useAuth } from '../auth/AuthContext';
-import {
-  ensureMarketSession,
-  getCachedMarketSession,
-  getMarketPollingIntervalMs,
-  shouldPollLiveMarket,
-} from '../utils/marketSession';
-import { runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { MdLock } from 'react-icons/md';
@@ -164,7 +158,6 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   }, []);
 
   const loadSubsectorData = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
-    if (!silent) setIsLoading(true);
     await runScreenPayloadFetch({
       cacheKey: SUBSECTOR_CACHE_KEY,
       fetcher: fetchSubsectorOutlook,
@@ -177,26 +170,15 @@ function SubSectorOutlookPage({ selectedSector, mappedGroups, onClearSector }) {
   }, [applySubsectorPayload]);
 
   useEffect(() => {
-    let isMounted = true;
-    let timer;
+    let cleanup;
     (async () => {
-      await ensureMarketSession();
-      const liveSession = shouldPollLiveMarket(getCachedMarketSession());
-      await loadSubsectorData({ silent: false, forceNetwork: liveSession });
-      if (!isMounted) return;
-      const pollMs = getMarketPollingIntervalMs(SUBSECTOR_REFRESH_MS, 0);
-      if (pollMs > 0) {
-        timer = setInterval(() => {
-          if (isMounted) {
-            loadSubsectorData({ silent: true });
-          }
-        }, pollMs);
-      }
+      await runLiveMarketPageMountPoll({
+        load: loadSubsectorData,
+        liveIntervalMs: SUBSECTOR_REFRESH_MS,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
     })();
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-    };
+    return () => cleanup?.();
   }, [loadSubsectorData]);
 
   useEffect(() => {

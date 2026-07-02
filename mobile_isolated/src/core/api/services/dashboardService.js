@@ -1,4 +1,4 @@
-import {apiGet} from '@core/api/apiClient';
+import {apiGet, apiPost} from '@core/api/apiClient';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {mergeApiOpts} from '@core/utils/screenDataFetch';
 import {
@@ -169,6 +169,8 @@ export const dashboardService = {
   },
   fetchWeeklyPicks: async (opts = {}) =>
     parseWeeklyPicksResponse(await apiGet('/stocks/weekly-picks', mergeApiOpts(opts, T.screen))),
+  generateWeeklyPicks: async (opts = {}) =>
+    apiPost('/stocks/weekly-picks/generate', null, mergeApiOpts(opts, T.screenHeavy)),
   fetchTopTradedVolume: async (limit = 40, opts = {}) =>
     parseStocksListResponse(
       await apiGet(`/stocks/volume/top-traded?limit=${encodeURIComponent(String(limit))}`, mergeApiOpts(opts, T.screen)),

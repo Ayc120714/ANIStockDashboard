@@ -8,7 +8,7 @@ import {brokersService} from '@core/api/services/brokersService';
 import {advisorService} from '@core/api/services/advisorService';
 import {dashboardService} from '@core/api/services/dashboardService';
 import {useAuth} from '@core/auth/AuthContext';
-import {readPageCache} from '@core/storage/pageCache';
+import {readPageCache, clearPageCache} from '@core/storage/pageCache';
 import {readDashboardCache, writeDashboardCache} from '@core/storage/dashboardCache';
 import {
   applyLiveSessionRefreshPolicy,
@@ -17,6 +17,7 @@ import {
   hasDashboardMinimumVisibleContent,
   hasDashboardMovers,
   isDashboardCacheIncomplete,
+  LEGACY_DASHBOARD_CACHE_KEYS,
   MOBILE_PAGE_CACHE_KEYS,
   pickDashboardSectionRows,
   dashboardSectionsToRefresh,
@@ -39,6 +40,7 @@ import {navigateToMainTab, navigateToStocksAlerts, navigateToStocksBrokers} from
 
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {fetchWithRetry} from '@core/utils/fetchWithRetry';
+import {dedupeWeeklyEntriesBySymbol, parseWeeklyEntriesResponse} from '@core/utils/webParity';
 
 const DASHBOARD_CACHE_KEY = MOBILE_PAGE_CACHE_KEYS.dashboard;
 const DASH_MS = API_TIMEOUT_MS.dashboardParallel;
@@ -82,9 +84,19 @@ function stockLabel(row) {
 
 import {isAnyBrokerConnected} from '@core/utils/brokerConnection';
 
-function parseWeeklyEntries(res) {
-  if (Array.isArray(res)) return res;
-  return extractApiRows(res, ['data', 'weekly_entries']);
+function normalizeWeeklyEntries(res) {
+  if (Array.isArray(res)) return dedupeWeeklyEntriesBySymbol(res);
+  return parseWeeklyEntriesResponse(res);
+}
+
+function applyDashboardState(setData, setBrokerConnected, setHoldings, cached) {
+  if (!cached) return;
+  const payload = cached.data ?? cached;
+  if (!payload || typeof payload !== 'object') return;
+  const weeklyData = normalizeWeeklyEntries(payload.weeklyData ?? []);
+  setData({...payload, weeklyData});
+  setBrokerConnected(Boolean(cached.brokerConnected ?? payload.brokerConnected));
+  setHoldings(Array.isArray(payload.holdings) ? payload.holdings : []);
 }
 
 function asRowArray(res, fallback = []) {
@@ -117,15 +129,6 @@ function isAuthFailureMessage(message) {
 
 function settledValue(settled, fallback) {
   return settled?.status === 'fulfilled' ? settled.value : fallback;
-}
-
-function applyDashboardState(setData, setBrokerConnected, setHoldings, cached) {
-  if (!cached) return;
-  const payload = cached.data ?? cached;
-  if (!payload || typeof payload !== 'object') return;
-  setData(payload);
-  setBrokerConnected(Boolean(cached.brokerConnected ?? payload.brokerConnected));
-  setHoldings(Array.isArray(payload.holdings) ? payload.holdings : []);
 }
 
 export const DashboardScreen = ({navigation}) => {
@@ -346,7 +349,7 @@ export const DashboardScreen = ({navigation}) => {
           ),
         ]);
 
-        partial.weeklyData = parseWeeklyEntries(settledValue(rExtras[0], cachedPayload.weeklyData ?? []));
+        partial.weeklyData = normalizeWeeklyEntries(settledValue(rExtras[0], cachedPayload.weeklyData ?? []));
         partial.alerts = asRowArray(settledValue(rExtras[1], cachedPayload.alerts ?? []));
         partial.ratings = asRowArray(settledValue(rExtras[2], cachedPayload.ratings ?? []));
         partial.trending = parseStockList(settledValue(rExtras[3], cachedPayload.trending ?? []));
@@ -392,6 +395,7 @@ export const DashboardScreen = ({navigation}) => {
     if (!isAuthenticated) return undefined;
     let mounted = true;
     (async () => {
+      await Promise.all(LEGACY_DASHBOARD_CACHE_KEYS.map(key => clearPageCache(key)));
       const [pageCached, legacyCached] = await Promise.all([
         readPageCache(DASHBOARD_CACHE_KEY),
         readDashboardCache(),
@@ -458,7 +462,7 @@ export const DashboardScreen = ({navigation}) => {
     [data.watchlist],
   );
   const signals = useMemo(() => parseSignals(data.signals), [data.signals]);
-  const weeklyData = useMemo(() => parseWeeklyEntries(data.weeklyData), [data.weeklyData]);
+  const weeklyData = useMemo(() => normalizeWeeklyEntries(data.weeklyData ?? []), [data.weeklyData]);
   const marketMovers = useMemo(
     () => ({
       gainers: parseStockList(data.gainers).slice(0, 5),

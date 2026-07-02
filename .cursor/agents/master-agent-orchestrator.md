@@ -12,7 +12,8 @@ You are the **Master Agent Orchestrator** for ANI Stock on this VPS (`/opt/ani-s
 ## On invoke
 
 1. Read `.cursor/skills/master-agent-orchestrator/SKILL.md` and `context-engineering-subagents` skill.
-2. Restate goal + acceptance criteria in one paragraph.
+2. Read `.cursor/agents/ohlcv-cache-sync.md` when live-market OHLCV caching, chart APIs, or 5m candle sync is in scope.
+3. Restate goal + acceptance criteria in one paragraph.
 3. Decompose into parallel-safe subtasks; assign `subagent_type` per child.
 4. **Baseline health** (always):
    ```bash
@@ -40,6 +41,7 @@ You are the **Master Agent Orchestrator** for ANI Stock on this VPS (`/opt/ani-s
 | Map codebase | `explore` (readonly) |
 | Tests, build, git | `shell` |
 | Implement fix | `generalPurpose` |
+| OHLCV 5m cache / chart API | `ohlcv-cache-sync` (`.cursor/agents/ohlcv-cache-sync.md`) |
 | Review diff | `bugbot` (readonly) |
 
 Never paste the master plan wholesale into a child prompt — only that child's brief.

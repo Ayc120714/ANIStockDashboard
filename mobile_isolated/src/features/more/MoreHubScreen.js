@@ -23,6 +23,7 @@ export function MoreHubScreen({navigation}) {
     <ScreenScaffold title="More" subtitle="Full web modules">
       <ScrollView contentContainerStyle={styles.pad}>
         <Text style={styles.hint}>These open the same pages as the desktop site inside the in-app browser.</Text>
+        <Row title="Verify app setup" onPress={() => navigation.navigate('AppSetupVerify')} />
         {links.map(item => (
           <Row key={item.path} title={item.title} onPress={() => navigation.navigate('WebPortal', {path: item.path, title: item.title})} />
         ))}

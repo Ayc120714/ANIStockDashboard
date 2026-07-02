@@ -19,7 +19,8 @@ import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import { MdArrowDownward, MdArrowUpward, MdBolt, MdRefresh } from 'react-icons/md';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { fetchAnalysisBrief, fetchBatchAnalysisContext, fetchBuyTierCardGrid } from '../api/advisor';
-import { runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 
 const TF_BLUE = '#1565c0';
@@ -198,25 +199,34 @@ export default function TrendReversalTab() {
   const [aiBatchLoading, setAiBatchLoading] = useState(false);
   const [aiPopover, setAiPopover] = useState({ symbol: null, anchorEl: null });
 
-  const TREND_REVERSAL_CACHE = 'advisor_trend_reversal_grid_v3';
+  const TREND_REVERSAL_CACHE = LIVE_PAGE_CACHE_KEYS.trendReversal;
 
-  const load = useCallback(async (refresh = false) => {
+  const load = useCallback(async ({ forceNetwork = false, silent = false, refresh = false } = {}) => {
+    const effectiveForce = forceNetwork || refresh;
     await runScreenPayloadFetch({
       cacheKey: TREND_REVERSAL_CACHE,
       fetcher: async () => {
-        const payload = await fetchBuyTierCardGrid({ refresh, symbol_limit: 800, lite: true });
+        const payload = await fetchBuyTierCardGrid({ refresh: effectiveForce, symbol_limit: 800, lite: true });
         return payload?.data ?? null;
       },
       applyPayload: (data) => setGrid(data ?? null),
-      setLoading,
+      setLoading: (v) => { if (!silent) setLoading(v); },
       setError,
-      forceNetwork: refresh,
+      forceNetwork: effectiveForce,
+      silent,
       hasUsable: (p) => Boolean(p && (p.daily || p.weekly || p.monthly)),
     });
   }, []);
 
   useEffect(() => {
-    load(false);
+    let cleanup;
+    (async () => {
+      await runLiveMarketPageMountPoll({
+        load,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
+    })();
+    return () => cleanup?.();
   }, [load]);
 
   const tableRows = useMemo(() => {
@@ -415,7 +425,7 @@ export default function TrendReversalTab() {
           variant="outlined"
           startIcon={loading ? <CircularProgress size={14} /> : <MdRefresh />}
           disabled={loading}
-          onClick={() => load(true)}
+          onClick={() => load({ refresh: true })}
           sx={{ textTransform: 'none' }}
         >
           Refresh

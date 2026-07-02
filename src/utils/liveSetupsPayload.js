@@ -131,3 +131,51 @@ export function partitionLiveSetups(rows = []) {
   const week = active.filter(isThisWeekSetupRow);
   return { today, week, active };
 }
+
+/** Tradeable entry-ready row with entry + stop loss levels. */
+export function isEntryReadySetupRow(row) {
+  if (!row || shouldRemoveSetupRow(row)) return false;
+  const status = String(row?.status || '');
+  if (status !== 'entry_ready' && !row?.entry_triggered && !row?.daily_entry_triggered) {
+    return false;
+  }
+  const entry = Number(row?.entry_price);
+  const sl = Number(row?.stop_loss);
+  return Number.isFinite(entry) && entry > 0 && Number.isFinite(sl) && sl > 0;
+}
+
+export function filterEntryReadySetupRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).filter(isEntryReadySetupRow);
+}
+
+export function entryReadySetupDigestKey(row) {
+  const sym = normalizeSymbol(row?.symbol);
+  const entry = Number(row?.entry_price || 0).toFixed(2);
+  const at = parseAdvisorAlertMs(getSetupTimestamp(row));
+  return sym ? `${sym}:${entry}:${at}` : '';
+}
+
+export function entryReadySetupsDigest(rows = []) {
+  return filterEntryReadySetupRows(rows)
+    .map(entryReadySetupDigestKey)
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
+export function diffNewEntryReadySetups(prevDigest, rows = []) {
+  const prev = new Set(String(prevDigest || '').split('|').filter(Boolean));
+  return filterEntryReadySetupRows(rows).filter((row) => {
+    const key = entryReadySetupDigestKey(row);
+    return key && !prev.has(key);
+  });
+}
+
+export function partitionEntryReadySetups(rows = []) {
+  const entryReady = filterEntryReadySetupRows(rows);
+  return {
+    today: entryReady.filter(isTodaySetupRow),
+    week: entryReady.filter(isThisWeekSetupRow),
+    all: entryReady,
+  };
+}

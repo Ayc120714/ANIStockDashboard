@@ -7,6 +7,7 @@ import {AppStartupLoader} from '@components/AppStartupLoader';
 import {LoginScreen} from '@features/auth/LoginScreen';
 import {OtpVerifyScreen} from '@features/auth/OtpVerifyScreen';
 import {AdminScreen} from '@features/admin/AdminScreen';
+import {AppSetupVerifyScreen} from '@features/setup/AppSetupVerifyScreen';
 import {WebPortalScreen} from '@features/web/WebPortalScreen';
 import {useBrokerDeepLinking} from '@features/brokers/useBrokerDeepLinking';
 import {MainTabNavigator} from '@nav/MainTabNavigator';
@@ -69,6 +70,11 @@ export const AppNavigator = () => {
             {props => <RedirectToStocksTab {...props} outlookTab="brokers" />}
           </Stack.Screen>
           <Stack.Screen name="Alerts" component={AlertsScreen} options={{headerShown: false}} />
+          <Stack.Screen
+            name="AppSetupVerify"
+            component={AppSetupVerifyScreen}
+            options={{title: 'Verify setup'}}
+          />
           <Stack.Screen name="WebPortal" component={WebPortalScreen} options={{headerShown: true}} />
           {user?.is_super_admin ? <Stack.Screen name="Admin" component={AdminScreen} options={{title: 'Admin'}} /> : null}
         </Stack.Navigator>

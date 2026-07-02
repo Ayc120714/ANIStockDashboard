@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiRequest } from './apiClient';
+import { dedupeWeeklyEntriesBySymbol } from '../utils/weeklyEntries';
 
 export const fetchRatings = async (filters = {}) => {
   const params = new URLSearchParams();
@@ -34,7 +35,7 @@ export const fetchAdvisorWeeklyEntries = async ({
   params.set('max_entry_gap_pct', String(max_entry_gap_pct));
   params.set('signal_limit', String(signal_limit));
   const data = await apiGet(`/advisor/signals/weekly-entries?${params.toString()}`);
-  return data?.data ?? [];
+  return dedupeWeeklyEntriesBySymbol(data?.data ?? []);
 };
 
 export const fetchMonthlyMacdSetup = async (limit = 200) => {

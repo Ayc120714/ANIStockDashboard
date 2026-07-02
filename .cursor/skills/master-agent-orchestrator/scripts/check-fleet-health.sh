@@ -25,6 +25,13 @@ check_json() {
 }
 
 check_json "system/status" "$API_BASE/system/status"
+if status_resp=$(curl -sf --max-time 8 "$API_BASE/system/status" 2>/dev/null); then
+  ohlcv_running=$(echo "$status_resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print('yes' if (d.get('orchestrator') or {}).get('ohlcv_cache_sync', d.get('data_plane',{})).get('running') or (d.get('orchestrator') or {}).get('ohlcv_cache_sync',{}).get('running') else 'no')" 2>/dev/null || echo "unknown")
+  orch_block=$(echo "$status_resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('orchestrator',{}).get('ohlcv_cache_sync') or {}, indent=2))" 2>/dev/null || echo "{}")
+  echo "[INFO] ohlcv_cache_sync running=$ohlcv_running"
+  echo "$orch_block" | head -12
+  echo
+fi
 check_json "system/readiness" "$API_BASE/system/readiness"
 
 # Detailed subagent list requires auth; fall back to orchestrator block in system/status.

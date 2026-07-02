@@ -13,7 +13,7 @@ import {
 } from '../api/advisor';
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
-import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '../utils/marketSession';
+import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import {
   formatAlertTimeIST,
   isTodayInIST,
@@ -90,62 +90,69 @@ function StockAlertsPage() {
   const [divergenceBackendTsSort, setDivergenceBackendTsSort] = useState('desc');
   const rowsPerPage = 25;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
+    const cacheKey = `stockAlertsPage_v1_${userId || 'guest'}`;
+    const symbolScoped = Boolean(String(deferredSymbolFilter || '').trim());
+    const effectiveForceNetwork = forceNetwork || symbolScoped;
+
+    const applyPayload = (payload) => {
+      setData(Array.isArray(payload?.priceTriggers) ? payload.priceTriggers : []);
+      setAdvisorAlerts(Array.isArray(payload?.advisorAlerts) ? payload.advisorAlerts : []);
+    };
+
     setErrorMsg('');
-    // Price triggers are per user_id; weekly/divergence use advisor JWT only.
-    const pricePromise = userId
-      ? fetchPriceAlertTriggers({ userId, limit: 500 })
-      : Promise.resolve([]);
-    // Backfilled weekly/RSI rows use the *event* date as timestamp, so "today only" hides almost everything.
-    const specialPromise = accessToken
-      ? fetchSpecialAlerts({
-        limit: 1000,
-        symbol: deferredSymbolFilter,
-        currentDayOnly: false,
-        includeHistory: true,
-      })
-      : Promise.resolve([]);
-
-    const [priceRes, specialRes] = await Promise.allSettled([pricePromise, specialPromise]);
-
-    if (priceRes.status === 'fulfilled') {
-      setData(Array.isArray(priceRes.value) ? priceRes.value : []);
-    } else {
-      const e = priceRes.reason;
-      if (isMissingResourceError(e)) {
-        setData([]);
-      } else {
-        setErrorMsg(e?.message || 'Failed to load alert history');
-      }
-    }
-
-    if (specialRes.status === 'fulfilled') {
-      setAdvisorAlerts(Array.isArray(specialRes.value) ? specialRes.value : []);
-    } else {
-      const e = specialRes.reason;
-      setErrorMsg((prev) => prev || (e?.message || 'Failed to load weekly/divergence alerts'));
-    }
-    setLoading(false);
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher: async () => {
+        const pricePromise = userId
+          ? fetchPriceAlertTriggers({ userId, limit: 500 })
+          : Promise.resolve([]);
+        const specialPromise = accessToken
+          ? fetchSpecialAlerts({
+            limit: 1000,
+            symbol: deferredSymbolFilter,
+            currentDayOnly: false,
+            includeHistory: true,
+          })
+          : Promise.resolve([]);
+        const [priceRes, specialRes] = await Promise.allSettled([pricePromise, specialPromise]);
+        let priceTriggers = [];
+        let advisorAlerts = [];
+        if (priceRes.status === 'fulfilled') {
+          priceTriggers = Array.isArray(priceRes.value) ? priceRes.value : [];
+        } else {
+          const e = priceRes.reason;
+          if (!isMissingResourceError(e)) {
+            throw e;
+          }
+        }
+        if (specialRes.status === 'fulfilled') {
+          advisorAlerts = Array.isArray(specialRes.value) ? specialRes.value : [];
+        } else {
+          const e = specialRes.reason;
+          throw new Error(e?.message || 'Failed to load weekly/divergence alerts');
+        }
+        return { priceTriggers, advisorAlerts };
+      },
+      applyPayload,
+      setLoading: (v) => { if (!silent) setLoading(v); },
+      setError: (msg) => setErrorMsg(msg || ''),
+      forceNetwork: effectiveForceNetwork,
+      silent,
+      hasUsable: (p) => Boolean(p?.priceTriggers?.length || p?.advisorAlerts?.length),
+    });
   }, [userId, deferredSymbolFilter, accessToken]);
 
-  useEffect(() => { load(); }, [load]);
-
   useEffect(() => {
-    let timer;
-    let cancelled = false;
+    let cleanup;
     (async () => {
-      await ensureMarketSession();
-      if (cancelled) return;
-      const pollMs = shouldPollLiveMarket(getCachedMarketSession()) ? 30_000 : 120_000;
-      timer = setInterval(() => {
-        if (!cancelled) load();
-      }, pollMs);
+      await runLiveMarketPageMountPoll({
+        load,
+        liveIntervalMs: 30_000,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
     })();
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
+    return () => cleanup?.();
   }, [load]);
 
   const handleSort = (col) => {

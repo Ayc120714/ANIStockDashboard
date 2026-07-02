@@ -174,7 +174,7 @@ export const MOBILE_APP_TABS = [
     match: ['/outlook', '/long-term', '/short-term', '/portfolio-manager', '/fno', '/commodities', '/forex', '/mutual-funds'],
     icon: '◎',
   },
-  {id: 'signals', label: 'Setups', path: '/alerts', match: ['/alerts'], icon: '⚡'},
+  {id: 'signals', label: 'Alerts', path: '/alerts', match: ['/alerts'], icon: '⚡'},
   {id: 'screens', label: 'Screens', path: '/screens', match: ['/screens', '/video-screener'], icon: '▤'},
   {id: 'advisor', label: 'Advisor', path: '/advisor', match: ['/advisor', '/next-week-setup'], icon: '✦'},
 ];

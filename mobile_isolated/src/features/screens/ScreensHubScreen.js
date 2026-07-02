@@ -37,6 +37,11 @@ import {
 } from '@core/utils/marketSession';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {safeFetch} from '@core/utils/safeFetch';
+import {
+  aiPicksScreensPayloadUsable,
+  buildAiPicksScreensPayload,
+  weeklyPicksHasRows,
+} from '@core/utils/weeklyPicksScreens';
 
 const LIVE_SCREEN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
 
@@ -105,6 +110,7 @@ export function ScreensHubScreen({navigation}) {
   const [screenDate, setScreenDate] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
+  const aiGenerateAttemptedRef = useRef(false);
   const screenDefaultSortKey = useMemo(() => {
     if (main === 'alpha') return 'rs';
     if (main === 'movers') return perM === 'week' ? 'week1w' : perM === 'month' ? 'month1m' : 'day1d';
@@ -126,9 +132,12 @@ export function ScreensHubScreen({navigation}) {
     setList(Array.isArray(payload.list) ? payload.list : []);
   }, []);
 
-  const screensHasUsable = useCallback(
-    data => Array.isArray(data?.list) && data.list.length > 0,
-    [],
+  const screensPayloadUsable = useCallback(
+    data => {
+      if (main === 'ai') return aiPicksScreensPayloadUsable(data);
+      return Array.isArray(data?.list) && data.list.length > 0;
+    },
+    [main],
   );
 
   const selectMainTab = useCallback(
@@ -136,6 +145,9 @@ export function ScreensHubScreen({navigation}) {
       resetTabState();
       setMain(tabId);
       setListPage(1);
+      if (tabId === 'ai') {
+        aiGenerateAttemptedRef.current = false;
+      }
     },
     [resetTabState],
   );
@@ -169,26 +181,26 @@ export function ScreensHubScreen({navigation}) {
       cacheKey,
       fetcher: async () => {
         if (main === 'ai') {
-          const picks = await safeFetch(() => dashboardService.fetchWeeklyPicks(SCREEN_HEAVY_OPTS), {
+          let picks = await safeFetch(() => dashboardService.fetchWeeklyPicks(SCREEN_HEAVY_OPTS), {
             ...SCREEN_HEAVY_OPTS,
             label: 'Weekly picks',
             fallback: null,
           });
           if (!picks) throw new Error('Weekly AI picks timed out. Pull down to retry.');
-          const bull = Array.isArray(picks?.bullish) ? picks.bullish : [];
-          const bear = Array.isArray(picks?.bearish) ? picks.bearish : [];
-          return {
-            weeklyMeta: {
-              pickDate: picks?.pick_date || null,
-              subtitle: 'Weekly AI picks — swing trade setup',
-            },
-            list: [
-              {_hdr: true, _title: 'Bullish swing picks', _tone: 'bull'},
-              ...bull.map((r, i) => ({...r, _n: i + 1, _side: 'bull'})),
-              {_hdr: true, _title: 'Bearish swing picks', _tone: 'bear'},
-              ...bear.map((r, i) => ({...r, _n: i + 1, _side: 'bear'})),
-            ],
-          };
+          if (!weeklyPicksHasRows(picks) && !aiGenerateAttemptedRef.current) {
+            aiGenerateAttemptedRef.current = true;
+            try {
+              await dashboardService.generateWeeklyPicks(SCREEN_HEAVY_OPTS);
+              for (let attempt = 0; attempt < 12; attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                picks = await dashboardService.fetchWeeklyPicks(SCREEN_HEAVY_OPTS);
+                if (weeklyPicksHasRows(picks)) break;
+              }
+            } catch (_) {
+              /* user can pull to refresh */
+            }
+          }
+          return buildAiPicksScreensPayload(picks);
         }
         if (main === 'trending') {
           const res = await safeFetch(
@@ -271,10 +283,10 @@ export function ScreensHubScreen({navigation}) {
       setLoading,
       setError: msg => setErr(msg || ''),
       forceNetwork: forceRefresh,
-      hasUsable: screensHasUsable,
+      hasUsable: screensPayloadUsable,
       silent: silent && !forceRefresh,
     });
-  }, [alphaHor, applyScreensPayload, gl, ipoFilter, main, perM, perV, screenDate, screensHasUsable]);
+  }, [alphaHor, applyScreensPayload, gl, ipoFilter, main, perM, perV, screenDate, screensPayloadUsable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,7 +295,7 @@ export function ScreensHubScreen({navigation}) {
       const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
       const hadCache = await hydrateFromPageCache(cacheKey, {
         apply: applyScreensPayload,
-        hasUsable: screensHasUsable,
+        hasUsable: screensPayloadUsable,
       });
       if (cancelled) return;
       await load({silent: hadCache});
@@ -292,7 +304,7 @@ export function ScreensHubScreen({navigation}) {
     return () => {
       cancelled = true;
     };
-  }, [alphaHor, applyScreensPayload, gl, ipoFilter, load, main, perM, perV, screenDate, screensHasUsable]);
+  }, [alphaHor, applyScreensPayload, gl, ipoFilter, load, main, perM, perV, screenDate, screensPayloadUsable]);
 
   useFocusEffect(
     useCallback(() => {
@@ -329,11 +341,14 @@ export function ScreensHubScreen({navigation}) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
+      if (main === 'ai') {
+        aiGenerateAttemptedRef.current = false;
+      }
       await load({forceRefresh: true});
     } finally {
       setRefreshing(false);
     }
-  }, [load]);
+  }, [load, main]);
 
   const filteredTrend = useMemo(() => {
     if (main !== 'trending') return list;
@@ -458,6 +473,11 @@ export function ScreensHubScreen({navigation}) {
       {weeklyMeta.pickDate ? (
         <Text style={styles.meta}>Generated: {weeklyMeta.pickDate}</Text>
       ) : null}
+      {main === 'ai' && !loading && !aiHasPickRows ? (
+        <Text style={styles.muted}>
+          No weekly AI picks yet. Pull down to refresh — generation may take up to a minute.
+        </Text>
+      ) : null}
       {err ? <Text style={styles.err}>{err}</Text> : null}
       {loading && !list.length ? (
         <View style={styles.loader}>
@@ -515,6 +535,7 @@ export function ScreensHubScreen({navigation}) {
   );
 
   const dataForList = isPaginated ? pagedList : main === 'ai' ? list : sortedList;
+  const aiHasPickRows = main === 'ai' && list.some(item => item && !item._hdr);
 
   const renderItem = ({item, index}) => {
     if (item._hdr) {
@@ -701,7 +722,7 @@ export function ScreensHubScreen({navigation}) {
           </View>
         }
         renderItem={renderItem}
-        ListEmptyComponent={!loading ? <Text style={styles.muted}>No rows.</Text> : null}
+        ListEmptyComponent={!loading && main !== 'ai' ? <Text style={styles.muted}>No rows.</Text> : null}
         ListFooterComponent={
           <View>
             {isPaginated && !loading ? (

@@ -22,6 +22,11 @@ import {
 } from '@core/utils/advisorHubCache';
 import {cacheHasUsableData, readPageCache, writePageCache} from '@core/storage/pageCache';
 import {fetchWithRetry} from '@core/utils/fetchWithRetry';
+import {
+  aiPicksScreensPayloadUsable,
+  buildAiPicksScreensPayload,
+  weeklyPicksHasRows,
+} from '@core/utils/weeklyPicksScreens';
 import {ensureMarketSession} from '@core/utils/marketSession';
 
 const T = API_TIMEOUT_MS.screen;
@@ -86,17 +91,10 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
     async () => {
       if (main === 'ai') {
         const picks = await dashboardService.fetchWeeklyPicks({timeoutMs: HEAVY});
-        const bull = Array.isArray(picks?.bullish) ? picks.bullish : [];
-        const bear = Array.isArray(picks?.bearish) ? picks.bearish : [];
-        return {
-          weeklyMeta: {pickDate: picks?.pick_date || null, subtitle: 'Weekly AI picks — swing trade setup'},
-          list: [
-            {_hdr: true, _title: 'Bullish swing picks', _tone: 'bull'},
-            ...bull.map((r, i) => ({...r, _n: i + 1, _side: 'bull'})),
-            {_hdr: true, _title: 'Bearish swing picks', _tone: 'bear'},
-            ...bear.map((r, i) => ({...r, _n: i + 1, _side: 'bear'})),
-          ],
-        };
+        if (!weeklyPicksHasRows(picks)) {
+          throw new Error('weekly picks empty');
+        }
+        return buildAiPicksScreensPayload(picks);
       }
       if (main === 'trending') {
         const res = await dashboardService.fetchTrending(MOBILE_SCREEN_LIST_LIMIT, {timeoutMs: HEAVY});
@@ -123,7 +121,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
         list: Array.isArray(res) ? res : parseStockListResponse(res),
       };
     },
-    data => Array.isArray(data?.list) && data.list.length > 0,
+    data => (main === 'ai' ? aiPicksScreensPayloadUsable(data) : Array.isArray(data?.list) && data.list.length > 0),
   );
 }
 

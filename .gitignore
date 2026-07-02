@@ -20,6 +20,12 @@
 /mobile_isolated/android/local.properties
 /mobile_isolated/.env
 
+# mobile build artifacts / reports (APKs, bundles, coverage)
+/mobile_isolated/dist
+/mobile_isolated/mobile
+/mobile_isolated/coverage
+/mobile_isolated/.vscode
+
 # tool caches
 .eslintcache
 node_modules/.cache

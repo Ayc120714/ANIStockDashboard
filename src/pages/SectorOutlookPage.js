@@ -15,13 +15,7 @@ import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
-import {
-  ensureMarketSession,
-  getCachedMarketSession,
-  getMarketPollingIntervalMs,
-  shouldPollLiveMarket,
-} from '../utils/marketSession';
-import { runScreenTableFetch } from '../utils/screenPageLoader';
+import { runLiveMarketPageMountPoll, runScreenTableFetch } from '../utils/screenPageLoader';
 
 const SECTOR_CACHE_KEY = 'sectorOutlookData';
 const SECTOR_REFRESH_MS = 30000;
@@ -48,26 +42,15 @@ function SectorOutlookPage({ onSectorClick }) {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    let timer;
+    let cleanup;
     (async () => {
-      await ensureMarketSession();
-      const liveSession = shouldPollLiveMarket(getCachedMarketSession());
-      await loadData({ silent: false, forceNetwork: liveSession });
-      if (!isMounted) return;
-      const pollMs = getMarketPollingIntervalMs(SECTOR_REFRESH_MS, 0);
-      if (pollMs > 0) {
-        timer = setInterval(() => {
-          if (isMounted) {
-            loadData({ silent: true });
-          }
-        }, pollMs);
-      }
+      await runLiveMarketPageMountPoll({
+        load: loadData,
+        liveIntervalMs: SECTOR_REFRESH_MS,
+        onCleanup: (fn) => { cleanup = fn; },
+      });
     })();
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-    };
+    return () => cleanup?.();
   }, [loadData]);
 
   // Filter data based on search term

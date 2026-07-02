@@ -210,6 +210,7 @@ export function HamburgerMenu({visible, onClose, navigation, user}) {
             <View style={styles.divider} />
 
             <NavRow icon="❓" label="Help & Support" onPress={() => go('WebPortal', {path: '/onboarding'})} />
+            <NavRow icon="✓" label="Verify app setup" onPress={() => go('AppSetupVerify')} />
             <Pressable
               onPress={() => {
                 logout();

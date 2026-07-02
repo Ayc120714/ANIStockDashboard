@@ -1,8 +1,10 @@
+import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
+
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v16',
+  dashboard: '@ani/mobile/page-cache/dashboard-v18',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
-    `@ani/mobile/page-cache/screens-v5-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
+    `@ani/mobile/page-cache/screens-v6-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v2-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v5-${listType}`,
@@ -87,6 +89,7 @@ export function isDashboardCacheIncomplete(cached) {
 /** Which dashboard sections should be refetched (without clearing the whole cache). */
 export function dashboardSectionsToRefresh(cached) {
   const payload = cached?.data || cached || {};
+  const weeklyData = payload.weeklyData;
   return {
     indices: !Array.isArray(payload.indices) || payload.indices.length === 0,
     movers:
@@ -96,7 +99,7 @@ export function dashboardSectionsToRefresh(cached) {
       || payload.losers.length === 0,
     watchlist: !Array.isArray(payload.watchlist),
     signals: !Array.isArray(payload.signals),
-    weekly: !Array.isArray(payload.weeklyData),
+    weekly: !Array.isArray(weeklyData) || hasDuplicateWeeklyEntrySymbols(weeklyData),
     extras:
       !Array.isArray(payload.alerts)
       || !Array.isArray(payload.ratings)
@@ -140,6 +143,8 @@ export function shouldForceAdvisorTrendNetwork({stale = false, trendHasData = fa
 /** Prior dashboard cache keys — cleared on upgrade so stale EOD shells are not reused. */
 export const LEGACY_DASHBOARD_CACHE_KEYS = [
   '@ani/mobile/page-cache/dashboard-v15',
+  '@ani/mobile/page-cache/dashboard-v16',
+  '@ani/mobile/page-cache/dashboard-v17',
 ];
 
 /** Prior cache keys — cleared on upgrade so empty/stale shells are not reused. */

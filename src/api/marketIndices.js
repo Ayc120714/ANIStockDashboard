@@ -171,8 +171,12 @@ const normalizeMarketIndicesResponse = (payload) => {
 };
 
 export const fetchMarketIndices = async () => {
-  const data = await apiGet(MARKET_INDICES_ENDPOINT, FETCH_NO_STORE);
-  return normalizeMarketIndicesResponse(data);
+  // Build the dashboard overview cards from the SAME table rows the Market Outlook
+  // indices table renders, so card CMP / 1D never diverge from the indices table.
+  // (Previously this used an independent row→card mapping that could drift, e.g. the
+  // 1D cell falling back to percentage_change while the table shows perf_1d only.)
+  const tableRows = await fetchMarketIndicesTable();
+  return deriveOutlookCardsFromTable(tableRows);
 };
 
 const fmtPerf = (v) => {

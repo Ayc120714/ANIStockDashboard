@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import { MdRefresh, MdTrendingUp, MdTrendingDown, MdRemoveRedEye } from 'react-icons/md';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
@@ -22,10 +22,11 @@ import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs, isPageCacheStale, shouldPollLiveMarket } from '../utils/marketSession';
-import { applyLiveSessionRefreshPolicy, dashboardSectionsToRefresh } from '../utils/dashboardCachePolicy';
+import { applyLiveSessionRefreshPolicy, applyPullRefreshPolicy, buildDashboardRefreshFallback, dashboardSectionsToRefresh, hasDashboardIndices, hasDashboardMovers, hasDashboardWatchlist, isDashboardCacheIncomplete, pickDashboardSectionRows } from '../utils/dashboardCachePolicy';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 import { ensureLegacyFormattedScreenCachesPurged } from '../utils/screenStockCache';
+import { dedupeWeeklyEntriesBySymbol } from '../utils/weeklyEntries';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -38,26 +39,13 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v6';
-
-function isDashboardCacheIncomplete(cached) {
-  if (!cached) return true;
-  const hasIndices = Boolean(cached.indices);
-  const gainers = cached.gainers;
-  const losers = cached.losers;
-  if (
-    hasIndices
-    && Array.isArray(losers) && losers.length > 0
-    && (!Array.isArray(gainers) || gainers.length === 0)
-  ) {
-    return true;
-  }
-  // Usable cache: indices or movers — do not wipe cache just because ratings/watchlist are missing.
-  if (hasIndices || (Array.isArray(gainers) && gainers.length) || (Array.isArray(losers) && losers.length)) {
-    return false;
-  }
-  return !Array.isArray(cached.watchlist);
-}
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v10';
+const LEGACY_DASHBOARD_CACHE_KEYS = [
+  'dashboard_overview_cache_v9',
+  'dashboard_overview_cache_v8',
+  'dashboard_overview_cache_v6',
+  'dashboard_overview_cache_v7',
+];
 
 const settledValue = (result, fallback) => (result?.status === 'fulfilled' ? result.value : fallback);
 
@@ -66,7 +54,7 @@ function applyDashboardCache(setters, cached, marketModeFallback) {
   setters.setIndices(cached.indices || null);
   setters.setWatchlist(Array.isArray(cached.watchlist) ? cached.watchlist : []);
   setters.setSignals(Array.isArray(cached.signals) ? cached.signals : []);
-  setters.setWeeklyData(Array.isArray(cached.weeklyData) ? cached.weeklyData : []);
+  setters.setWeeklyData(dedupeWeeklyEntriesBySymbol(Array.isArray(cached.weeklyData) ? cached.weeklyData : []));
   setters.setAdvisorRegimeStocks(Array.isArray(cached.advisorRegimeStocks) ? cached.advisorRegimeStocks : []);
   setters.setObData(Array.isArray(cached.obData) ? cached.obData : []);
   setters.setSectors(Array.isArray(cached.sectors) ? cached.sectors : []);
@@ -89,6 +77,17 @@ const isAuthFailureMessage = (message) => {
     || m.includes('request failed: 401');
 };
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+
+const watchlistDayPct = (row) => {
+  if (!row || typeof row !== 'object') return null;
+  if (isFiniteNumber(row.day1d)) return row.day1d;
+  if (isFiniteNumber(row.day_pct)) return row.day_pct;
+  if (isFiniteNumber(row.chg_pct)) return row.chg_pct;
+  const raw = row.day1d ?? row.day_pct ?? row.chg_pct;
+  if (raw == null || raw === '') return null;
+  const n = Number(String(raw).replace(/%/g, '').trim());
+  return Number.isFinite(n) ? n : null;
+};
 const deriveDirectionFromRow = (row) => {
   const reco = String(row?.recommendation || '').toLowerCase();
   if (reco.includes('sell')) return -1;
@@ -112,7 +111,7 @@ const dedupeWatchlistBySymbol = (rows = []) => {
     }
     const preferNew =
       (row.list_type === 'short_term' && existing.list_type !== 'short_term')
-      || (isFiniteNumber(row.day1d) && !isFiniteNumber(existing.day1d));
+      || (watchlistDayPct(row) != null && watchlistDayPct(existing) == null);
     if (preferNew) bySymbol.set(symbol, row);
   });
   return Array.from(bySymbol.values());
@@ -136,40 +135,6 @@ const StatBox = ({ label, value, sub, color }) => (
     {sub && <Box sx={{ fontSize: 11, color: '#888' }}>{sub}</Box>}
   </Box>
 );
-
-// ─── Market Pulse ───────────────────────────────────────────────────────────
-function MarketPulse({ indices }) {
-  const rawCards = [...(indices?.indexCards || []), ...(indices?.smallcapCards || [])];
-  const seenTitles = new Set();
-  const allCards = rawCards.filter((c) => {
-    const title = String(c?.title || '').trim();
-    if (!title || seenTitles.has(title)) return false;
-    seenTitles.add(title);
-    return true;
-  });
-  if (!allCards.length) {
-    return (
-      <Card>
-        <SectionTitle>Market Pulse</SectionTitle>
-        <Box sx={{ fontSize: 12, color: '#777' }}>
-          Market indices data is not available from current backend source.
-        </Box>
-      </Card>
-    );
-  }
-  return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 1.5 }}>
-      {allCards.map((c, i) => (
-        <Card key={i} sx={{ p: 1.5, minWidth: 0, borderLeft: `3px solid ${c.trendDirection === 'up' ? '#2e7d32' : c.trendDirection === 'down' ? '#c62828' : '#888'}` }}>
-          <Box sx={{ fontSize: 11, fontWeight: 600, color: '#555', mb: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</Box>
-          <Box sx={{ fontSize: 17, fontWeight: 700, color: '#1a3c5e' }}>{c.value}</Box>
-          <Box sx={{ fontSize: 12, fontWeight: 600, color: pctColor(c.change?.replace(/[+%]/g, '')) }}>{c.change}</Box>
-          {c.pe && <Box sx={{ fontSize: 10, color: '#999', mt: 0.3 }}>{c.pe}</Box>}
-        </Card>
-      ))}
-    </Box>
-  );
-}
 
 // ─── Portfolio Snapshot ─────────────────────────────────────────────────────
 function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
@@ -203,12 +168,12 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
   } = useMemo(() => {
     const stCountMemo = watchlist.filter((w) => w.list_type === 'short_term').length;
     const ltCountMemo = watchlist.filter((w) => w.list_type === 'long_term').length;
-    const rowsWithDay = all.filter((w) => isFiniteNumber(w?.day1d));
-    const gainersMemo = rowsWithDay.filter((w) => w.day1d > 0);
-    const losersMemo = rowsWithDay.filter((w) => w.day1d < 0);
-    const avg1dMemo = rowsWithDay.length ? rowsWithDay.reduce((s, w) => s + w.day1d, 0) / rowsWithDay.length : 0;
-    const bestMemo = rowsWithDay.reduce((b, w) => (!b || w.day1d > b.day1d) ? w : b, null);
-    const worstMemo = rowsWithDay.reduce((w2, w) => (!w2 || w.day1d < w2.day1d) ? w : w2, null);
+    const rowsWithDay = all.filter((w) => watchlistDayPct(w) != null);
+    const gainersMemo = rowsWithDay.filter((w) => watchlistDayPct(w) > 0);
+    const losersMemo = rowsWithDay.filter((w) => watchlistDayPct(w) < 0);
+    const avg1dMemo = rowsWithDay.length ? rowsWithDay.reduce((s, w) => s + watchlistDayPct(w), 0) / rowsWithDay.length : 0;
+    const bestMemo = rowsWithDay.reduce((b, w) => (!b || watchlistDayPct(w) > watchlistDayPct(b)) ? w : b, null);
+    const worstMemo = rowsWithDay.reduce((w2, w) => (!w2 || watchlistDayPct(w) < watchlistDayPct(w2)) ? w : w2, null);
 
     const sectorMap = {};
     all.forEach((w) => { const s = w.sector || 'Other'; sectorMap[s] = (sectorMap[s] || 0) + 1; });
@@ -278,7 +243,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
       .filter((w) => (w.weekly_entry_gap_pct || 100) <= 10)
       .filter((w) => !occupiedSymbols.has(String(w?.symbol || '').toUpperCase()));
     const inEntryZoneMemo = nearEntryMemo.filter((w) => (w.weekly_entry_gap_pct || 100) <= 5);
-    const topMoversMemo = [...all].sort((a, b) => Math.abs(b.day1d || 0) - Math.abs(a.day1d || 0)).slice(0, 6);
+    const topMoversMemo = [...all].sort((a, b) => Math.abs(watchlistDayPct(b) || 0) - Math.abs(watchlistDayPct(a) || 0)).slice(0, 6);
     return {
       stCount: stCountMemo,
       ltCount: ltCountMemo,
@@ -345,21 +310,21 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
 
       {/* Row 2: Best/Worst + Alerts */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1.5, mb: 2 }}>
-        {best && best.day1d > 0 && (
+        {best && watchlistDayPct(best) > 0 && (
           <Box sx={{ bgcolor: '#e8f5e9', borderRadius: 1.5, p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <MdTrendingUp color="#2e7d32" size={22} />
             <Box>
               <Box sx={{ fontSize: 11, color: '#666' }}>Best Today</Box>
-              <Box sx={{ fontWeight: 700, fontSize: 14 }}>{best.symbol} <span style={{ color: '#2e7d32' }}>{fmtPct(best.day1d)}</span></Box>
+              <Box sx={{ fontWeight: 700, fontSize: 14 }}>{best.symbol} <span style={{ color: '#2e7d32' }}>{fmtPct(watchlistDayPct(best))}</span></Box>
             </Box>
           </Box>
         )}
-        {worst && worst.day1d < 0 && (
+        {worst && watchlistDayPct(worst) < 0 && (
           <Box sx={{ bgcolor: '#ffebee', borderRadius: 1.5, p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <MdTrendingDown color="#c62828" size={22} />
             <Box>
               <Box sx={{ fontSize: 11, color: '#666' }}>Worst Today</Box>
-              <Box sx={{ fontWeight: 700, fontSize: 14 }}>{worst.symbol} <span style={{ color: '#c62828' }}>{fmtPct(worst.day1d)}</span></Box>
+              <Box sx={{ fontWeight: 700, fontSize: 14 }}>{worst.symbol} <span style={{ color: '#c62828' }}>{fmtPct(watchlistDayPct(worst))}</span></Box>
             </Box>
           </Box>
         )}
@@ -491,7 +456,7 @@ function PortfolioSnapshot({ watchlist = [], signals = [], weeklyData = [] }) {
                 <tr key={`${w.symbol}-${w.id ?? idx}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>{w.symbol}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(w.price)}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', color: pctColor(w.day1d), fontWeight: 600 }}>{fmtPct(w.day1d)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: pctColor(watchlistDayPct(w)), fontWeight: 600 }}>{fmtPct(watchlistDayPct(w))}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                     {w.recommendation ? <Chip label={w.recommendation.toUpperCase()} size="small" sx={{ fontSize: 10, fontWeight: 700, height: 20, bgcolor: recoColors[w.recommendation.toUpperCase()] || '#888', color: '#fff' }} /> : '—'}
                   </td>
@@ -625,7 +590,7 @@ function RelativeRegimeBoard({ stocks = [], indices = null }) {
 
 // ─── Weekly Entries (MyIndicator: PSAR + SuperTrend + Fibonacci) ────────────
 function WeeklyEntries({ weeklyData = [] }) {
-  const rows = weeklyData;
+  const rows = useMemo(() => dedupeWeeklyEntriesBySymbol(weeklyData), [weeklyData]);
   const MAX_ENTRY_GAP_PCT = 5;
   const deriveWeeklyEntryStop = (w) => {
     const psar = Number(w?.weekly_psar);
@@ -691,7 +656,7 @@ function WeeklyEntries({ weeklyData = [] }) {
       .sort((a, b) => (a.weekly_entry_gap_pct || 100) - (b.weekly_entry_gap_pct || 100)),
     [rows]
   );
-  const visibleRows = nearEntries.slice(0, 25);
+  const visibleRows = dedupeWeeklyEntriesBySymbol(nearEntries).slice(0, 25);
 
   if (!rows.length) {
     return (
@@ -1317,6 +1282,7 @@ function DashboardPage() {
   const [telegramStatusChecked, setTelegramStatusChecked] = useState(false);
   const [hasApprovedTelegramAccess, setHasApprovedTelegramAccess] = useState(false);
   const userId = String(user?.id || user?.user_id || user?.email || '');
+  const loadSeqRef = useRef(0);
   const hasHydratedData = Boolean(
     (watchlist && watchlist.length)
     || (signals && signals.length)
@@ -1343,14 +1309,16 @@ function DashboardPage() {
     setHoldings(broker.rows);
   }, [userId]);
 
-  const loadAll = useCallback(async ({ forceSpinner = false, forceRefresh = false } = {}) => {
+  const loadAll = useCallback(async ({ forceSpinner = false, forceRefresh = false, backgroundOnly = false } = {}) => {
+    const loadSeq = ++loadSeqRef.current;
+    const isStaleLoad = () => loadSeq !== loadSeqRef.current;
     try {
       if (!isAuthenticated || !accessToken) {
         setLoadError('Your session expired. Please sign in again.');
         setLoading(false);
         return;
       }
-      if (forceSpinner && !hasHydratedData) {
+      if (forceSpinner && !hasHydratedData && !backgroundOnly) {
         setLoading(true);
       }
       const session = await ensureMarketSession();
@@ -1378,77 +1346,100 @@ function DashboardPage() {
           setMarketMode,
           setLastUpdated,
         }, { ...cached, updatedAt: cachedWrap?.updatedAt }, marketMode);
-        setLoading(false);
+        if (!backgroundOnly) setLoading(false);
       }
 
-      if (liveSession || cacheStale || cacheIncomplete) {
-        clearApiGetCache();
-        if (cacheStale || cacheIncomplete) clearPageCache(DASHBOARD_CACHE_KEY);
+      const refreshFallback = buildDashboardRefreshFallback(cachedWrap?.data ? cachedWrap : cached);
+      const need = dashboardSectionsToRefresh({ ...refreshFallback, ...cached });
+      applyLiveSessionRefreshPolicy(need, liveSession);
+      if (forceRefresh) applyPullRefreshPolicy(need);
+
+      if (!forceRefresh && !liveSession && !cacheStale && !cacheIncomplete && cached) {
+        const skipNetwork = await shouldUseCachedPageDataOnly(DASHBOARD_CACHE_KEY);
+        if (skipNetwork) {
+          await refreshBrokerHoldings({ forceLive: true });
+          return;
+        }
       }
 
-      const skipNetwork = !forceRefresh
-        && !liveSession
-        && !cacheStale
-        && !cacheIncomplete
-        && cached
-        && (await shouldUseCachedPageDataOnly(DASHBOARD_CACHE_KEY));
-      if (skipNetwork) {
-        await refreshBrokerHoldings({ forceLive: true });
+      if (backgroundOnly && !cached) {
         return;
       }
 
-      const need = dashboardSectionsToRefresh(cached);
-      applyLiveSessionRefreshPolicy(need, liveSession);
-      const partial = {};
+      if (liveSession || forceRefresh || cacheStale) {
+        clearApiGetCache();
+        if (cacheStale || forceRefresh) clearPageCache(DASHBOARD_CACHE_KEY);
+      }
+
+      const skipApiCache = liveSession || forceRefresh;
+      const partial = { ...refreshFallback, ...cached };
+      const sectionFallback = () => ({ ...refreshFallback, ...partial });
 
       const phase1 = await Promise.allSettled([
-        need.indices || forceRefresh ? fetchMarketIndices() : Promise.resolve(cached?.indices || null),
+        need.indices || forceRefresh ? fetchMarketIndices() : Promise.resolve(partial.indices || null),
         need.movers || forceRefresh
           ? fetchPriceShockersRaw('gainers', 8, 'day').then((rows) => mapPriceShockersList(rows, 'day'))
-          : Promise.resolve(cached?.gainers ?? []),
+          : Promise.resolve(partial.gainers ?? []),
         need.movers || forceRefresh
           ? fetchPriceShockersRaw('losers', 8, 'day').then((rows) => mapPriceShockersList(rows, 'day'))
-          : Promise.resolve(cached?.losers ?? []),
+          : Promise.resolve(partial.losers ?? []),
       ]);
-      partial.indices = settledValue(phase1[0], cached?.indices || null);
-      partial.gainers = settledValue(phase1[1], cached?.gainers ?? []);
-      partial.losers = settledValue(phase1[2], cached?.losers ?? []);
+      if (isStaleLoad()) return;
+      partial.indices = settledValue(phase1[0], partial.indices || null);
+      partial.gainers = pickDashboardSectionRows('gainers', settledValue(phase1[1], null), sectionFallback());
+      partial.losers = pickDashboardSectionRows('losers', settledValue(phase1[2], null), sectionFallback());
       setIndices(partial.indices);
       setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
       setLosers(Array.isArray(partial.losers) ? partial.losers : []);
-      setLoading(false);
 
       const phase2 = await Promise.allSettled([
-        need.watchlist || forceRefresh ? fetchWatchlist(null) : Promise.resolve(cached?.watchlist ?? []),
-        need.signals || forceRefresh ? fetchWatchlistSignals({ timeframe: 'intraday' }) : Promise.resolve(cached?.signals ?? []),
-        need.weekly || forceRefresh ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(cached?.weeklyData ?? []),
-        need.extras || forceRefresh ? fetchAlerts({ limit: 25 }) : Promise.resolve(cached?.alerts ?? []),
-        need.extras || forceRefresh ? fetchRatings({ limit: 8 }) : Promise.resolve(cached?.ratings ?? []),
+        need.watchlist || forceRefresh
+          ? fetchWatchlist(null, skipApiCache ? { skipCache: true } : {})
+          : Promise.resolve(partial.watchlist ?? []),
+        need.extras || forceRefresh ? fetchWatchlistSignals({ timeframe: 'intraday' }) : Promise.resolve(partial.signals ?? []),
+        need.extras || forceRefresh ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(partial.weeklyData ?? []),
+        need.extras || forceRefresh ? fetchAlerts({ limit: 25 }) : Promise.resolve(partial.alerts ?? []),
+        need.extras || forceRefresh ? fetchRatings({ limit: 8 }) : Promise.resolve(partial.ratings ?? []),
         need.extras || forceRefresh
           ? fetchTrendingRaw(20).then((rows) => mapStockListToTable(rows, {}))
-          : Promise.resolve(cached?.trendingStocks ?? []),
+          : Promise.resolve(partial.trendingStocks ?? []),
       ]);
-      partial.watchlist = settledValue(phase2[0], cached?.watchlist ?? []);
-      partial.signals = settledValue(phase2[1], cached?.signals ?? []);
-      partial.weeklyData = settledValue(phase2[2], cached?.weeklyData ?? []);
-      partial.alerts = settledValue(phase2[3], cached?.alerts ?? []);
-      partial.ratings = settledValue(phase2[4], cached?.ratings ?? []);
-      partial.trendingStocks = settledValue(phase2[5], cached?.trendingStocks ?? []);
+      if (isStaleLoad()) return;
+      partial.watchlist = pickDashboardSectionRows('watchlist', settledValue(phase2[0], null), sectionFallback());
+      partial.signals = pickDashboardSectionRows('signals', settledValue(phase2[1], null), sectionFallback());
+      partial.weeklyData = dedupeWeeklyEntriesBySymbol(
+        pickDashboardSectionRows('weeklyData', settledValue(phase2[2], null), sectionFallback()),
+      );
+      partial.alerts = pickDashboardSectionRows('alerts', settledValue(phase2[3], null), sectionFallback());
+      partial.ratings = pickDashboardSectionRows('ratings', settledValue(phase2[4], null), sectionFallback());
+      partial.trendingStocks = pickDashboardSectionRows('trendingStocks', settledValue(phase2[5], null), sectionFallback());
+
+      setWatchlist(Array.isArray(partial.watchlist) ? partial.watchlist : []);
+      setSignals(Array.isArray(partial.signals) ? partial.signals : []);
+      setWeeklyData(Array.isArray(partial.weeklyData) ? partial.weeklyData : []);
+      setAlerts(Array.isArray(partial.alerts) ? partial.alerts : []);
+      setRatings(Array.isArray(partial.ratings) ? partial.ratings : []);
+      setTrendingStocks(Array.isArray(partial.trendingStocks) ? partial.trendingStocks : []);
+      if (!backgroundOnly) setLoading(false);
 
       const phase3 = await Promise.allSettled([
-        need.optional || forceRefresh ? fetchSectorOutlook() : Promise.resolve(cached?.sectors ?? []),
-        need.optional || forceRefresh ? fetchOrderBlocks() : Promise.resolve(cached?.obData ?? []),
-        need.weekly || forceRefresh ? fetchLatestSignalsPayload(200) : Promise.resolve({ data: cached?.advisorRegimeStocks ?? [] }),
+        need.extras || forceRefresh ? fetchSectorOutlook() : Promise.resolve(partial.sectors ?? []),
+        need.extras || forceRefresh ? fetchOrderBlocks() : Promise.resolve(partial.obData ?? []),
+        need.extras || forceRefresh ? fetchLatestSignalsPayload(200) : Promise.resolve({ data: partial.advisorRegimeStocks ?? [] }),
         apiGet('/system/status'),
       ]);
-      partial.sectors = settledValue(phase3[0], cached?.sectors ?? []);
-      partial.obData = settledValue(phase3[1], cached?.obData ?? []);
-      const advPayload = settledValue(phase3[2], { data: cached?.advisorRegimeStocks ?? [] });
-      partial.advisorRegimeStocks = (Array.isArray(advPayload?.data) ? advPayload.data : []).map((s) => ({
-        symbol: s.symbol,
-        day1d: s.day1d,
-        day1w: s.week1w,
-      }));
+      if (isStaleLoad()) return;
+      partial.sectors = pickDashboardSectionRows('sectors', settledValue(phase3[0], null), sectionFallback());
+      partial.obData = pickDashboardSectionRows('obData', settledValue(phase3[1], null), sectionFallback());
+      const advPayload = settledValue(phase3[2], { data: partial.advisorRegimeStocks ?? [] });
+      const freshAdvisorRows = Array.isArray(advPayload?.data) ? advPayload.data : [];
+      partial.advisorRegimeStocks = freshAdvisorRows.length
+        ? freshAdvisorRows.map((s) => ({
+          symbol: s.symbol,
+          day1d: s.day1d,
+          day1w: s.week1w,
+        }))
+        : (Array.isArray(refreshFallback.advisorRegimeStocks) ? refreshFallback.advisorRegimeStocks : []);
       const sys = phase3[3];
 
       const coreResults = [phase1[0], phase2[0], phase2[1], phase2[2], phase3[2], phase3[0], phase1[1], phase1[2], phase2[3], phase2[4], phase2[5]];
@@ -1463,34 +1454,34 @@ function DashboardPage() {
         return;
       }
 
-      setWatchlist(Array.isArray(partial.watchlist) ? partial.watchlist : []);
-      setSignals(Array.isArray(partial.signals) ? partial.signals : []);
-      setWeeklyData(Array.isArray(partial.weeklyData) ? partial.weeklyData : []);
       setAdvisorRegimeStocks(Array.isArray(partial.advisorRegimeStocks) ? partial.advisorRegimeStocks : []);
       setObData(Array.isArray(partial.obData) ? partial.obData : []);
       setSectors(Array.isArray(partial.sectors) ? partial.sectors : []);
-      setAlerts(Array.isArray(partial.alerts) ? partial.alerts : []);
-      setRatings(Array.isArray(partial.ratings) ? partial.ratings : []);
-      setTrendingStocks(Array.isArray(partial.trendingStocks) ? partial.trendingStocks : []);
       if (sys.status === 'fulfilled') setMarketMode(sys.value?.orchestrator?.mode || 'unknown');
       setLastUpdated(new Date());
       setLoadError('');
-      writePageCache(DASHBOARD_CACHE_KEY, {
-        indices: partial.indices,
-        watchlist: partial.watchlist,
-        signals: partial.signals,
-        weeklyData: partial.weeklyData,
-        advisorRegimeStocks: partial.advisorRegimeStocks,
-        obData: partial.obData,
-        sectors: partial.sectors,
-        gainers: partial.gainers,
-        losers: partial.losers,
-        alerts: partial.alerts,
-        ratings: partial.ratings,
-        trendingStocks: partial.trendingStocks,
-        marketMode: sys.status === 'fulfilled' ? (sys.value?.orchestrator?.mode || 'unknown') : marketMode,
-        updatedAt: Date.now(),
-      });
+      if (
+        hasDashboardWatchlist(partial)
+        || hasDashboardWatchlist(refreshFallback)
+        || hasDashboardIndices(partial)
+        || hasDashboardMovers(partial)
+      ) {
+        writePageCache(DASHBOARD_CACHE_KEY, {
+          indices: partial.indices,
+          watchlist: partial.watchlist,
+          signals: partial.signals,
+          weeklyData: partial.weeklyData,
+          advisorRegimeStocks: partial.advisorRegimeStocks,
+          obData: partial.obData,
+          sectors: partial.sectors,
+          gainers: partial.gainers,
+          losers: partial.losers,
+          alerts: partial.alerts,
+          ratings: partial.ratings,
+          trendingStocks: partial.trendingStocks,
+          marketMode: sys.status === 'fulfilled' ? (sys.value?.orchestrator?.mode || 'unknown') : marketMode,
+        });
+      }
       setLoading(false);
 
       await refreshBrokerHoldings({ forceLive: true });
@@ -1498,6 +1489,10 @@ function DashboardPage() {
       setLoading(false);
     }
   }, [hasHydratedData, marketMode, refreshBrokerHoldings, isAuthenticated, accessToken]);
+
+  useEffect(() => {
+    LEGACY_DASHBOARD_CACHE_KEYS.forEach((key) => clearPageCache(key));
+  }, []);
 
   useEffect(() => {
     let timer;
@@ -1508,7 +1503,7 @@ function DashboardPage() {
       const session = await ensureMarketSession();
       const pollMs = getMarketPollingIntervalMs(30_000, 0);
       if (pollMs > 0 && session.isLiveMarket) {
-        timer = setInterval(() => loadAll({ forceSpinner: false }), pollMs);
+        timer = setInterval(() => loadAll({ forceSpinner: false, backgroundOnly: true }), pollMs);
       }
     })();
     return () => {
@@ -1636,11 +1631,6 @@ function DashboardPage() {
               After login, subscribe for alerts: open the bot and send <b>/start</b>. Your chat must be approved in Telegram Admin before alerts are delivered.
             </Alert>
           ) : null}
-          {/* Market Pulse Banner */}
-          <Box sx={{ mb: 2 }}>
-            <MarketPulse indices={indices} />
-          </Box>
-
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) minmax(300px,360px)' }, gap: 2, alignItems: 'start' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />

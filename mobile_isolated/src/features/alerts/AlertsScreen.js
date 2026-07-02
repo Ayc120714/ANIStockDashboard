@@ -1,19 +1,21 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {ScreenScaffold} from '@components/ScreenScaffold';
 import {TradeProductPicker} from '@components/TradeProductPicker';
 import {useAuth} from '@core/auth/AuthContext';
-import {alertsService} from '@core/api/services/alertsService';
-import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
-import {safeFetch} from '@core/utils/safeFetch';
 import {ensureMarketSession, getMarketPollingIntervalMs} from '@core/utils/marketSession';
 import {formatAlertTimeIST} from '@core/utils/alertInboxUtils';
 import {formatNowTimeIST} from '@core/utils/istTime';
 import {startTradeFromAlert} from '@core/utils/startTradeFromAlert';
 import {inferAlertSide} from '@core/utils/tradePreflight';
-import {isLiveEntryExitAlert, liveAlertToSignalRow} from '@core/utils/signalsTabPayload';
-import {isTodayInIST} from '@core/utils/alertInboxUtils';
+import {fetchLiveSetupsPayload, partitionEntryReadySetups} from '@core/utils/liveSetupsPayload';
+import {
+  buildEntryReadyPopupMessage,
+  detectNewEntryReadySetups,
+  notifyEntryReadyPopup,
+} from '@core/utils/entryReadySetupAlerts';
+import {getSetupLifecycleState} from '@core/utils/setupLifecycle';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
 const POLL_MS = 15000;
@@ -48,16 +50,7 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [tradePickerAlert, setTradePickerAlert] = useState(null);
   const [loadError, setLoadError] = useState('');
-
-  const normalizeList = raw => {
-    if (Array.isArray(raw)) {
-      return raw;
-    }
-    if (Array.isArray(raw?.data)) {
-      return raw.data;
-    }
-    return [];
-  };
+  const firstLoad = useRef(true);
 
   const load = useCallback(async ({silent = false, notify = false} = {}) => {
     if (silent) {
@@ -66,29 +59,22 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
       setLoading(true);
     }
     try {
-      const resp = await safeFetch(() => alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT}), {
-        timeoutMs: API_TIMEOUT_MS.screen,
-        retries: 2,
-        label: 'Alerts',
-      });
-      const list = normalizeList(resp)
-        .filter(row => isTodayInIST(row?.timestamp || row?.created_at || row?.alert_time))
-        .filter(isLiveEntryExitAlert)
-        .map(liveAlertToSignalRow)
-        .filter(row => row.symbol);
-      setAlerts(prev => {
-        const prevIds = new Set((prev || []).map(item => String(item?.id || '')));
-        const incomingIds = list.map(item => String(item?.id || ''));
-        const added = incomingIds.filter(id => id && !prevIds.has(id)).length;
-        if (added > 0) {
-          setNewCount(added);
+      const rows = await fetchLiveSetupsPayload();
+      const {entryReady, fresh} = await detectNewEntryReadySetups(rows, {bootstrap: firstLoad.current});
+      firstLoad.current = false;
+      if (fresh.length) {
+        setNewCount(prev => prev + fresh.length);
+        const message = buildEntryReadyPopupMessage(fresh);
+        await notifyEntryReadyPopup(fresh);
+        if (notify) {
+          Alert.alert('Entry ready alert', message);
         }
-        return list;
-      });
+      }
+      setAlerts(entryReady);
       setLastSyncAt(new Date());
       setLoadError('');
     } catch (error) {
-      const msg = String(error?.message || error || 'Could not load alerts');
+      const msg = String(error?.message || error || 'Could not load entry-ready alerts');
       setLoadError(msg);
       if (notify) {
         Alert.alert('Alerts', msg);
@@ -125,7 +111,8 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
     };
   }, [autoSync, load]);
 
-  const items = useMemo(() => (Array.isArray(alerts) ? alerts : []), [alerts]);
+  const partitioned = useMemo(() => partitionEntryReadySetups(alerts), [alerts]);
+  const items = useMemo(() => partitioned.all, [partitioned.all]);
 
   if (loading) {
     if (embedded) {
@@ -169,29 +156,33 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
       ) : null}
 
       <View style={styles.metaCard}>
-        <Text style={styles.metaText}>Alerts: {items.length}</Text>
+        <Text style={styles.metaText}>Entry ready: {items.length}</Text>
+        <Text style={styles.metaText}>Today: {partitioned.today.length} · This week: {partitioned.week.length}</Text>
         <Text style={styles.metaText}>New since last sync: {newCount}</Text>
         <Text style={styles.metaSub}>
           Last sync: {lastSyncAt ? `${formatNowTimeIST(lastSyncAt)} IST` : 'Not synced yet'}
         </Text>
       </View>
 
-      {items.map((item, index) => (
-        <View key={String(item?.id || `${item?.symbol || 'alert'}-${index}`)} style={styles.alertCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.symbol}>{item?.symbol || 'N/A'}</Text>
-            <Text style={styles.severity}>{String(item?.severity || 'info').toUpperCase()}</Text>
+      {items.map((item, index) => {
+        const lifecycle = getSetupLifecycleState(item);
+        return (
+          <View key={String(item?.id || `${item?.symbol || 'alert'}-${index}`)} style={styles.alertCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.symbol}>{item?.symbol || 'N/A'}</Text>
+              <Text style={styles.severity}>{lifecycle.statusLabel || 'ENTRY READY'}</Text>
+            </View>
+            <Text style={styles.message}>{item?._alertMessage || item?.message || item?._alertType || 'Entry ready alert'}</Text>
+            <Text style={styles.signalLine}>{renderSignalLine(item)}</Text>
+            <Text style={styles.time}>{formatAlertTimeIST(item?._alertAt || item?.timestamp || item?.setup_at)}</Text>
+            <Pressable
+              style={styles.tradeBtn}
+              onPress={() => setTradePickerAlert(item)}>
+              <Text style={styles.tradeBtnText}>Trade this alert</Text>
+            </Pressable>
           </View>
-          <Text style={styles.message}>{item?._alertMessage || item?.message || item?._alertType || 'Alert'}</Text>
-          <Text style={styles.signalLine}>{renderSignalLine(item)}</Text>
-          <Text style={styles.time}>{formatAlertTimeIST(item?._alertAt || item?.timestamp)}</Text>
-          <Pressable
-            style={styles.tradeBtn}
-            onPress={() => setTradePickerAlert(item)}>
-            <Text style={styles.tradeBtnText}>Trade this alert</Text>
-          </Pressable>
-        </View>
-      ))}
+        );
+      })}
 
       <TradeProductPicker
         visible={Boolean(tradePickerAlert)}
@@ -206,7 +197,9 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
         }
       />
 
-      {items.length === 0 ? <Text style={styles.empty}>No live alerts available right now.</Text> : null}
+      {items.length === 0 ? (
+        <Text style={styles.empty}>No entry-ready alerts right now. You will get a popup when a new stock becomes entry ready.</Text>
+      ) : null}
     </>
   );
 
@@ -219,7 +212,7 @@ export const AlertsScreen = ({navigation, embedded = false}) => {
   }
 
   return (
-    <ScreenScaffold title="Live Alerts" subtitle="Real-time advisor alerts with entry/exit/SL sync">
+    <ScreenScaffold title="Entry Ready Alerts" subtitle="Tradeable entry-ready stocks with live popup notifications">
       {content}
     </ScreenScaffold>
   );
@@ -248,7 +241,7 @@ const styles = StyleSheet.create({
   alertCard: {...mobileStyles.card, borderRadius: 12, padding: 12, gap: 6},
   rowBetween: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   symbol: mobileStyles.metricSm,
-  severity: {fontSize: AYC.type.caption, fontWeight: '700', color: '#7c3aed'},
+  severity: {fontSize: AYC.type.caption, fontWeight: '700', color: '#1565c0'},
   message: mobileStyles.body,
   signalLine: mobileStyles.caption,
   time: mobileStyles.muted,

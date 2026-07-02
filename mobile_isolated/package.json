@@ -1,6 +1,6 @@
 {
   "name": "ani-stock-mobile",
-  "version": "1.2.79",
+  "version": "1.2.84",
   "private": true,
   "scripts": {
     "start": "react-native start --port 8081",

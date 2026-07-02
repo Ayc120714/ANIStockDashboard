@@ -17,20 +17,34 @@ import {
 
 describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
-    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v16');
+    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v18');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v6');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
       '@ani/mobile/page-cache/advisor-hub-trend-v10',
     );
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
-      'screens-v5',
+      'screens-v6',
     );
   });
 
   it('tracks legacy dashboard cache keys for upgrade cleanup', () => {
     expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v15');
+    expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v16');
+    expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v17');
     expect(LEGACY_DASHBOARD_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.dashboard);
+  });
+
+  it('refetches weekly entries when cached rows contain duplicate symbols', () => {
+    const cached = {
+      data: {
+        weeklyData: [
+          {symbol: 'AADHARHFC', weekly_entry_gap_pct: 1.7},
+          {symbol: 'AADHARHFC', weekly_entry_gap_pct: 1.7},
+        ],
+      },
+    };
+    expect(dashboardSectionsToRefresh(cached).weekly).toBe(true);
   });
 
   it('tracks legacy trend cache keys for upgrade cleanup', () => {
