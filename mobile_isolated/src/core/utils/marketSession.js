@@ -66,13 +66,39 @@ function istCloseEpochMs(y, m, d) {
   return Date.parse(`${y}-${pad(m)}-${pad(d)}T15:30:00+05:30`);
 }
 
+function nseCloseEpochMsForDateIso(isoDate) {
+  if (!isoDate || typeof isoDate !== 'string') return null;
+  const [y, m, d] = isoDate.split('-').map(x => Number(x));
+  if (!y || !m || !d) return null;
+  return istCloseEpochMs(y, m, d);
+}
+
+function lastWeekdayCloseEpochMsBefore(now = new Date()) {
+  let cur = new Date(now.getTime());
+  for (let i = 0; i < 10; i += 1) {
+    const cp = istClockParts(cur);
+    if (cp.weekday !== 'Sat' && cp.weekday !== 'Sun') {
+      return istCloseEpochMs(cp.y, cp.m, cp.d);
+    }
+    cur = new Date(cur.getTime() - 24 * 60 * 60 * 1000);
+  }
+  return null;
+}
+
 export function isPostMarketPageCacheStale(updatedAt, session) {
   const ts = Number(updatedAt);
   if (!ts) return true;
-  if (session?.isTradingDay === false) return false;
 
   const nowP = istClockParts();
-  if (nowP.weekday === 'Sat' || nowP.weekday === 'Sun') return false;
+  const isWeekend = nowP.weekday === 'Sat' || nowP.weekday === 'Sun';
+  const offCalendarSession = session?.isTradingDay === false;
+
+  if (offCalendarSession || isWeekend) {
+    const closeMs =
+      nseCloseEpochMsForDateIso(session?.referenceTradingDate) ?? lastWeekdayCloseEpochMsBefore();
+    if (closeMs == null) return true;
+    return ts < closeMs;
+  }
 
   const cacheP = istClockParts(new Date(ts));
   const sameIstDay = cacheP.y === nowP.y && cacheP.m === nowP.m && cacheP.d === nowP.d;
@@ -107,6 +133,7 @@ const parseStatus = status => {
     isLiveMarket,
     isMarketHours,
     isTradingDay,
+    referenceTradingDate: status?.market_info?.reference_trading_date || null,
     marketPhase: orch.market_phase || status?.market_info?.market_phase || 'off_hours',
     mode: mode || 'unknown',
     liveSource,

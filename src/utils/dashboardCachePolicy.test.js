@@ -67,6 +67,17 @@ describe('dashboardCachePolicy', () => {
     expect(isDashboardCacheIncomplete(cached)).toBe(false);
   });
 
+  it('always refetches watchlist for fresh day1d even when cache has rows', () => {
+    const cached = {
+      indices: { indexCards: [{ title: 'Nifty 50' }] },
+      gainers: [{ symbol: 'A' }],
+      losers: [{ symbol: 'B' }],
+      watchlist: [{ symbol: 'PARAS', day1d: 8.97 }],
+    };
+    expect(dashboardSectionsToRefresh(cached).watchlist).toBe(true);
+    expect(dashboardSectionsToRefresh(cached).movers).toBe(false);
+  });
+
   it('requires both gainers and losers for complete movers cache', () => {
     expect(hasDashboardMovers({ gainers: [{ symbol: 'A' }], losers: [{ symbol: 'B' }] })).toBe(true);
     expect(hasDashboardMovers({ gainers: [{ symbol: 'A' }], losers: [] })).toBe(false);

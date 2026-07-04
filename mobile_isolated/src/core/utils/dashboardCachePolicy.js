@@ -1,7 +1,7 @@
 import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
 
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v18',
+  dashboard: '@ani/mobile/page-cache/dashboard-v19',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v6-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
@@ -97,7 +97,7 @@ export function dashboardSectionsToRefresh(cached) {
       || !Array.isArray(payload.losers)
       || payload.gainers.length === 0
       || payload.losers.length === 0,
-    watchlist: !Array.isArray(payload.watchlist),
+    watchlist: true,
     signals: !Array.isArray(payload.signals),
     weekly: !Array.isArray(weeklyData) || hasDuplicateWeeklyEntrySymbols(weeklyData),
     extras:

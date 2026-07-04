@@ -78,7 +78,8 @@ export const dashboardSectionsToRefresh = (cached) => {
   return {
     indices: !hasDashboardIndices(cached),
     movers: !hasDashboardMovers(cached),
-    watchlist: !Array.isArray(payload.watchlist) || payload.watchlist.length === 0,
+    // Always refetch watchlist when loading dashboard — day1d/CMP must match EOD overlays (subsector parity).
+    watchlist: true,
     extras:
       !Array.isArray(payload.signals)
       || !Array.isArray(payload.weeklyData)

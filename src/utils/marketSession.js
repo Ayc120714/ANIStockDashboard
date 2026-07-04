@@ -96,6 +96,27 @@ function istCloseEpochMs(y, m, d) {
   return Date.parse(`${y}-${pad(m)}-${pad(d)}T15:30:00+05:30`);
 }
 
+/** NSE cash close (15:30 IST) for a `YYYY-MM-DD` reference trading date. */
+export function nseCloseEpochMsForDateIso(isoDate) {
+  if (!isoDate || typeof isoDate !== 'string') return null;
+  const [y, m, d] = isoDate.split('-').map((x) => Number(x));
+  if (!y || !m || !d) return null;
+  return istCloseEpochMs(y, m, d);
+}
+
+/** Walk back from `now` to the most recent Mon–Fri close (weekend fallback). */
+function lastWeekdayCloseEpochMsBefore(now = new Date()) {
+  let cur = new Date(now.getTime());
+  for (let i = 0; i < 10; i += 1) {
+    const cp = istClockParts(cur);
+    if (cp.weekday !== 'Sat' && cp.weekday !== 'Sun') {
+      return istCloseEpochMs(cp.y, cp.m, cp.d);
+    }
+    cur = new Date(cur.getTime() - 24 * 60 * 60 * 1000);
+  }
+  return null;
+}
+
 /** True after 15:30 IST on a weekday (holidays not detected). */
 export function isAfterNseCloseIstNow(date = new Date()) {
   const p = istClockParts(date);
@@ -110,10 +131,19 @@ export function isAfterNseCloseIstNow(date = new Date()) {
 export function isPostMarketPageCacheStale(updatedAt, session) {
   const ts = Number(updatedAt);
   if (!ts) return true;
-  if (session?.isTradingDay === false) return false;
 
   const nowP = istClockParts();
-  if (nowP.weekday === 'Sat' || nowP.weekday === 'Sun') return false;
+  const isWeekend = nowP.weekday === 'Sat' || nowP.weekday === 'Sun';
+  const offCalendarSession = session?.isTradingDay === false;
+
+  // Weekend/holiday: intraday dashboard cache must not mask EOD CHG% (subsector modal refetches).
+  if (offCalendarSession || isWeekend) {
+    const closeMs =
+      nseCloseEpochMsForDateIso(session?.referenceTradingDate)
+      ?? lastWeekdayCloseEpochMsBefore();
+    if (closeMs == null) return true;
+    return ts < closeMs;
+  }
 
   const cacheP = istClockParts(new Date(ts));
   const sameIstDay =
@@ -175,6 +205,7 @@ const parseStatus = (status) => {
     isWebSocketStreaming,
     isMarketHours,
     isTradingDay,
+    referenceTradingDate: status?.market_info?.reference_trading_date || null,
     marketPhase: orch.market_phase || status?.market_info?.market_phase || 'off_hours',
     mode: mode || 'unknown',
     fetchedAt: Date.now(),

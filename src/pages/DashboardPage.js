@@ -39,8 +39,9 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v10';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v11';
 const LEGACY_DASHBOARD_CACHE_KEYS = [
+  'dashboard_overview_cache_v10',
   'dashboard_overview_cache_v9',
   'dashboard_overview_cache_v8',
   'dashboard_overview_cache_v6',
