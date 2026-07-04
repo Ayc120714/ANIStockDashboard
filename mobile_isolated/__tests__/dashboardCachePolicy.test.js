@@ -17,7 +17,7 @@ import {
 
 describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
-    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v19');
+    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v20');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v6');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
       '@ani/mobile/page-cache/advisor-hub-trend-v10',
@@ -98,7 +98,7 @@ describe('dashboard cache policy fixes', () => {
     const need = dashboardSectionsToRefresh(partial);
     expect(need.indices).toBe(false);
     expect(need.movers).toBe(false);
-    expect(need.watchlist).toBe(true);
+    expect(need.watchlist).toBe(false);
     expect(need.signals).toBe(false);
   });
 

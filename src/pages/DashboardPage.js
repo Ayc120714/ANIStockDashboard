@@ -22,7 +22,7 @@ import { TELEGRAM_BOT_LABEL, TELEGRAM_BOT_URL } from '../constants/telegram';
 import { fetchTelegramSubscribers } from '../api/telegram';
 import { useAuth } from '../auth/AuthContext';
 import { ensureMarketSession, getMarketPollingIntervalMs, isPageCacheStale, shouldPollLiveMarket } from '../utils/marketSession';
-import { applyLiveSessionRefreshPolicy, applyPullRefreshPolicy, buildDashboardRefreshFallback, dashboardSectionsToRefresh, hasDashboardIndices, hasDashboardMovers, hasDashboardWatchlist, isDashboardCacheIncomplete, pickDashboardSectionRows } from '../utils/dashboardCachePolicy';
+import { applyLiveSessionRefreshPolicy, applyPullRefreshPolicy, buildDashboardRefreshFallback, dashboardSectionsToRefresh, dashboardVolatileRefreshNeed, hasDashboardIndices, hasDashboardMovers, hasDashboardMinimumVisibleContent, hasDashboardWatchlist, isDashboardCacheIncomplete, pickDashboardSectionRows, readDashboardCacheSnapshot, shouldBackgroundRefreshDashboardVolatile } from '../utils/dashboardCachePolicy';
 import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 import { ensureLegacyFormattedScreenCachesPurged } from '../utils/screenStockCache';
@@ -39,8 +39,9 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v11';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v12';
 const LEGACY_DASHBOARD_CACHE_KEYS = [
+  'dashboard_overview_cache_v11',
   'dashboard_overview_cache_v10',
   'dashboard_overview_cache_v9',
   'dashboard_overview_cache_v8',
@@ -67,6 +68,28 @@ function applyDashboardCache(setters, cached, marketModeFallback) {
   if (cached.marketMode) setters.setMarketMode(cached.marketMode);
   else if (marketModeFallback) setters.setMarketMode(marketModeFallback);
   setters.setLastUpdated(cached.updatedAt ? new Date(cached.updatedAt) : new Date());
+}
+
+function getDashboardBootSnapshot(cacheKey) {
+  const snap = readDashboardCacheSnapshot(cacheKey);
+  if (!snap) return null;
+  const p = snap.payload;
+  return {
+    indices: p.indices || null,
+    watchlist: Array.isArray(p.watchlist) ? p.watchlist : [],
+    signals: Array.isArray(p.signals) ? p.signals : [],
+    weeklyData: dedupeWeeklyEntriesBySymbol(Array.isArray(p.weeklyData) ? p.weeklyData : []),
+    advisorRegimeStocks: Array.isArray(p.advisorRegimeStocks) ? p.advisorRegimeStocks : [],
+    obData: Array.isArray(p.obData) ? p.obData : [],
+    sectors: Array.isArray(p.sectors) ? p.sectors : [],
+    gainers: Array.isArray(p.gainers) ? p.gainers : [],
+    losers: Array.isArray(p.losers) ? p.losers : [],
+    alerts: Array.isArray(p.alerts) ? p.alerts : [],
+    ratings: Array.isArray(p.ratings) ? p.ratings : [],
+    trendingStocks: Array.isArray(p.trendingStocks) ? p.trendingStocks : [],
+    marketMode: p.marketMode || 'unknown',
+    lastUpdated: snap.updatedAt ? new Date(snap.updatedAt) : null,
+  };
 }
 
 const isAuthFailureMessage = (message) => {
@@ -1262,22 +1285,23 @@ function DashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, isAuthenticated, accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const bootSnap = useMemo(() => getDashboardBootSnapshot(DASHBOARD_CACHE_KEY), []);
+  const [loading, setLoading] = useState(() => !bootSnap);
   const [loadError, setLoadError] = useState('');
-  const [indices, setIndices] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
-  const [signals, setSignals] = useState([]);
-  const [weeklyData, setWeeklyData] = useState([]);
-  const [advisorRegimeStocks, setAdvisorRegimeStocks] = useState([]);
-  const [obData, setObData] = useState([]);
-  const [sectors, setSectors] = useState([]);
-  const [gainers, setGainers] = useState([]);
-  const [losers, setLosers] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [ratings, setRatings] = useState([]);
-  const [trendingStocks, setTrendingStocks] = useState([]);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [marketMode, setMarketMode] = useState('unknown');
+  const [indices, setIndices] = useState(() => bootSnap?.indices ?? null);
+  const [watchlist, setWatchlist] = useState(() => bootSnap?.watchlist ?? []);
+  const [signals, setSignals] = useState(() => bootSnap?.signals ?? []);
+  const [weeklyData, setWeeklyData] = useState(() => bootSnap?.weeklyData ?? []);
+  const [advisorRegimeStocks, setAdvisorRegimeStocks] = useState(() => bootSnap?.advisorRegimeStocks ?? []);
+  const [obData, setObData] = useState(() => bootSnap?.obData ?? []);
+  const [sectors, setSectors] = useState(() => bootSnap?.sectors ?? []);
+  const [gainers, setGainers] = useState(() => bootSnap?.gainers ?? []);
+  const [losers, setLosers] = useState(() => bootSnap?.losers ?? []);
+  const [alerts, setAlerts] = useState(() => bootSnap?.alerts ?? []);
+  const [ratings, setRatings] = useState(() => bootSnap?.ratings ?? []);
+  const [trendingStocks, setTrendingStocks] = useState(() => bootSnap?.trendingStocks ?? []);
+  const [lastUpdated, setLastUpdated] = useState(() => bootSnap?.lastUpdated ?? null);
+  const [marketMode, setMarketMode] = useState(() => bootSnap?.marketMode ?? 'unknown');
   const [holdings, setHoldings] = useState([]);
   const [brokerAuthenticated, setBrokerAuthenticated] = useState(false);
   const [telegramStatusChecked, setTelegramStatusChecked] = useState(false);
@@ -1310,7 +1334,7 @@ function DashboardPage() {
     setHoldings(broker.rows);
   }, [userId]);
 
-  const loadAll = useCallback(async ({ forceSpinner = false, forceRefresh = false, backgroundOnly = false } = {}) => {
+  const loadAll = useCallback(async ({ forceSpinner = false, forceRefresh = false, backgroundOnly = false, volatileOnly = false } = {}) => {
     const loadSeq = ++loadSeqRef.current;
     const isStaleLoad = () => loadSeq !== loadSeqRef.current;
     try {
@@ -1319,7 +1343,7 @@ function DashboardPage() {
         setLoading(false);
         return;
       }
-      if (forceSpinner && !hasHydratedData && !backgroundOnly) {
+      if (forceSpinner && !hasHydratedData && !backgroundOnly && !volatileOnly) {
         setLoading(true);
       }
       const session = await ensureMarketSession();
@@ -1347,13 +1371,31 @@ function DashboardPage() {
           setMarketMode,
           setLastUpdated,
         }, { ...cached, updatedAt: cachedWrap?.updatedAt }, marketMode);
-        if (!backgroundOnly) setLoading(false);
+        if (!backgroundOnly && !volatileOnly) setLoading(false);
+      }
+
+      if (
+        shouldBackgroundRefreshDashboardVolatile({
+          forceRefresh,
+          liveSession,
+          backgroundOnly: backgroundOnly || volatileOnly,
+          cachedWrap,
+          session,
+        })
+      ) {
+        void loadAll({ backgroundOnly: true, volatileOnly: true });
+        await refreshBrokerHoldings({ forceLive: true });
+        return;
       }
 
       const refreshFallback = buildDashboardRefreshFallback(cachedWrap?.data ? cachedWrap : cached);
-      const need = dashboardSectionsToRefresh({ ...refreshFallback, ...cached });
-      applyLiveSessionRefreshPolicy(need, liveSession);
-      if (forceRefresh) applyPullRefreshPolicy(need);
+      const need = volatileOnly
+        ? dashboardVolatileRefreshNeed()
+        : dashboardSectionsToRefresh({ ...refreshFallback, ...cached });
+      if (!volatileOnly) {
+        applyLiveSessionRefreshPolicy(need, liveSession);
+        if (forceRefresh) applyPullRefreshPolicy(need);
+      }
 
       if (!forceRefresh && !liveSession && !cacheStale && !cacheIncomplete && cached) {
         const skipNetwork = await shouldUseCachedPageDataOnly(DASHBOARD_CACHE_KEY);
@@ -1363,13 +1405,15 @@ function DashboardPage() {
         }
       }
 
-      if (backgroundOnly && !cached) {
+      if (backgroundOnly && !cached && !volatileOnly) {
         return;
       }
 
-      if (liveSession || forceRefresh || cacheStale) {
+      if (forceRefresh) {
         clearApiGetCache();
-        if (cacheStale || forceRefresh) clearPageCache(DASHBOARD_CACHE_KEY);
+        clearPageCache(DASHBOARD_CACHE_KEY);
+      } else if (liveSession) {
+        clearApiGetCache();
       }
 
       const skipApiCache = liveSession || forceRefresh;
@@ -1389,39 +1433,56 @@ function DashboardPage() {
       partial.indices = settledValue(phase1[0], partial.indices || null);
       partial.gainers = pickDashboardSectionRows('gainers', settledValue(phase1[1], null), sectionFallback());
       partial.losers = pickDashboardSectionRows('losers', settledValue(phase1[2], null), sectionFallback());
-      setIndices(partial.indices);
-      setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
-      setLosers(Array.isArray(partial.losers) ? partial.losers : []);
+      if (!volatileOnly) {
+        setIndices(partial.indices);
+        setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
+        setLosers(Array.isArray(partial.losers) ? partial.losers : []);
+      }
 
       const phase2 = await Promise.allSettled([
         need.watchlist || forceRefresh
           ? fetchWatchlist(null, skipApiCache ? { skipCache: true } : {})
           : Promise.resolve(partial.watchlist ?? []),
-        need.extras || forceRefresh ? fetchWatchlistSignals({ timeframe: 'intraday' }) : Promise.resolve(partial.signals ?? []),
-        need.extras || forceRefresh ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(partial.weeklyData ?? []),
-        need.extras || forceRefresh ? fetchAlerts({ limit: 25 }) : Promise.resolve(partial.alerts ?? []),
-        need.extras || forceRefresh ? fetchRatings({ limit: 8 }) : Promise.resolve(partial.ratings ?? []),
-        need.extras || forceRefresh
+        (!volatileOnly && (need.extras || forceRefresh)) ? fetchWatchlistSignals({ timeframe: 'intraday' }) : Promise.resolve(partial.signals ?? []),
+        (!volatileOnly && (need.extras || forceRefresh)) ? fetchAdvisorWeeklyEntries({ limit: 25, max_entry_gap_pct: 5 }) : Promise.resolve(partial.weeklyData ?? []),
+        (!volatileOnly && (need.extras || forceRefresh)) ? fetchAlerts({ limit: 25 }) : Promise.resolve(partial.alerts ?? []),
+        (!volatileOnly && (need.extras || forceRefresh)) ? fetchRatings({ limit: 8 }) : Promise.resolve(partial.ratings ?? []),
+        (!volatileOnly && (need.extras || forceRefresh))
           ? fetchTrendingRaw(20).then((rows) => mapStockListToTable(rows, {}))
           : Promise.resolve(partial.trendingStocks ?? []),
       ]);
       if (isStaleLoad()) return;
       partial.watchlist = pickDashboardSectionRows('watchlist', settledValue(phase2[0], null), sectionFallback());
-      partial.signals = pickDashboardSectionRows('signals', settledValue(phase2[1], null), sectionFallback());
-      partial.weeklyData = dedupeWeeklyEntriesBySymbol(
-        pickDashboardSectionRows('weeklyData', settledValue(phase2[2], null), sectionFallback()),
-      );
-      partial.alerts = pickDashboardSectionRows('alerts', settledValue(phase2[3], null), sectionFallback());
-      partial.ratings = pickDashboardSectionRows('ratings', settledValue(phase2[4], null), sectionFallback());
-      partial.trendingStocks = pickDashboardSectionRows('trendingStocks', settledValue(phase2[5], null), sectionFallback());
+      if (!volatileOnly) {
+        partial.signals = pickDashboardSectionRows('signals', settledValue(phase2[1], null), sectionFallback());
+        partial.weeklyData = dedupeWeeklyEntriesBySymbol(
+          pickDashboardSectionRows('weeklyData', settledValue(phase2[2], null), sectionFallback()),
+        );
+        partial.alerts = pickDashboardSectionRows('alerts', settledValue(phase2[3], null), sectionFallback());
+        partial.ratings = pickDashboardSectionRows('ratings', settledValue(phase2[4], null), sectionFallback());
+        partial.trendingStocks = pickDashboardSectionRows('trendingStocks', settledValue(phase2[5], null), sectionFallback());
+      }
 
       setWatchlist(Array.isArray(partial.watchlist) ? partial.watchlist : []);
-      setSignals(Array.isArray(partial.signals) ? partial.signals : []);
-      setWeeklyData(Array.isArray(partial.weeklyData) ? partial.weeklyData : []);
-      setAlerts(Array.isArray(partial.alerts) ? partial.alerts : []);
-      setRatings(Array.isArray(partial.ratings) ? partial.ratings : []);
-      setTrendingStocks(Array.isArray(partial.trendingStocks) ? partial.trendingStocks : []);
-      if (!backgroundOnly) setLoading(false);
+      setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
+      setLosers(Array.isArray(partial.losers) ? partial.losers : []);
+      if (!volatileOnly) {
+        setIndices(partial.indices);
+        setSignals(Array.isArray(partial.signals) ? partial.signals : []);
+        setWeeklyData(Array.isArray(partial.weeklyData) ? partial.weeklyData : []);
+        setAlerts(Array.isArray(partial.alerts) ? partial.alerts : []);
+        setRatings(Array.isArray(partial.ratings) ? partial.ratings : []);
+        setTrendingStocks(Array.isArray(partial.trendingStocks) ? partial.trendingStocks : []);
+        if (!backgroundOnly) setLoading(false);
+      }
+
+      if (volatileOnly) {
+        const existingWrap = readPageCache(DASHBOARD_CACHE_KEY);
+        const merged = { ...(existingWrap?.data || {}), ...partial };
+        writePageCache(DASHBOARD_CACHE_KEY, merged);
+        setLastUpdated(new Date());
+        return;
+      }
 
       const phase3 = await Promise.allSettled([
         need.extras || forceRefresh ? fetchSectorOutlook() : Promise.resolve(partial.sectors ?? []),

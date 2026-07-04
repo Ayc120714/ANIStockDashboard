@@ -3,11 +3,13 @@ import {
   applyPullRefreshPolicy,
   buildDashboardRefreshFallback,
   dashboardSectionsToRefresh,
+  dashboardVolatileRefreshNeed,
   hasDashboardIndices,
   hasDashboardMovers,
   hasDashboardWatchlist,
   isDashboardCacheIncomplete,
   pickDashboardSectionRows,
+  shouldBackgroundRefreshDashboardVolatile,
 } from './dashboardCachePolicy';
 import { hasDuplicateWeeklyEntrySymbols } from './weeklyEntries';
 
@@ -67,15 +69,39 @@ describe('dashboardCachePolicy', () => {
     expect(isDashboardCacheIncomplete(cached)).toBe(false);
   });
 
-  it('always refetches watchlist for fresh day1d even when cache has rows', () => {
+  it('skips watchlist refetch when cached rows exist (off-market fast navigation)', () => {
     const cached = {
       indices: { indexCards: [{ title: 'Nifty 50' }] },
       gainers: [{ symbol: 'A' }],
       losers: [{ symbol: 'B' }],
-      watchlist: [{ symbol: 'PARAS', day1d: 8.97 }],
+      watchlist: [{ symbol: 'PARAS', day1d: -3.67 }],
     };
-    expect(dashboardSectionsToRefresh(cached).watchlist).toBe(true);
+    expect(dashboardSectionsToRefresh(cached).watchlist).toBe(false);
     expect(dashboardSectionsToRefresh(cached).movers).toBe(false);
+  });
+
+  it('background-refreshes volatile sections when quote cache is stale but snapshot is visible', () => {
+    const session = { isTradingDay: false, referenceTradingDate: '2026-07-03' };
+    const cachedWrap = {
+      data: { watchlist: [{ symbol: 'PARAS' }], gainers: [{ symbol: 'A' }], losers: [{ symbol: 'B' }] },
+      updatedAt: Date.parse('2026-07-03T11:00:00+05:30'),
+    };
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse('2026-07-04T20:00:00+05:30'));
+    expect(shouldBackgroundRefreshDashboardVolatile({
+      forceRefresh: false,
+      liveSession: false,
+      backgroundOnly: false,
+      cachedWrap,
+      session,
+    })).toBe(true);
+    expect(dashboardVolatileRefreshNeed()).toEqual({
+      indices: false,
+      movers: true,
+      watchlist: true,
+      extras: false,
+    });
+    jest.useRealTimers();
   });
 
   it('requires both gainers and losers for complete movers cache', () => {

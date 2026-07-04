@@ -1,4 +1,6 @@
 import { hasDuplicateWeeklyEntrySymbols } from './weeklyEntries';
+import { isPageCacheStale } from './marketSession';
+import { readPageCache } from './pageDataCache';
 
 const payloadOf = (cached) => {
   if (!cached || typeof cached !== 'object') return null;
@@ -35,6 +37,34 @@ export const hasDashboardMovers = (cached) => {
 
 export const hasDashboardMinimumVisibleContent = (cached) =>
   hasDashboardIndices(cached) || hasDashboardMovers(cached) || hasDashboardWatchlist(cached);
+
+/** Hydrate dashboard React state synchronously from sessionStorage (instant back-navigation). */
+export function readDashboardCacheSnapshot(cacheKey) {
+  const wrap = readPageCache(cacheKey);
+  if (!wrap?.data || typeof wrap.data !== 'object') return null;
+  return { payload: wrap.data, updatedAt: wrap.updatedAt ?? null };
+}
+
+/**
+ * Off-market: quotes cache is stale (e.g. intraday before EOD) but UI can show last snapshot
+ * while watchlist/movers refresh in the background — matches screenPageLoader SWR pattern.
+ */
+export function shouldBackgroundRefreshDashboardVolatile({
+  forceRefresh,
+  liveSession,
+  backgroundOnly,
+  cachedWrap,
+  session,
+}) {
+  if (forceRefresh || liveSession || backgroundOnly) return false;
+  if (!cachedWrap?.data || !hasDashboardMinimumVisibleContent(cachedWrap)) return false;
+  return isPageCacheStale(cachedWrap.updatedAt, session);
+}
+
+/** Sections that carry live CMP / day1d — refresh when quote cache is stale. */
+export function dashboardVolatileRefreshNeed() {
+  return { indices: false, movers: true, watchlist: true, extras: false };
+}
 
 export const isDashboardCacheIncomplete = (cached) => {
   if (!cached) return true;
@@ -78,8 +108,7 @@ export const dashboardSectionsToRefresh = (cached) => {
   return {
     indices: !hasDashboardIndices(cached),
     movers: !hasDashboardMovers(cached),
-    // Always refetch watchlist when loading dashboard — day1d/CMP must match EOD overlays (subsector parity).
-    watchlist: true,
+    watchlist: !hasDashboardWatchlist(cached),
     extras:
       !Array.isArray(payload.signals)
       || !Array.isArray(payload.weeklyData)
