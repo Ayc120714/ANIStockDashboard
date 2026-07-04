@@ -1,6 +1,23 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import TradingViewLink, { SymbolWithTradingView, symbolCellTdStyle } from './TradingViewLink';
+import TradingViewLink, {
+  SymbolWithTradingView,
+  buildTradingViewSymbolsCsv,
+  symbolCellTdStyle,
+} from './TradingViewLink';
+
+describe('buildTradingViewSymbolsCsv', () => {
+  it('builds deduped NSE-prefixed comma list', () => {
+    expect(buildTradingViewSymbolsCsv(['reliance', 'TCS', 'reliance', '', null])).toBe(
+      'NSE:RELIANCE,NSE:TCS',
+    );
+  });
+
+  it('returns empty string when no valid symbols', () => {
+    expect(buildTradingViewSymbolsCsv([])).toBe('');
+    expect(buildTradingViewSymbolsCsv(['', '  '])).toBe('');
+  });
+});
 
 describe('TradingViewLink', () => {
   it('renders NSE chart link for equity symbol', () => {

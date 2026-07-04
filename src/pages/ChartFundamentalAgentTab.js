@@ -7,6 +7,7 @@ import {
   CircularProgress,
   FormControlLabel,
   MenuItem,
+  Snackbar,
   Switch,
   TextField,
   Tooltip,
@@ -21,7 +22,7 @@ import { fetchChartFundamentalAgent } from '../api/advisor';
 import { chartFundamentalPayloadUsable } from '../utils/pageDataCache';
 import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
-import { SymbolWithTradingView } from '../components/TradingViewLink';
+import { SymbolWithTradingView, buildTradingViewSymbolsCsv } from '../components/TradingViewLink';
 
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -151,6 +152,7 @@ function AgentResultsTable({
   page,
   rowsPerPage,
   onPageChange,
+  onCopyCsv,
 }) {
   const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const safePage = Math.min(page, totalPages);
@@ -257,6 +259,14 @@ function AgentResultsTable({
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 13 }}>
             Showing {rangeStart}–{rangeEnd} of {rows.length}
           </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onCopyCsv?.(rows, title)}
+            sx={{ textTransform: 'none', fontSize: 11, py: 0.25, px: 1 }}
+          >
+            Copy CSV
+          </Button>
           {totalPages > 1 && (
             <Pagination
               count={totalPages}
@@ -388,8 +398,29 @@ export default function ChartFundamentalAgentTab() {
   const [weeklyPage, setWeeklyPage] = useState(1);
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [snack, setSnack] = useState({ open: false, message: '' });
 
   const CACHE_KEY = LIVE_PAGE_CACHE_KEYS.chartFundamental;
+
+  const handleCopyTableCsv = async (tableRows, tableTitle) => {
+    const text = buildTradingViewSymbolsCsv((tableRows || []).map((r) => r.symbol));
+    if (!text) {
+      setSnack({ open: true, message: `No symbols to copy (${tableTitle})` });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setSnack({
+        open: true,
+        message: `Copied ${text.split(',').length} symbols from ${tableTitle} (TradingView CSV)`,
+      });
+    } catch (_) {
+      setSnack({
+        open: true,
+        message: 'Could not copy (use HTTPS or allow clipboard access)',
+      });
+    }
+  };
 
   const load = useCallback(
     async ({ forceNetwork = false, silent = false, refresh = false } = {}) => {
@@ -592,6 +623,7 @@ export default function ChartFundamentalAgentTab() {
             page={dailyPage}
             rowsPerPage={rowsPerPage}
             onPageChange={setDailyPage}
+            onCopyCsv={handleCopyTableCsv}
           />
           <AgentResultsTable
             title="Weekly setup"
@@ -605,6 +637,7 @@ export default function ChartFundamentalAgentTab() {
             page={weeklyPage}
             rowsPerPage={rowsPerPage}
             onPageChange={setWeeklyPage}
+            onCopyCsv={handleCopyTableCsv}
           />
             <AgentResultsTable
               title="Monthly setup"
@@ -618,9 +651,26 @@ export default function ChartFundamentalAgentTab() {
             page={monthlyPage}
             rowsPerPage={rowsPerPage}
             onPageChange={setMonthlyPage}
+            onCopyCsv={handleCopyTableCsv}
           />
         </Box>
       )}
+
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={2800}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnack((s) => ({ ...s, open: false }))}
+          severity="info"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
