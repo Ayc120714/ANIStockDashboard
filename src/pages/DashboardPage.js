@@ -39,8 +39,9 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v12';
+const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v13';
 const LEGACY_DASHBOARD_CACHE_KEYS = [
+  'dashboard_overview_cache_v12',
   'dashboard_overview_cache_v11',
   'dashboard_overview_cache_v10',
   'dashboard_overview_cache_v9',
@@ -1477,6 +1478,25 @@ function DashboardPage() {
       }
 
       if (volatileOnly) {
+        const volatilePhase3 = await Promise.allSettled([
+          need.extras ? fetchLatestSignalsPayload(200) : Promise.resolve({ data: partial.advisorRegimeStocks ?? [] }),
+        ]);
+        if (isStaleLoad()) return;
+        const advPayload = settledValue(volatilePhase3[0], { data: partial.advisorRegimeStocks ?? [] });
+        const freshAdvisorRows = Array.isArray(advPayload?.data) ? advPayload.data : [];
+        partial.advisorRegimeStocks = freshAdvisorRows.length
+          ? freshAdvisorRows.map((s) => ({
+            symbol: s.symbol,
+            day1d: s.day1d,
+            day1w: s.week1w,
+          }))
+          : (Array.isArray(refreshFallback.advisorRegimeStocks) ? refreshFallback.advisorRegimeStocks : []);
+
+        setIndices(partial.indices);
+        setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
+        setLosers(Array.isArray(partial.losers) ? partial.losers : []);
+        setAdvisorRegimeStocks(Array.isArray(partial.advisorRegimeStocks) ? partial.advisorRegimeStocks : []);
+
         const existingWrap = readPageCache(DASHBOARD_CACHE_KEY);
         const merged = { ...(existingWrap?.data || {}), ...partial };
         writePageCache(DASHBOARD_CACHE_KEY, merged);

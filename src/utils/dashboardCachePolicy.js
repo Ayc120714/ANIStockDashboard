@@ -63,7 +63,7 @@ export function shouldBackgroundRefreshDashboardVolatile({
 
 /** Sections that carry live CMP / day1d — refresh when quote cache is stale. */
 export function dashboardVolatileRefreshNeed() {
-  return { indices: false, movers: true, watchlist: true, extras: false };
+  return { indices: true, movers: true, watchlist: true, extras: true };
 }
 
 export const isDashboardCacheIncomplete = (cached) => {

@@ -96,10 +96,10 @@ describe('dashboardCachePolicy', () => {
       session,
     })).toBe(true);
     expect(dashboardVolatileRefreshNeed()).toEqual({
-      indices: false,
+      indices: true,
       movers: true,
       watchlist: true,
-      extras: false,
+      extras: true,
     });
     jest.useRealTimers();
   });
