@@ -205,6 +205,8 @@ function StockAlertsPage() {
       await deletePriceAlertTrigger({ userId, triggerId: id });
       setStatusMsg('Alert history row deleted.');
       setData((prev) => prev.filter((row) => row.id !== id));
+      // Rewrite the sessionStorage payload so remounts don't resurrect the row.
+      await load({ silent: true, forceNetwork: true });
     } catch (e) {
       setErrorMsg(e?.message || 'Failed to delete alert history row');
     }
@@ -217,6 +219,7 @@ function StockAlertsPage() {
       await clearPriceAlertTriggers({ userId });
       setStatusMsg('Alert history cleared.');
       setData([]);
+      await load({ silent: true, forceNetwork: true });
     } catch (e) {
       setErrorMsg(e?.message || 'Failed to clear alert history');
     }
@@ -473,7 +476,7 @@ function StockAlertsPage() {
         <TextField size="small" placeholder="Symbol…" value={symbolFilter}
           onChange={e => { setSymbolFilter(e.target.value); setPage(1); }} sx={{ width: 110 }} />
         <Box sx={{ flex: 1 }} />
-        <Button size="small" variant="outlined" onClick={load} sx={{ textTransform: 'none', fontSize: 12 }}>
+        <Button size="small" variant="outlined" onClick={() => load({ forceNetwork: true })} sx={{ textTransform: 'none', fontSize: 12 }}>
           Refresh
         </Button>
         <Button size="small" variant="outlined" onClick={handleGenerateFromOldData} sx={{ textTransform: 'none', fontSize: 12 }}>

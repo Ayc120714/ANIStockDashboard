@@ -4,6 +4,8 @@ import {
   runWatchlistPageFetch,
 } from './screenPageLoader';
 import { writePageCache } from './pageDataCache';
+import { clearApiGetCache } from '../api/apiClient';
+import { getCachedMarketSession, shouldPollLiveMarket } from './marketSession';
 
 jest.mock('./marketSession', () => ({
   ensureMarketSession: jest.fn(async () => ({ isLiveMarket: true, isTradingDay: true })),
@@ -112,6 +114,50 @@ describe('screenPageLoader live navigation', () => {
     expect(applyPayload).not.toHaveBeenCalledWith(
       expect.objectContaining({ watchlist: [{ symbol: 'HSCL' }] }),
     );
+  });
+
+  it('busts the GET memo cache on live forceNetwork payload polls (regression)', async () => {
+    // Bug: payload pages (Market Outlook, Stock Alerts, …) polled with
+    // forceNetwork but never cleared the short GET cache, re-serving stale data.
+    getCachedMarketSession.mockReturnValue({ isLiveMarket: true, isTradingDay: true });
+    shouldPollLiveMarket.mockReturnValue(true);
+    const applyPayload = jest.fn();
+    const fetcher = jest.fn(async () => ({ indexCards: [{ title: 'Nifty' }] }));
+
+    await runScreenPayloadFetch({
+      cacheKey: 'test_payload_force_poll',
+      fetcher,
+      applyPayload,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      forceNetwork: true,
+      hasUsable: (data) => Boolean(data?.indexCards?.length),
+    });
+
+    expect(clearApiGetCache).toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalled();
+  });
+
+  it('busts the GET memo cache on hydrated background payload refresh (regression)', async () => {
+    getCachedMarketSession.mockReturnValue({ isLiveMarket: true, isTradingDay: true });
+    shouldPollLiveMarket.mockReturnValue(true);
+    const cacheKey = 'test_payload_bg_refresh';
+    writePageCache(cacheKey, { indexCards: [{ title: 'Nifty', value: 'old' }] });
+    const applyPayload = jest.fn();
+    const fetcher = jest.fn(async () => ({ indexCards: [{ title: 'Nifty', value: 'new' }] }));
+
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      forceNetwork: true,
+      hasUsable: (data) => Boolean(data?.indexCards?.length),
+    });
+    await new Promise((resolve) => { setTimeout(resolve, 10); });
+
+    expect(clearApiGetCache).toHaveBeenCalled();
   });
 
   it('hydrates enriched watchlist pages from cache during live navigation', async () => {

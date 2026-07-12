@@ -44,7 +44,8 @@ export const checkPriceAlerts = async ({ userId, listType, prices }) => {
 export const fetchPriceAlertTriggers = async ({ userId, limit = 50 }) => {
   if (!userId) return [];
   const query = withUser(userId, { limit });
-  const data = await tradeApiGet(`/price-alerts/triggers?${query}`, { cache: 'no-store' });
+  // skipCache: trigger history must never be served from the short GET memo.
+  const data = await tradeApiGet(`/price-alerts/triggers?${query}`, { cache: 'no-store', skipCache: true });
   return data?.data ?? [];
 };
 

@@ -17,8 +17,10 @@ import {
   resolveWatchlistRowsAfterFetch,
 } from '../utils/watchlistPageMutation';
 import OrderPanel from '../components/OrderPanel';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
-const LONG_TERM_CACHE_KEY = 'longTermWatchlist_v4';
+// Shared with login prefetch — key drift here means prefetch warms a dead key.
+const LONG_TERM_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.longTermWatchlist;
 
 const recColors = {
   strong_buy: '#1b5e20', buy: '#2e7d32', hold: '#f57f17',
@@ -487,7 +489,7 @@ function LongTermPage() {
     try {
       await backfillWatchlistMarketData(syms);
       setCheckedSymbols(new Set());
-      await load({ silentPoll: true });
+      await load({ silent: true, forceNetwork: true });
     } catch (e) {
       alert(e?.message || 'Could not load market data for selected symbols');
     }
@@ -500,7 +502,7 @@ function LongTermPage() {
     setFundRefreshing(true);
     try {
       await refreshWatchlistFundamentals(syms.slice(0, 25));
-      await load({ silentPoll: true });
+      await load({ silent: true, forceNetwork: true });
     } catch (e) {
       alert(e?.message || 'Fundamentals refresh failed');
     }

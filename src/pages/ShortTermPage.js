@@ -18,8 +18,10 @@ import {
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
 import { runLiveMarketPageMountPoll, runWatchlistPageFetch } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
-const SHORT_TERM_CACHE_KEY = 'shortTermWatchlist_v4';
+// Shared with login prefetch — key drift here means prefetch warms a dead key.
+const SHORT_TERM_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.shortTermWatchlist;
 
 const tierColors = {
   B1: '#66bb6a', B2: '#43a047', B3: '#1b5e20',

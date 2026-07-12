@@ -1,4 +1,14 @@
 import { apiGet, apiPost, apiRequest, clearApiGetCache } from './apiClient';
+import { clearPageCache } from '../utils/pageDataCache';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
+
+/** Watchlist mutations must invalidate ST/LT page caches, not just the GET memo,
+ * or pages that hydrate from sessionStorage keep showing pre-mutation rows. */
+const invalidateWatchlistPageCaches = () => {
+  clearApiGetCache();
+  clearPageCache(LIVE_PAGE_CACHE_KEYS.shortTermWatchlist);
+  clearPageCache(LIVE_PAGE_CACHE_KEYS.longTermWatchlist);
+};
 
 const extractRows = (payload, keys = []) => {
   if (Array.isArray(payload)) return payload;
@@ -25,7 +35,7 @@ export const fetchWatchlist = async (listType = null, options = {}) => {
 
 export const addToWatchlist = async (symbol, listType = 'long_term', notes = '') => {
   const res = await apiPost('/watchlist', { symbol, list_type: listType, notes });
-  clearApiGetCache();
+  invalidateWatchlistPageCaches();
   return res;
 };
 
@@ -45,7 +55,7 @@ export const removeFromWatchlist = async (symbol, listType = 'long_term', option
   params.set('list_type', listType);
   if (includeAll) params.set('include_all', 'true');
   const res = await apiRequest(`/watchlist/symbol/${encodeURIComponent(symbol)}?${params.toString()}`, { method: 'DELETE' });
-  clearApiGetCache();
+  invalidateWatchlistPageCaches();
   return res;
 };
 
@@ -53,7 +63,7 @@ export const bulkDeleteFromWatchlist = async (symbols, listType, options = {}) =
   const includeAll = Boolean(options?.includeAll);
   const qs = includeAll ? '?include_all=true' : '';
   const res = await apiPost(`/watchlist/bulk-delete${qs}`, { symbols, list_type: listType });
-  clearApiGetCache();
+  invalidateWatchlistPageCaches();
   return res;
 };
 

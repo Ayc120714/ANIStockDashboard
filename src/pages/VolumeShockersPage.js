@@ -16,6 +16,7 @@ import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingV
 import { addToWatchlist } from '../api/watchlist';
 import { useAuth } from '../auth/AuthContext';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
 function VolumeShockersPage() {
   const { isAuthenticated, bootstrapping, user } = useAuth();
@@ -95,7 +96,7 @@ function VolumeShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 200 : 50;
-    const cacheKey = `volumeShockersData_v5_${userKey}_${period}_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.volumeShockers(userKey, period, fetchLimit)}${dateStr ? '_' + dateStr : ''}`;
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,

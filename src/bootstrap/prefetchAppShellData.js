@@ -47,7 +47,7 @@ async function prefetchWatchlist(listType, cacheKey) {
  * Background warm of main tab caches after login so navigation reuses sessionStorage
  * until logout or browser tab close (OHLCV cache-sync SPA policy).
  */
-export async function prefetchAppShellData() {
+export async function prefetchAppShellData({ userKey = '' } = {}) {
   if (inflight) return inflight;
 
   inflight = (async () => {
@@ -82,7 +82,8 @@ export async function prefetchAppShellData() {
         (rows) => Array.isArray(rows) && rows.length > 0,
       ),
       () => warmCacheIfNeeded(
-        LIVE_PAGE_CACHE_KEYS.volumeShockers('day', 50),
+        // Must match VolumeShockersPage's user-scoped key or the warm is wasted.
+        LIVE_PAGE_CACHE_KEYS.volumeShockers(userKey || 'default', 'day', 50),
         () => fetchVolumeShockers(50, 'day'),
         (rows) => Array.isArray(rows) && rows.length > 0,
       ),

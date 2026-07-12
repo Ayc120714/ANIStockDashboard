@@ -10,6 +10,9 @@ export const normalizeWatchlistSymbol = value => String(value || '').trim().toUp
 async function invalidateWatchlistCache(listType) {
   const horizon = listType === 'short_term' ? 'short_term' : 'long_term';
   await clearPageCache(MOBILE_PAGE_CACHE_KEYS.watchlist(horizon));
+  // Dashboard renders a watchlist strip from its own page cache — clear it too
+  // or it keeps showing pre-mutation symbols until its TTL expires.
+  await clearPageCache(MOBILE_PAGE_CACHE_KEYS.dashboard);
 }
 
 export const watchlistService = {

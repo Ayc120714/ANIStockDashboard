@@ -44,4 +44,21 @@ describe('watchlistService', () => {
       expect.objectContaining({method: 'DELETE'}),
     );
   });
+
+  it('invalidates dashboard page cache on watchlist mutations (regression)', async () => {
+    // Bug: dashboard watchlist strip kept pre-mutation symbols until TTL expiry.
+    const {MOBILE_PAGE_CACHE_KEYS} = require('@core/utils/dashboardCachePolicy');
+
+    await watchlistService.addToWatchlist('tcs', 'long_term');
+    expect(mockClearPageCache).toHaveBeenCalledWith(MOBILE_PAGE_CACHE_KEYS.watchlist('long_term'));
+    expect(mockClearPageCache).toHaveBeenCalledWith(MOBILE_PAGE_CACHE_KEYS.dashboard);
+
+    mockClearPageCache.mockClear();
+    await watchlistService.removeFromWatchlist('infy', 'short_term');
+    expect(mockClearPageCache).toHaveBeenCalledWith(MOBILE_PAGE_CACHE_KEYS.dashboard);
+
+    mockClearPageCache.mockClear();
+    await watchlistService.bulkDeleteFromWatchlist(['tcs'], 'long_term');
+    expect(mockClearPageCache).toHaveBeenCalledWith(MOBILE_PAGE_CACHE_KEYS.dashboard);
+  });
 });

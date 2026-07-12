@@ -8,6 +8,8 @@ import {beginLogout, isLogoutActive, resetLogoutState} from '@core/auth/authSess
 import {sessionStorage} from '@core/storage/sessionStorage';
 import {tokenStorage} from '@core/storage/tokenStorage';
 import {clearAllSessionPageCaches} from '@core/storage/pageCache';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {USER_SCOPED_ALERT_KEYS} from '@core/storage/keys';
 
 const isLocalDevToken = token =>
   typeof token === 'string' && /^local-(access|refresh)-/.test(token);
@@ -63,6 +65,13 @@ export const AuthProvider = ({children}) => {
 
     void (async () => {
       await clearAllSessionPageCaches();
+      try {
+        // Digest/inbox state is per-user; the next account on this device
+        // must not inherit the previous user's alert history.
+        await AsyncStorage.multiRemove(USER_SCOPED_ALERT_KEYS);
+      } catch (_) {
+        /* ignore */
+      }
       let refreshToken = null;
       try {
         refreshToken = await tokenStorage.getRefreshToken();

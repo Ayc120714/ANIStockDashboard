@@ -31,3 +31,20 @@ export function notificationInboxReadKeys(userId = '') {
   const uid = String(userId || '').trim() || 'anon';
   return `@ani/mobile/notification-inbox-read-v2-${uid}`;
 }
+
+/**
+ * Alert/digest state that belongs to the signed-in user, not the device.
+ * Cleared on logout so the next account doesn't inherit inbox rows or
+ * suppressed-alert digests. Device-scoped keys (deviceId, update prompts)
+ * intentionally stay.
+ */
+export const USER_SCOPED_ALERT_KEYS = [
+  STORAGE_KEYS.signalsDigest,
+  STORAGE_KEYS.liveAdvisorAlertsDigest,
+  STORAGE_KEYS.entryReadyDigest,
+  STORAGE_KEYS.pendingApprovalDigest,
+  STORAGE_KEYS.notificationInboxDigest,
+  STORAGE_KEYS.advisorTableDigests,
+  STORAGE_KEYS.advisorTableChangeEvents,
+  STORAGE_KEYS.notificationInboxSections,
+];

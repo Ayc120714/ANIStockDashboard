@@ -10,15 +10,15 @@ export const LIVE_PAGE_CACHE_KEYS = {
   subsectorOutlook: 'subsectorOutlookData_v3',
   aiPicks: 'aiWeeklyPicks_v1',
   liveSetups: 'liveSetupsEntryReady_v1',
-  shortTermWatchlist: 'shortTermWatchlist_v3',
-  longTermWatchlist: 'longTermWatchlist_v3',
+  shortTermWatchlist: 'shortTermWatchlist_v4',
+  longTermWatchlist: 'longTermWatchlist_v4',
   chartFundamental: 'advisor_chart_fundamental_agent_v6',
   trendReversal: 'advisor_trend_reversal_grid_v3',
   trending: (limit = 50) => `trendingStocksData_v3_${limit}`,
   priceShockers: (type = 'gainers', period = 'day', limit = 50) =>
     `priceShockersData_v4_${type}_${period}_${limit}`,
-  volumeShockers: (period = 'day', limit = 50) =>
-    `volumeShockersData_v5_default_${period}_${limit}`,
+  volumeShockers: (userKey = 'default', period = 'day', limit = 50) =>
+    `volumeShockersData_v5_${userKey}_${period}_${limit}`,
 };
 
 export const AI_PICKS_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.aiPicks;

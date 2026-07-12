@@ -86,6 +86,10 @@ function scheduleBackgroundPayloadRefresh({
 }) {
   void (async () => {
     try {
+      const session = getCachedMarketSession();
+      if (forceNetwork && shouldPollLiveMarket(session)) {
+        clearApiGetCache();
+      }
       const fresh = await fetcher();
       if (hasUsable(fresh)) {
         writePageCache(cacheKey, fresh);
@@ -215,6 +219,11 @@ export async function runScreenPayloadFetch({
   }
 
   try {
+    // Same as table loader: live force polls must not serve the short GET memo.
+    const session = getCachedMarketSession();
+    if (forceNetwork && shouldPollLiveMarket(session)) {
+      clearApiGetCache();
+    }
     const fresh = await fetcher();
     if (hasUsable(fresh)) {
       writePageCache(cacheKey, fresh);
