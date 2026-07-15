@@ -46,7 +46,15 @@ export function clearAllSessionPageCaches() {
 /** Chart + Fundamental agent: valid once the backend scanned a non-empty universe. */
 export function chartFundamentalPayloadUsable(data) {
   if (!data || typeof data !== 'object' || data.agent !== 'chart_fundamental') return false;
-  return Number(data.scan_symbols) > 0;
+  if (Number(data.scan_symbols) <= 0) return false;
+  // All-empty tables must not be cached/served as final: a poisoned "0 matches"
+  // payload would otherwise stick until the next market session (closed-market
+  // loads skip the network when the cache looks usable).
+  return (
+    (Array.isArray(data.data) && data.data.length > 0)
+    || (Array.isArray(data.weekly_data) && data.weekly_data.length > 0)
+    || (Array.isArray(data.monthly_data) && data.monthly_data.length > 0)
+  );
 }
 
 export function cacheHasUsableData(data) {

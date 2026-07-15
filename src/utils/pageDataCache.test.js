@@ -39,13 +39,27 @@ describe('chartFundamentalPayloadUsable', () => {
     ).toBe(false);
   });
 
-  it('accepts scanned payloads even when all gate tables are empty', () => {
+  it('rejects scanned payloads when all gate tables are empty (would poison cache)', () => {
+    // Regression: an all-empty scan cached as "usable" pinned "0 matches" on the
+    // Chart & Fundamental tab because closed-market loads skip the network.
     expect(
       chartFundamentalPayloadUsable({
         agent: 'chart_fundamental',
         data: [],
         weekly_data: [],
         monthly_data: [],
+        scan_symbols: 800,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts scanned payloads when any setup table has rows', () => {
+    expect(
+      chartFundamentalPayloadUsable({
+        agent: 'chart_fundamental',
+        data: [],
+        weekly_data: [],
+        monthly_data: [{ symbol: 'BFINVEST' }],
         scan_symbols: 800,
       }),
     ).toBe(true);

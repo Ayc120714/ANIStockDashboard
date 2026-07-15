@@ -125,7 +125,8 @@ export function extractChartBlocks(data) {
 
 export function hasUsableAdvisorChartPayload(data) {
   if (!data || typeof data !== 'object') return false;
-  if (data.agent === 'chart_fundamental' && Number(data.scan_symbols) > 0) return true;
+  // A scanned payload with all tables empty is not cache-usable: it would pin
+  // "0 matches" on screen while closed-market loads skip the network.
   return extractChartBlocks(data).some(block => (block?.rows?.length || 0) > 0);
 }
 

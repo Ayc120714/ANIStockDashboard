@@ -3,6 +3,7 @@ import {
   extractTrendGrid,
   hasTrendGridRows,
   hasUsableAdvisorTrendPayload,
+  hasUsableAdvisorChartPayload,
   normalizeTrendGrid,
 } from '@core/utils/advisorHubCache';
 import {
@@ -72,5 +73,33 @@ describe('advisorHubCache trend reversal fixes', () => {
       monthly: {},
     };
     expect(countTrendGridRows(arrayGrid)).toBe(1);
+  });
+});
+
+describe('hasUsableAdvisorChartPayload cache poisoning guard', () => {
+  it('rejects scanned chart payloads with all-empty setup tables', () => {
+    // Regression: caching "0 matches" as usable pinned empty Daily/Weekly/
+    // Monthly tables because closed-market loads skip the network.
+    expect(
+      hasUsableAdvisorChartPayload({
+        agent: 'chart_fundamental',
+        data: [],
+        weekly_data: [],
+        monthly_data: [],
+        scan_symbols: 800,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts chart payloads when any setup table has rows', () => {
+    expect(
+      hasUsableAdvisorChartPayload({
+        agent: 'chart_fundamental',
+        data: [{symbol: 'HIRECT', close: 100, rs_daily_123: 0.42}],
+        weekly_data: [],
+        monthly_data: [],
+        scan_symbols: 800,
+      }),
+    ).toBe(true);
   });
 });
