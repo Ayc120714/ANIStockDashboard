@@ -5,6 +5,7 @@ import {
   dashboardSectionsToRefresh,
   LEGACY_ADVISOR_TREND_CACHE_KEYS,
   LEGACY_DASHBOARD_CACHE_KEYS,
+  LEGACY_SCREENS_HUB_CACHE_PREFIXES,
   MOBILE_PAGE_CACHE_KEYS,
   hasDashboardMovers,
   hasDashboardMinimumVisibleContent,
@@ -24,7 +25,14 @@ describe('dashboard cache policy fixes', () => {
     );
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
-      'screens-v6',
+      'screens-v7',
+    );
+  });
+
+  it('tracks legacy screens hub cache prefixes for upgrade cleanup', () => {
+    expect(LEGACY_SCREENS_HUB_CACHE_PREFIXES).toContain('@ani/mobile/page-cache/screens-v6-');
+    expect(MOBILE_PAGE_CACHE_KEYS.screensHub('trending', 'gainers', 'day', 'day', 'short')).toContain(
+      'screens-v7',
     );
   });
 
