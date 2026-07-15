@@ -12,7 +12,7 @@ export const LIVE_PAGE_CACHE_KEYS = {
   liveSetups: 'liveSetupsEntryReady_v1',
   shortTermWatchlist: 'shortTermWatchlist_v4',
   longTermWatchlist: 'longTermWatchlist_v4',
-  chartFundamental: 'advisor_chart_fundamental_agent_v6',
+  chartFundamental: 'advisor_chart_fundamental_agent_v7',
   trendReversal: 'advisor_trend_reversal_grid_v3',
   trending: (limit = 50) => `trendingStocksData_v3_${limit}`,
   priceShockers: (type = 'gainers', period = 'day', limit = 50) =>

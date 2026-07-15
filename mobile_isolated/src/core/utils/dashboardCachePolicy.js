@@ -4,13 +4,13 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   dashboard: '@ani/mobile/page-cache/dashboard-v20',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
-    `@ani/mobile/page-cache/screens-v6-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
+    `@ani/mobile/page-cache/screens-v7-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v2-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v5-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
   advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v10',
-  advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v3',
+  advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v4',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
   brokersSetup: userId => `@ani/mobile/page-cache/brokers-setup-v2-${userId || 'anon'}`,
@@ -85,6 +85,11 @@ export function isDashboardCacheIncomplete(cached) {
   if (!hasIndices) return true;
   return !hasDashboardMovers(payload);
 }
+
+/** Prior screens hub cache keys — cleared on upgrade so stale EOD shells are not reused. */
+export const LEGACY_SCREENS_HUB_CACHE_PREFIXES = [
+  '@ani/mobile/page-cache/screens-v6-',
+];
 
 /** Which dashboard sections should be refetched (without clearing the whole cache). */
 export function dashboardSectionsToRefresh(cached) {

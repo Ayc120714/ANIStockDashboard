@@ -1,5 +1,6 @@
 import {CHART_FUNDAMENTAL_BLOCKS} from '@core/utils/chartFundamentalTables';
 import {formatAdvisorRsPct} from '@core/utils/advisorWebParity';
+import {mapFiiHoldingFields} from '@core/utils/fiiHoldingTrend';
 
 function resolveRsValue(row, block) {
   const primary = row?.[block.rsField];
@@ -24,6 +25,7 @@ function mapAgentRow(row, block) {
     rating: String(row?.rating || '—').replace(/_/g, ' '),
     horizon: String(row?.horizon || '—').replace(/_/g, ' '),
     passed_all: row?.passed_all,
+    ...mapFiiHoldingFields(row),
   };
 }
 

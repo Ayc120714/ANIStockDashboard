@@ -1,4 +1,5 @@
 import {formatINR} from '@core/utils/formatMarket';
+import {mapFiiHoldingFields} from '@core/utils/fiiHoldingTrend';
 
 function firstVal(row, keys) {
   for (const k of keys) {
@@ -59,6 +60,7 @@ function mapRow(customRow, signals, block) {
     diPlus: firstVal(customRow, ['di_plus', 'diPlus', 'dmi_plus']) ?? firstVal(signal, ['di_plus', 'dmi_plus']),
     rating: formatRating(customRow, signal),
     horizon: formatHorizon(customRow, signal),
+    ...mapFiiHoldingFields(customRow),
   };
 }
 
@@ -126,6 +128,8 @@ export function formatChartCell(row, key) {
       return row.rsLabel;
     case 'diPlus':
       return formatNum(row.diPlus);
+    case 'fii4q':
+      return row.fii4qLabel ?? '—';
     default:
       return row[key] ?? '—';
   }

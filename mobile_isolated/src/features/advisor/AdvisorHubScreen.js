@@ -53,6 +53,7 @@ import {usePagedList} from '@hooks/usePagedList';
 import {AI_ANALYSIS_SETUPS, getAnalysisSetupLabel} from '@core/utils/aiAnalysisSetups';
 import {loadUserEnabledSymbols} from '@core/utils/userEnabledSymbols';
 import {AdvisorSignalsSection} from './AdvisorSignalsSection';
+import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -180,6 +181,7 @@ function ChartFundamentalTable({block, pageSize = ADVISOR_PAGE_SIZE}) {
               <Text style={[styles.th, styles.cfSector]}>Sector</Text>
               <Text style={[styles.th, styles.cfNum]}>{block.closeHeader}</Text>
               {hasPrev ? <Text style={[styles.th, styles.cfNum]}>{block.prevHeader}</Text> : null}
+              <Text style={[styles.th, styles.cfFii]}>FII 4Q</Text>
               <Text style={[styles.th, styles.cfRating]}>Rating</Text>
               <Text style={[styles.th, styles.cfHorizon]}>Horizon</Text>
             </View>
@@ -202,6 +204,12 @@ function ChartFundamentalTable({block, pageSize = ADVISOR_PAGE_SIZE}) {
                 </Text>
                 <Text style={[styles.td, styles.cfNum]}>{formatChartCell(row, 'close')}</Text>
                 {hasPrev ? <Text style={[styles.td, styles.cfNum]}>{formatChartCell(row, 'prevClose')}</Text> : null}
+                <Text
+                  style={[styles.td, styles.cfFii]}
+                  numberOfLines={1}
+                  accessibilityLabel={row.fii4qTooltip || 'FII holding trend unavailable'}>
+                  {formatChartCell(row, 'fii4q')}
+                </Text>
                 <Text style={[styles.td, styles.cfRating]} numberOfLines={1}>
                   {row.rating}
                 </Text>
@@ -646,6 +654,7 @@ export function AdvisorHubScreen({navigation}) {
             />
           }>
           {head}
+          <RsRvolEma5mSignalsSection />
           <AdvisorSignalsSection
             sigRows={sigRows}
             monthlyRows={monthlyRows}
@@ -948,6 +957,7 @@ const styles = StyleSheet.create({
   cfTv: {width: 28, alignItems: 'center', justifyContent: 'center'},
   cfSector: {width: 96},
   cfNum: {width: 72, textAlign: 'right'},
+  cfFii: {width: 132, fontSize: 10},
   cfRs: {width: 64, textAlign: 'right'},
   cfDi: {width: 44, textAlign: 'right'},
   cfRating: {width: 64, textAlign: 'center'},

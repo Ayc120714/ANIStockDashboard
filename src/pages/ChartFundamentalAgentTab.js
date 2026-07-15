@@ -23,6 +23,11 @@ import { chartFundamentalPayloadUsable } from '../utils/pageDataCache';
 import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { SymbolWithTradingView, buildTradingViewSymbolsCsv } from '../components/TradingViewLink';
+import {
+  buildFiiHoldingTooltip,
+  formatFiiHoldingChain,
+  getLatestFiiHoldingPct,
+} from '../utils/fiiHoldingTrend';
 
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -33,6 +38,7 @@ const DAILY_COLS = [
   { key: 'close', label: 'Close', numeric: true, width: 80 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
+  { key: 'fii_4q', label: 'FII 4Q', numeric: true, width: 132 },
 ];
 
 const WEEKLY_COLS = [
@@ -42,6 +48,7 @@ const WEEKLY_COLS = [
   { key: 'weekly_close_prev', label: 'Prev Wk', numeric: true, width: 80 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
+  { key: 'fii_4q', label: 'FII 4Q', numeric: true, width: 132 },
 ];
 
 const MONTHLY_COLS = [
@@ -51,6 +58,7 @@ const MONTHLY_COLS = [
   { key: 'monthly_close_prev', label: 'Prev Mo', numeric: true, width: 80 },
   { key: 'rating', label: 'Rating', width: 68 },
   { key: 'horizon', label: 'Horizon', width: 76 },
+  { key: 'fii_4q', label: 'FII 4Q', numeric: true, width: 132 },
 ];
 
 const fmt = (v) => {
@@ -109,6 +117,7 @@ function sortComparable(row, key) {
     const n = Number(row[key]);
     return Number.isFinite(n) ? n : null;
   }
+  if (key === 'fii_4q') return getLatestFiiHoldingPct(row);
   return row[key];
 }
 
@@ -215,6 +224,14 @@ function AgentResultsTable({
       return (
         <Tooltip title={r.horizon_reason || ''}>
           <span>{horizonLabel(r.horizon)}</span>
+        </Tooltip>
+      );
+    }
+    if (col.key === 'fii_4q') {
+      const chain = formatFiiHoldingChain(r);
+      return (
+        <Tooltip title={buildFiiHoldingTooltip(r)}>
+          <span style={{ fontSize: 10 }}>{chain}</span>
         </Tooltip>
       );
     }
@@ -330,10 +347,16 @@ function AgentResultsTable({
                         maxWidth: col.key === 'symbol' ? col.width : col.key === 'sector' ? col.width : undefined,
                         overflow: col.key === 'symbol' || col.key === 'sector' ? 'hidden' : undefined,
                         textOverflow: col.key === 'symbol' || col.key === 'sector' ? 'ellipsis' : undefined,
-                        fontSize: col.key === 'sector' ? 11 : undefined,
+                        fontSize: col.key === 'sector' || col.key === 'fii_4q' ? 10 : undefined,
                         color: col.key === 'horizon' ? '#37474f' : undefined,
                       }}
-                      title={col.key === 'sector' ? (r.sector || '') : undefined}
+                      title={
+                        col.key === 'sector'
+                          ? (r.sector || '')
+                          : col.key === 'fii_4q'
+                            ? buildFiiHoldingTooltip(r)
+                            : undefined
+                      }
                     >
                       {renderCell(r, col)}
                     </td>
