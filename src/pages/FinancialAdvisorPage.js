@@ -18,6 +18,7 @@ import {
 } from '../utils/earlyDetectionTable';
 import TrendReversalTab from './TrendReversalTab';
 import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
+import RsRvolEma5mTable from '../components/RsRvolEma5mTable';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
@@ -995,6 +996,7 @@ function SignalsAlertsTab() {
 
   return (
     <>
+      {view === 'signals' && <RsRvolEma5mTable />}
       {view === 'signals' && (
         <Box id="advisor-early-detection" sx={{ mb: 2 }}>
           <TableTitle style={{ fontSize: 15, marginBottom: 8, color: '#0b3d91' }}>

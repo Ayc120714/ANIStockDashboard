@@ -141,6 +141,22 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  fetchRsRvolEma5mSignals: async ({
+    limit = 500,
+    symbol_limit = 1500,
+    rvol_min = 1.5,
+    refresh = false,
+    timeoutMs,
+  } = {}) =>
+    apiGet(
+      `/advisor/signals/rs-rvol-ema5m${toQuery({
+        limit,
+        symbol_limit,
+        rvol_min,
+        ...(refresh ? {refresh: 'true'} : {}),
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionRecent: async ({
     lookback_days = null,
     timeframe = 'daily',

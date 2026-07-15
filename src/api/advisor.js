@@ -240,6 +240,24 @@ export const fetchChartFundamentalAgent = async ({
   return apiGet(`/advisor/signals/chart-fundamental-agent?${params.toString()}`);
 };
 
+export const fetchRsRvolEma5mSignals = async ({
+  limit = 300,
+  symbol_limit = 1500,
+  rvol_min = 1.5,
+  symbols = '',
+  as_of = '',
+  refresh = false,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('rvol_min', String(rvol_min));
+  if (symbols && String(symbols).trim()) params.set('symbols', String(symbols).trim());
+  if (as_of && String(as_of).trim()) params.set('as_of', String(as_of).trim());
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/rs-rvol-ema5m?${params.toString()}`);
+};
+
 export const fetchLiveScreenerSignals = async ({
   limit = 150,
   symbols = '',
