@@ -18,6 +18,7 @@ import {
 } from '../utils/earlyDetectionTable';
 import TrendReversalTab from './TrendReversalTab';
 import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
+import BrokerConsensusTab from './BrokerConsensusTab';
 import RsRvolEma5mTable from '../components/RsRvolEma5mTable';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
@@ -194,8 +195,9 @@ function resolveAdvisorTabIndex(advisorTab) {
   if (key === 'chart' || key === 'fundamental') return 2;
   if (key === 'analysis' || key === 'ai') return 3;
   if (key === 'portfolio') return 4;
+  if (key === 'broker' || key === 'consensus' || key === 'broker_consensus') return 5;
   const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 4 ? n : 0;
+  return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 0;
 }
 
 function FinancialAdvisorPage() {
@@ -227,12 +229,14 @@ function FinancialAdvisorPage() {
         <Tab label="Chart & Fundamental" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
+        <Tab label="Broker Consensus" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
       {tab === 1 && <TrendReversalTab />}
       {tab === 2 && <ChartFundamentalAgentTab />}
       {tab === 3 && <AnalysisTab />}
       {tab === 4 && <PortfolioTab />}
+      {tab === 5 && <BrokerConsensusTab />}
     </TableSection>
   );
 }
