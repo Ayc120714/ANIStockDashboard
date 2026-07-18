@@ -104,7 +104,7 @@ function UniverseRow({ item, onOpen }) {
       }}
       style={{ cursor: 'pointer' }}
     >
-      <td style={symbolCellTdStyle}>
+      <td style={symbolCellTdStyle(compact)}>
         <SymbolWithTradingView symbol={item.symbol}>{item.symbol}</SymbolWithTradingView>
       </td>
       <td style={compact}>{item.company_name || '—'}</td>
