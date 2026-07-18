@@ -53,7 +53,6 @@ import {usePagedList} from '@hooks/usePagedList';
 import {AI_ANALYSIS_SETUPS, getAnalysisSetupLabel} from '@core/utils/aiAnalysisSetups';
 import {loadUserEnabledSymbols} from '@core/utils/userEnabledSymbols';
 import {AdvisorSignalsSection} from './AdvisorSignalsSection';
-import {BrokerConsensusSection} from './BrokerConsensusSection';
 import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
@@ -67,7 +66,6 @@ const TABS = [
   {id: 'chart', label: 'Chart & fundamental'},
   {id: 'ai', label: 'AI analysis'},
   {id: 'health', label: 'Portfolio health'},
-  {id: 'consensus', label: 'Broker consensus'},
 ];
 
 function formatChgPct(v) {
@@ -830,17 +828,6 @@ export function AdvisorHubScreen({navigation}) {
           onSelect={setAiType}
           onClose={() => setShowAiSetupPicker(false)}
         />
-      </MobileChrome>
-    );
-  }
-
-  if (tab === 'consensus') {
-    return (
-      <MobileChrome navigation={navigation}>
-        <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-          {head}
-          <BrokerConsensusSection />
-        </ScrollView>
       </MobileChrome>
     );
   }

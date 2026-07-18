@@ -1,6 +1,5 @@
 import { apiGet, apiPost, apiRequest } from './apiClient';
 import { dedupeWeeklyEntriesBySymbol } from '../utils/weeklyEntries';
-import { buildBrokerConsensusQueryParams } from '../utils/brokerConsensusDisplay';
 
 export const fetchRatings = async (filters = {}) => {
   const params = new URLSearchParams();
@@ -488,32 +487,4 @@ export const fetchPortfolioHealth = async (symbols) => {
 
 export const refreshAdvisor = async () => {
   return apiGet('/advisor/refresh');
-};
-
-/** Third-party broker research consensus list (paginated, filterable). */
-export const fetchBrokerConsensus = async (filters = {}, { normalized = false } = {}) => {
-  const safeFilters = normalized ? filters : buildBrokerConsensusQueryParams(filters);
-  const params = new URLSearchParams();
-  if (safeFilters.search) {
-    params.set('search', String(safeFilters.search));
-  }
-  if (safeFilters.label) {
-    params.set('label', String(safeFilters.label));
-  }
-  if (safeFilters.origin) {
-    params.set('origin', String(safeFilters.origin));
-  }
-  if (safeFilters.confidence) {
-    params.set('confidence', String(safeFilters.confidence));
-  }
-  params.set('sort', String(safeFilters.sort));
-  params.set('page', String(safeFilters.page));
-  params.set('page_size', String(safeFilters.page_size));
-  return apiGet(`/advisor/broker-consensus?${params.toString()}`, { cache: 'no-store', skipCache: true });
-};
-
-/** Per-symbol broker consensus detail with institution-level recommendations. */
-export const fetchBrokerConsensusDetail = async (symbol) => {
-  const sym = String(symbol || '').trim().toUpperCase();
-  return apiGet(`/advisor/broker-consensus/${encodeURIComponent(sym)}`, { cache: 'no-store', skipCache: true });
 };

@@ -179,23 +179,6 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
-  fetchBrokerConsensusList: (filters = {}) =>
-    apiGet(
-      `/advisor/broker-consensus${toQuery({
-        search: filters.search,
-        label: filters.label,
-        origin: filters.origin,
-        confidence: filters.confidence,
-        sort: filters.sort || 'score_desc',
-        page: filters.page || 1,
-        page_size: filters.page_size || 20,
-      })}`,
-      {timeoutMs: filters.timeoutMs ?? T},
-    ),
-  fetchBrokerConsensusDetail: (symbol, opts = {}) =>
-    apiGet(`/advisor/broker-consensus/${encodeURIComponent(String(symbol || '').trim().toUpperCase())}`, {
-      timeoutMs: opts.timeoutMs ?? T,
-    }),
   fetchEarlyDetectionHistory: async ({
     from_date,
     to_date,
