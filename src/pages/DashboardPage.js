@@ -27,6 +27,8 @@ import { resolveDashboardBrokerHoldings } from '../utils/loadBrokerHoldings';
 import { clearPageCache, readPageCache, shouldUseCachedPageDataOnly, writePageCache } from '../utils/pageDataCache';
 import { ensureLegacyFormattedScreenCachesPurged } from '../utils/screenStockCache';
 import { dedupeWeeklyEntriesBySymbol } from '../utils/weeklyEntries';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
+import { buildSectorPerformanceCards, formatSectorCardSubtitle } from '../utils/sectorPerformanceCards';
 
 const COLORS_PIE = ['#1a3c5e', '#2e7d32', '#c62828', '#f57f17', '#6a1b9a', '#00838f', '#4e342e', '#37474f', '#e65100', '#1565c0'];
 const fmt = (v, d = 2) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : n.toFixed(d); };
@@ -39,8 +41,9 @@ const parsePctNumber = (v) => {
   const n = Number(String(v).replace(/[^\d.+-]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
-const DASHBOARD_CACHE_KEY = 'dashboard_overview_cache_v13';
+const DASHBOARD_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.dashboard;
 const LEGACY_DASHBOARD_CACHE_KEYS = [
+  'dashboard_overview_cache_v13',
   'dashboard_overview_cache_v12',
   'dashboard_overview_cache_v11',
   'dashboard_overview_cache_v10',
@@ -49,6 +52,12 @@ const LEGACY_DASHBOARD_CACHE_KEYS = [
   'dashboard_overview_cache_v6',
   'dashboard_overview_cache_v7',
 ];
+
+/** Keep Sector Insights page cache aligned with dashboard sector cards. */
+function syncSectorOutlookPageCache(sectors) {
+  if (!Array.isArray(sectors) || !sectors.length) return;
+  writePageCache(LIVE_PAGE_CACHE_KEYS.sectorOutlook, sectors);
+}
 
 const settledValue = (result, fallback) => (result?.status === 'fulfilled' ? result.value : fallback);
 
@@ -879,7 +888,7 @@ function OrderBlockZones({ obData }) {
   );
 }
 
-// ─── Sector Heatmap ─────────────────────────────────────────────────────────
+// ─── Sector Heatmap (1D % + CMP from same Sector Insights payload) ───────────
 function SectorHeatmap({ sectors }) {
   const navigate = useNavigate();
   if (!sectors || !sectors.length) {
@@ -892,7 +901,7 @@ function SectorHeatmap({ sectors }) {
       </Card>
     );
   }
-  const data = sectors.filter(s => s.sector && s.avg_day_change != null).sort((a, b) => Math.abs(b.avg_day_change) - Math.abs(a.avg_day_change));
+  const data = buildSectorPerformanceCards(sectors, { limit: 12 });
   if (!data.length) {
     return (
       <Card>
@@ -917,8 +926,8 @@ function SectorHeatmap({ sectors }) {
     <Card>
       <SectionTitle>Sector Performance</SectionTitle>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 1 }}>
-        {data.slice(0, 12).map(s => (
-          <Tooltip key={s.sector} title={`${s.sector}: ${s.stock_count || '?'} stocks, Trend: ${s.trend || '—'}`}>
+        {data.map(s => (
+          <Tooltip key={s.sector} title={`${s.sector}: 1D ${fmtPct(s.avg_day_change)}, CMP ${formatSectorCardSubtitle(s)}, Trend: ${s.trend || '—'}`}>
             <Box
               onClick={() => navigate('/outlook')}
               sx={{
@@ -930,7 +939,7 @@ function SectorHeatmap({ sectors }) {
               <Box sx={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sector}</Box>
               <Box sx={{ fontSize: 15, fontWeight: 700 }}>{fmtPct(s.avg_day_change)}</Box>
               <Box sx={{ fontSize: 10, opacity: 0.8 }}>
-                {Number.isFinite(Number(s.stock_count)) ? `${Number(s.stock_count)} stocks` : '—'}
+                {formatSectorCardSubtitle(s)}
               </Box>
             </Box>
           </Tooltip>
@@ -1480,6 +1489,8 @@ function DashboardPage() {
       if (volatileOnly) {
         const volatilePhase3 = await Promise.allSettled([
           need.extras ? fetchLatestSignalsPayload(200) : Promise.resolve({ data: partial.advisorRegimeStocks ?? [] }),
+          // Sector Performance cards must track Sector Insights 1D — include in volatile refresh.
+          need.extras ? fetchSectorOutlook() : Promise.resolve(partial.sectors ?? []),
         ]);
         if (isStaleLoad()) return;
         const advPayload = settledValue(volatilePhase3[0], { data: partial.advisorRegimeStocks ?? [] });
@@ -1491,11 +1502,14 @@ function DashboardPage() {
             day1w: s.week1w,
           }))
           : (Array.isArray(refreshFallback.advisorRegimeStocks) ? refreshFallback.advisorRegimeStocks : []);
+        partial.sectors = pickDashboardSectionRows('sectors', settledValue(volatilePhase3[1], null), sectionFallback());
 
         setIndices(partial.indices);
         setGainers(Array.isArray(partial.gainers) ? partial.gainers : []);
         setLosers(Array.isArray(partial.losers) ? partial.losers : []);
         setAdvisorRegimeStocks(Array.isArray(partial.advisorRegimeStocks) ? partial.advisorRegimeStocks : []);
+        setSectors(Array.isArray(partial.sectors) ? partial.sectors : []);
+        syncSectorOutlookPageCache(partial.sectors);
 
         const existingWrap = readPageCache(DASHBOARD_CACHE_KEY);
         const merged = { ...(existingWrap?.data || {}), ...partial };
@@ -1513,6 +1527,7 @@ function DashboardPage() {
       if (isStaleLoad()) return;
       partial.sectors = pickDashboardSectionRows('sectors', settledValue(phase3[0], null), sectionFallback());
       partial.obData = pickDashboardSectionRows('obData', settledValue(phase3[1], null), sectionFallback());
+      syncSectorOutlookPageCache(partial.sectors);
       const advPayload = settledValue(phase3[2], { data: partial.advisorRegimeStocks ?? [] });
       const freshAdvisorRows = Array.isArray(advPayload?.data) ? advPayload.data : [];
       partial.advisorRegimeStocks = freshAdvisorRows.length

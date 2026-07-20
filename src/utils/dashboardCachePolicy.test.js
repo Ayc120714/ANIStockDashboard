@@ -104,6 +104,12 @@ describe('dashboardCachePolicy', () => {
     jest.useRealTimers();
   });
 
+  it('marks extras (incl. sectors) for volatile refresh so Sector Performance stays live', () => {
+    // Regression: volatileOnly previously refreshed indices/movers but skipped
+    // fetchSectorOutlook, leaving dashboard cards stale vs Sector Insights.
+    expect(dashboardVolatileRefreshNeed().extras).toBe(true);
+  });
+
   it('requires both gainers and losers for complete movers cache', () => {
     expect(hasDashboardMovers({ gainers: [{ symbol: 'A' }], losers: [{ symbol: 'B' }] })).toBe(true);
     expect(hasDashboardMovers({ gainers: [{ symbol: 'A' }], losers: [] })).toBe(false);

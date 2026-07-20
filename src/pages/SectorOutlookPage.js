@@ -16,8 +16,9 @@ import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView } from '../components/TradingViewLink';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import { runLiveMarketPageMountPoll, runScreenTableFetch } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
-const SECTOR_CACHE_KEY = 'sectorOutlookData';
+const SECTOR_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.sectorOutlook;
 const SECTOR_REFRESH_MS = 30000;
 
 function SectorOutlookPage({ onSectorClick }) {

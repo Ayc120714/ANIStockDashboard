@@ -52,6 +52,13 @@ const normalizeRow = (row, index) => {
   const trend =
     day == null || !Number.isFinite(day) ? '→' : day > 0.05 ? '↗' : day < -0.05 ? '↘' : '→';
 
+  const rawCount = row?.stock_count ?? row?.stocks ?? row?.constituents;
+  // Do not use Number(null) — that is 0 and made dashboard cards show "0 stocks".
+  const stock_count =
+    rawCount != null && rawCount !== '' && Number.isFinite(Number(rawCount))
+      ? Number(rawCount)
+      : null;
+
   return {
     id: row?.id ?? index + 1,
     name,
@@ -67,10 +74,9 @@ const normalizeRow = (row, index) => {
     month6m: typeof row?.month6m === 'string' ? row.month6m : fmtPctOpt(month6),
     year1y: typeof row?.year1y === 'string' ? row.year1y : fmtPctOpt(year),
     year3y: typeof row?.year3y === 'string' ? row.year3y : fmtPctOpt(year3),
-    avg_day_change: day != null && Number.isFinite(day) ? day : 0,
-    stock_count: Number.isFinite(Number(row?.stock_count ?? row?.stocks ?? row?.count))
-      ? Number(row?.stock_count ?? row?.stocks ?? row?.count)
-      : null,
+    day1dNum: day != null && Number.isFinite(day) ? day : null,
+    avg_day_change: day != null && Number.isFinite(day) ? day : null,
+    stock_count,
   };
 };
 

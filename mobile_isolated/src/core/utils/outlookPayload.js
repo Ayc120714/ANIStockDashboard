@@ -104,7 +104,7 @@ export function normalizeSectorOutlookRow(row, index = 0) {
     day1dNum: day,
     week1wNum: week,
     month1mNum: month,
-    avg_day_change: day != null && Number.isFinite(day) ? day : 0,
+    avg_day_change: day != null && Number.isFinite(day) ? day : null,
   };
 }
 
