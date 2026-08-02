@@ -11,7 +11,7 @@ import {
   mapPriceShockersList,
   mapStockListToTable,
 } from '../api/stocks';
-import { fetchAlerts, fetchRatings, fetchAdvisorWeeklyEntries, fetchLatestSignalsPayload } from '../api/advisor';
+import { fetchAlerts, fetchRatings, fetchAdvisorWeeklyEntries, fetchLatestSignalsPayload, fetchQuarterlyEarningsSetup } from '../api/advisor';
 import { apiGet, clearApiGetCache } from '../api/apiClient';
 import {
   fetchWatchlist,
@@ -1291,6 +1291,127 @@ function HoldingsList({ holdings, loading, brokerAuthenticated, compact = false 
 }
 
 // ─── Main Dashboard ─────────────────────────────────────────────────────────
+// ─── Quarterly Earnings Setup (prev-quarter earnings growth + near breakout) ─
+const fmtCr = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })} cr`; };
+const fmtYoy = (v) => { if (v == null) return '—'; const n = +v; return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`; };
+
+function QuarterlyEarningsSetup() {
+  const [payload, setPayload] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await fetchQuarterlyEarningsSetup({ limit: 30 });
+        if (mounted) setPayload(data);
+      } catch (e) {
+        if (mounted) setError(String(e?.message || e));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const rows = payload?.data ?? [];
+  const prevQ = payload?.previous_quarter || '';
+  const curQ = payload?.current_quarter || '';
+  const title = 'Quarterly Earnings Setup — Near Breakout';
+
+  if (loading) {
+    return (
+      <Card>
+        <SectionTitle>{title}</SectionTitle>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={22} /></Box>
+      </Card>
+    );
+  }
+  if (error || !rows.length) {
+    return (
+      <Card>
+        <SectionTitle>{title}</SectionTitle>
+        <Box sx={{ fontSize: 12, color: '#777' }}>
+          {error
+            ? 'Quarterly earnings setup data is currently unavailable.'
+            : `No stocks with ${prevQ} profit growth are near a breakout right now.`}
+        </Box>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <SectionTitle>{title}</SectionTitle>
+      <Box sx={{ fontSize: 11, color: '#888', mb: 1 }}>
+        Stocks with positive net profit and YoY profit growth in the {prevQ} quarter, shown with {curQ} results,
+        now at or within {5}% of a bullish breakout (Donchian upper band / 52-week high, RSI &gt; 50, DI+ &gt; DI−).
+        {payload?.fallback_applied && payload?.requested_previous_quarter !== prevQ ? (
+          <> {' '}({payload.requested_previous_quarter} data still being ingested — showing {prevQ}.)</>
+        ) : null}
+      </Box>
+      <Box sx={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Symbol</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>CMP</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#1565c0', fontWeight: 600 }}>Breakout Lvl</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Dist%</th>
+              <th style={{ textAlign: 'center', padding: '6px 8px', color: '#555', fontWeight: 600 }}>Signals</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>RSI</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>RVOL</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>{prevQ} Profit</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>YoY</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>{curQ} Profit</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#555', fontWeight: 600 }}>YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const brokeOut = Boolean(r.broke_out);
+              const prev = r.previous_quarter || {};
+              const cur = r.current_quarter || {};
+              return (
+                <tr key={r.symbol} style={{ borderBottom: '1px solid #f0f0f0', backgroundColor: brokeOut ? '#e8f5e9' : 'transparent' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 700 }}>{r.symbol}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtCur(r.price)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#1565c0', fontWeight: 600 }}>{fmtCur(r.breakout_level)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: brokeOut ? '#2e7d32' : '#555' }}>
+                    {brokeOut ? 'BROKE OUT' : `${fmt(r.pct_to_breakout, 1)}%`}
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {String(r.donchian_breakout || '').toLowerCase() === 'up' && (
+                        <Chip label="DONCHIAN" size="small" sx={{ fontSize: 8, height: 16, fontWeight: 700, bgcolor: '#2e7d32', color: '#fff' }} />
+                      )}
+                      {r.is_52w_high && (
+                        <Chip label="52W HIGH" size="small" sx={{ fontSize: 8, height: 16, fontWeight: 700, bgcolor: '#1565c0', color: '#fff' }} />
+                      )}
+                    </Box>
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(r.rsi, 0)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{r.volume_ratio != null ? `${fmt(r.volume_ratio, 1)}x` : '—'}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11 }}>{fmtCr(prev.net_profit)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: pctColor(prev.profit_yoy_pct) }}>{fmtYoy(prev.profit_yoy_pct)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11 }}>{fmtCr(cur.net_profit)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: pctColor(cur.profit_yoy_pct) }}>{fmtYoy(cur.profit_yoy_pct)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Box>
+      <Box sx={{ mt: 1, fontSize: 10, color: '#999', display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <span><b style={{ color: '#2e7d32' }}>Green row</b> = already closed above the breakout level</span>
+        <span>Breakout Lvl = 20-day Donchian upper band</span>
+        <span>Profit in ₹ crore; YoY vs same quarter last year</span>
+      </Box>
+    </Card>
+  );
+}
+
 function DashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1732,6 +1853,7 @@ function DashboardPage() {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <PortfolioSnapshot watchlist={watchlist} signals={signals} weeklyData={weeklyData} />
               <RelativeRegimeBoard stocks={advisorRegimeStocks} indices={indices} />
+              <QuarterlyEarningsSetup />
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <WeeklyEntries weeklyData={weeklyData} />
                 <OrderBlockZones obData={obData} />

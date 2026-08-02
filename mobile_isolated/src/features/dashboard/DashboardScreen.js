@@ -131,6 +131,74 @@ function settledValue(settled, fallback) {
   return settled?.status === 'fulfilled' ? settled.value : fallback;
 }
 
+function fmtYoyPct(v) {
+  if (v == null || Number.isNaN(Number(v))) return '--';
+  const n = Number(v);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+}
+
+/** Quarterly Earnings Setup: prev-quarter earnings growth + near breakout (parity with web dashboard). */
+function QuarterlyEarningsSetupSection() {
+  const [payload, setPayload] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await advisorService.fetchQuarterlyEarningsSetup({limit: 15});
+        if (mounted) setPayload(res);
+      } catch (_) {
+        if (mounted) setFailed(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const rows = Array.isArray(payload?.data) ? payload.data.slice(0, 10) : [];
+  if (failed || !rows.length) return null;
+
+  const prevQ = payload?.previous_quarter || '';
+  const curQ = payload?.current_quarter || '';
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>QUARTERLY EARNINGS SETUP — NEAR BREAKOUT</Text>
+      <View style={styles.card}>
+        <Text style={styles.muted}>
+          {prevQ} profit growth + {curQ} results · at or near breakout (Donchian / 52w high)
+        </Text>
+        {rows.map((r, i) => {
+          const prev = r.previous_quarter || {};
+          const cur = r.current_quarter || {};
+          const dist = Number(r.pct_to_breakout);
+          const distLabel = r.broke_out
+            ? 'BROKE OUT'
+            : Number.isFinite(dist)
+              ? `${dist.toFixed(1)}% to brk`
+              : '--';
+          return (
+            <View key={`qes-${r.symbol || i}`} style={styles.qesRow}>
+              <Text style={[styles.signalLine, styles.qesSymbol]} numberOfLines={1}>
+                {r.symbol || '--'}
+              </Text>
+              <Text style={[styles.signalLine, r.broke_out ? styles.qesBrokeOut : null]}>{distLabel}</Text>
+              <Text style={styles.signalLine}>
+                {prevQ}: {fmtYoyPct(prev.profit_yoy_pct)}
+              </Text>
+              <Text style={styles.signalLine}>
+                {curQ}: {fmtYoyPct(cur.profit_yoy_pct)}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
 export const DashboardScreen = ({navigation}) => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -622,6 +690,8 @@ export const DashboardScreen = ({navigation}) => {
           </View>
         </View>
 
+        <QuarterlyEarningsSetupSection />
+
         <Text style={styles.sectionTitle}>RECOMMENDATION SPLIT</Text>
         <View style={styles.card}>
           <View style={styles.splitRow}><Text style={styles.splitLabel}>BUY</Text><View style={styles.barBg}><View style={[styles.barFill, {width: `${split.buyPct}%`, backgroundColor: '#22c55e'}]} /></View><Text style={styles.splitCount}>{split.buy}</Text></View>
@@ -770,6 +840,9 @@ const styles = StyleSheet.create({
   barBg: {flex: 1, height: 8, backgroundColor: '#f1f5f9', borderRadius: 99},
   barFill: {height: 8, borderRadius: 99},
   muted: {fontSize: 12, color: AYC.textMuted},
+  qesRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap'},
+  qesSymbol: {minWidth: 82, fontWeight: '800'},
+  qesBrokeOut: {color: '#15803d'},
   linkText: {fontSize: 12, fontWeight: '800', color: AYC.accent, marginTop: 4},
   toolbar: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6},
   toolBtn: {paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: AYC.card, borderWidth: 1, borderColor: AYC.cardBorder},

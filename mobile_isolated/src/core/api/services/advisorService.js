@@ -179,6 +179,16 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  /** Quarterly Earnings Setup: prev-quarter earnings growth + near-breakout price action. */
+  fetchQuarterlyEarningsSetup: ({limit = 30, near_breakout_pct = 5, min_rsi = 50, timeoutMs} = {}) =>
+    apiGet(
+      `/advisor/signals/quarterly-earnings-setup${toQuery({
+        limit,
+        near_breakout_pct,
+        min_rsi,
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionHistory: async ({
     from_date,
     to_date,

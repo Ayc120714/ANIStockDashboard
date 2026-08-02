@@ -379,6 +379,19 @@ export const fetchVideoStrategySignals = async ({
   return data ?? { count: 0, data: [], cached: false, scan_symbols: 0 };
 };
 
+/** Quarterly Earnings Setup: prev-quarter earnings growth + near-breakout price action. */
+export const fetchQuarterlyEarningsSetup = async ({
+  limit = 50,
+  near_breakout_pct = 5,
+  min_rsi = 50,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('near_breakout_pct', String(near_breakout_pct));
+  params.set('min_rsi', String(min_rsi));
+  return apiGet(`/advisor/signals/quarterly-earnings-setup?${params.toString()}`);
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];
