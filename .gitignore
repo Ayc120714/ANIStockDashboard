@@ -42,3 +42,6 @@ node_modules/.cache-loader
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Compound Engineering local preferences (machine-specific)
+.compound-engineering/*.local.yaml

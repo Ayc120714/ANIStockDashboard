@@ -62,7 +62,7 @@ function scheduleBackgroundTableRefresh({
   void (async () => {
     try {
       const session = getCachedMarketSession();
-      if (forceNetwork && shouldPollLiveMarket(session)) {
+      if (shouldPollLiveMarket(session)) {
         clearApiGetCache();
       }
       const fresh = await fetcher();
@@ -87,7 +87,7 @@ function scheduleBackgroundPayloadRefresh({
   void (async () => {
     try {
       const session = getCachedMarketSession();
-      if (forceNetwork && shouldPollLiveMarket(session)) {
+      if (shouldPollLiveMarket(session)) {
         clearApiGetCache();
       }
       const fresh = await fetcher();
@@ -284,6 +284,7 @@ export async function runScreenTableFetchWithLivePoll({
   mapRows,
 }) {
   await ensureMarketSession();
+  const session = getCachedMarketSession();
 
   await runScreenTableFetch({
     cacheKey,
@@ -291,7 +292,7 @@ export async function runScreenTableFetchWithLivePoll({
     setRows,
     setLoading,
     setError,
-    forceNetwork: false,
+    forceNetwork: shouldPollLiveMarket(session),
     mapRows,
   });
 

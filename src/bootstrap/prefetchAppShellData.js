@@ -8,6 +8,7 @@ import { fetchSectorOutlook } from '../api/sectorOutlook';
 import { fetchSubsectorOutlook } from '../api/subsectorOutlook';
 import { fetchMarketOutlookBundle, marketOutlookHasUsable } from '../utils/marketOutlookLoader';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
+import { FII_DII_FETCH_DAYS } from '../utils/fiiDiiPayload';
 import { fetchWeeklyPicks, fetchTrending, fetchPriceShockers, fetchVolumeShockers } from '../api/stocks';
 import { fetchWatchlist, fetchWatchlistSignals } from '../api/watchlist';
 import { ensureMarketSession } from '../utils/marketSession';
@@ -59,7 +60,7 @@ export async function prefetchAppShellData({ userKey = '' } = {}) {
         () => fetchMarketOutlookBundle(),
         marketOutlookHasUsable,
       ),
-      () => warmCacheIfNeeded(LIVE_PAGE_CACHE_KEYS.fiiDii, () => fetchFiiDiiActivity(20)),
+      () => warmCacheIfNeeded(LIVE_PAGE_CACHE_KEYS.fiiDii, () => fetchFiiDiiActivity(FII_DII_FETCH_DAYS)),
       () => warmCacheIfNeeded(
         LIVE_PAGE_CACHE_KEYS.sectorOutlook,
         fetchSectorOutlook,

@@ -76,6 +76,21 @@ export async function clearPageCache(key) {
   }
 }
 
+/** Drop stale page-cache keys after a version bump (e.g. screens-v6 → v7). */
+export async function clearPageCachesByPrefix(prefix) {
+  if (!prefix || typeof prefix !== 'string') return 0;
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const keys = allKeys.filter(k => typeof k === 'string' && k.startsWith(prefix));
+    if (keys.length) {
+      await AsyncStorage.multiRemove(keys);
+    }
+    return keys.length;
+  } catch {
+    return 0;
+  }
+}
+
 const MOBILE_PAGE_CACHE_PREFIX = '@ani/mobile/page-cache/';
 
 export function isSessionPageCacheKey(key) {

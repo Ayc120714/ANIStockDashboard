@@ -80,7 +80,13 @@ export function fiiDiiCacheIsStale(cached) {
 }
 
 export function fiiDiiHasUsable(data) {
-  return Boolean(data && Array.isArray(data.daily) && data.daily.length > 0);
+  return Boolean(
+    data
+    && Array.isArray(data.daily)
+    && data.daily.length > 0
+    && Array.isArray(data.quarterly)
+    && Array.isArray(data.yearly),
+  );
 }
 
 export async function shouldSkipFiiDiiFetch(cacheKey, cachedWrap = null) {

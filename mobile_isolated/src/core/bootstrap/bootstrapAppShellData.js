@@ -199,6 +199,7 @@ async function bootstrapScreensHub(
       };
     },
     data => (main === 'ai' ? aiPicksScreensPayloadUsable(data) : Array.isArray(data?.list) && data.list.length > 0),
+    {liveScreen: main !== 'ai'},
   );
 }
 

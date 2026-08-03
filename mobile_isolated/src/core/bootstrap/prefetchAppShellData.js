@@ -27,7 +27,7 @@ import {
   buildAiPicksScreensPayload,
   weeklyPicksHasRows,
 } from '@core/utils/weeklyPicksScreens';
-import {ensureMarketSession} from '@core/utils/marketSession';
+import {ensureMarketSession, isPageCacheStale, shouldPollLiveMarket} from '@core/utils/marketSession';
 
 const T = API_TIMEOUT_MS.screen;
 const HEAVY = API_TIMEOUT_MS.screenHeavy;
@@ -45,10 +45,15 @@ function outlookHasUsable(tab, data) {
   return Array.isArray(data?.grouped?.data) && data.grouped.data.length > 0;
 }
 
-async function warmCacheIfNeeded(cacheKey, fetcher, hasUsable = cacheHasUsableData) {
+async function warmCacheIfNeeded(cacheKey, fetcher, hasUsable = cacheHasUsableData, {liveScreen = false} = {}) {
+  const session = await ensureMarketSession();
+  const live = shouldPollLiveMarket(session);
   const cached = await readPageCache(cacheKey);
   if (cached?.data != null && hasUsable(cached.data)) {
-    return false;
+    const skipFetch = !liveScreen || (!live && !isPageCacheStale(cached.updatedAt, session));
+    if (skipFetch) {
+      return false;
+    }
   }
   const fresh = await fetchWithRetry(fetcher, {retries: 1});
   await writePageCache(cacheKey, fresh);
@@ -122,6 +127,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
       };
     },
     data => (main === 'ai' ? aiPicksScreensPayloadUsable(data) : Array.isArray(data?.list) && data.list.length > 0),
+    {liveScreen: main !== 'ai'},
   );
 }
 

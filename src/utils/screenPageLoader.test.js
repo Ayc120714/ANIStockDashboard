@@ -1,6 +1,7 @@
 import {
   runScreenPayloadFetch,
   runScreenTableFetch,
+  runScreenTableFetchWithLivePoll,
   runWatchlistPageFetch,
 } from './screenPageLoader';
 import { writePageCache } from './pageDataCache';
@@ -157,6 +158,46 @@ describe('screenPageLoader live navigation', () => {
     });
     await new Promise((resolve) => { setTimeout(resolve, 10); });
 
+    expect(clearApiGetCache).toHaveBeenCalled();
+  });
+
+  it('busts GET memo on live background table refresh (regression)', async () => {
+    getCachedMarketSession.mockReturnValue({ isLiveMarket: true, isTradingDay: true });
+    shouldPollLiveMarket.mockReturnValue(true);
+    const cacheKey = 'test_table_bg_refresh';
+    writePageCache(cacheKey, [{ symbol: 'RELIANCE', chg: '+1.00%' }]);
+    const setRows = jest.fn();
+    const fetcher = jest.fn(async () => [{ symbol: 'RELIANCE', chg: '+2.50%' }]);
+
+    await runScreenTableFetch({
+      cacheKey,
+      fetcher,
+      setRows,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      forceNetwork: false,
+    });
+    await new Promise((resolve) => { setTimeout(resolve, 10); });
+
+    expect(clearApiGetCache).toHaveBeenCalled();
+  });
+
+  it('forces network on live screen table mount poll (regression)', async () => {
+    getCachedMarketSession.mockReturnValue({ isLiveMarket: true, isTradingDay: true });
+    shouldPollLiveMarket.mockReturnValue(true);
+    const fetcher = jest.fn(async () => [{ symbol: 'TCS', chg: '+1.00%' }]);
+    const setRows = jest.fn();
+
+    await runScreenTableFetchWithLivePoll({
+      cacheKey: 'test_live_mount',
+      fetcher,
+      setRows,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      isHistoricalView: false,
+    });
+
+    expect(fetcher).toHaveBeenCalled();
     expect(clearApiGetCache).toHaveBeenCalled();
   });
 

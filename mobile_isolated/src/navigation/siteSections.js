@@ -12,6 +12,7 @@ export const SITE_SECTIONS = [
   {title: 'Video screener', path: '/video-screener'},
   {title: 'Portfolio manager', path: '/portfolio-manager'},
   {title: 'Live signals', path: '/advisor?advisorTab=signals'},
+  {title: 'Renko Smart', path: '/advisor?advisorTab=renko'},
   {title: 'Mutual funds', path: '/mutual-funds'},
   {title: 'Profile', path: '/profile'},
   {title: 'Upgrade premium', path: '/upgrade-premium'},

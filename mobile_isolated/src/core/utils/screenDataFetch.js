@@ -28,3 +28,13 @@ export async function fetchScreenDataOrThrow(fetcher, opts = {}, timeoutMessage)
 export function mergeApiOpts(opts = {}, ms = API_TIMEOUT_MS.screen) {
   return {...opts, timeoutMs: opts.timeoutMs ?? ms};
 }
+
+/** Live screen tables (trending / movers / volume) must bypass HTTP cache during NSE session. */
+export function mergeLiveScreenApiOpts(opts = {}, ms = API_TIMEOUT_MS.screenHeavy) {
+  return {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? ms,
+    cache: 'no-store',
+    liveScreen: true,
+  };
+}

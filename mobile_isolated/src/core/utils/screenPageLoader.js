@@ -43,6 +43,11 @@ async function shouldSkipScreenFetch(cacheKey, cachedWrap = null) {
   return shouldSkipNetworkForClosedMarket(cached.updatedAt, true);
 }
 
+async function shouldUseLiveScreenNetwork() {
+  const session = await resolveSessionForCacheDecision();
+  return shouldPollLiveMarket(session);
+}
+
 /** Refresh from network without blocking the UI when cache is already shown. */
 function scheduleBackgroundTableRefresh({
   cacheKey,
@@ -51,10 +56,10 @@ function scheduleBackgroundTableRefresh({
   setError,
   forceNetwork = false,
 }) {
-  const retries = forceNetwork ? 1 : 0;
   void (async () => {
     try {
-      const fresh = await fetchWithRetry(fetcher, {retries});
+      const live = await shouldUseLiveScreenNetwork();
+      const fresh = await fetchWithRetry(fetcher, {retries: live || forceNetwork ? 1 : 0});
       const rows = extractRowArray(fresh);
       await writePageCache(cacheKey, Array.isArray(fresh) ? fresh : rows);
       setRows(rows);
@@ -73,10 +78,10 @@ function scheduleBackgroundPayloadRefresh({
   hasUsable,
   forceNetwork = false,
 }) {
-  const retries = forceNetwork ? 1 : 0;
   void (async () => {
     try {
-      const fresh = await fetchWithRetry(fetcher, {retries});
+      const live = await shouldUseLiveScreenNetwork();
+      const fresh = await fetchWithRetry(fetcher, {retries: live || forceNetwork ? 1 : 0});
       if (hasUsable(fresh)) {
         await writePageCache(cacheKey, fresh);
         applyPayload(fresh);
@@ -129,7 +134,11 @@ export async function runScreenTableFetch({
     : Promise.resolve(getFreshCachedMarketSession() || getCachedMarketSession());
 
   try {
-    const [fresh] = await Promise.all([fetchWithRetry(fetcher, {retries: forceNetwork ? 1 : 0}), sessionPromise]);
+    const live = forceNetwork || (await shouldUseLiveScreenNetwork());
+    const [fresh] = await Promise.all([
+      fetchWithRetry(fetcher, {retries: live ? 1 : 0}),
+      sessionPromise,
+    ]);
     const rows = extractRowArray(fresh);
     await writePageCache(cacheKey, Array.isArray(fresh) ? fresh : rows);
     setRows(rows);
@@ -189,8 +198,9 @@ export async function runScreenPayloadFetch({
     : Promise.resolve(getFreshCachedMarketSession() || getCachedMarketSession());
 
   try {
+    const live = forceNetwork || (await shouldUseLiveScreenNetwork());
     const [fresh] = await Promise.all([
-      fetchWithRetry(fetcher, {retries: forceNetwork ? 1 : 0}),
+      fetchWithRetry(fetcher, {retries: live ? 1 : 0}),
       sessionPromise,
     ]);
     if (hasUsable(fresh)) {

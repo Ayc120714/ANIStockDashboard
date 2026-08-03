@@ -5,8 +5,8 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v7-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
-  marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v2-${tab}`,
-  stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v4-${tab}`,
+  marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v4-${tab}`,
+  stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v6-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v5-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
   advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v10',

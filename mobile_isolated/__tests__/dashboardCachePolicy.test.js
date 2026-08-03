@@ -23,7 +23,8 @@ describe('dashboard cache policy fixes', () => {
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
       '@ani/mobile/page-cache/advisor-hub-trend-v10',
     );
-    expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v4');
+    expect(MOBILE_PAGE_CACHE_KEYS.marketsOutlook('market')).toContain('markets-outlook-v4');
+    expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v6');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
       'screens-v7',
     );

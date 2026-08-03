@@ -1,6 +1,6 @@
 import {apiGet, apiPost} from '@core/api/apiClient';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
-import {mergeApiOpts} from '@core/utils/screenDataFetch';
+import {mergeApiOpts, mergeLiveScreenApiOpts} from '@core/utils/screenDataFetch';
 import {
   flattenSubsectorOutlookPayload,
   normalizeMarketIndicesTablePayload,
@@ -65,15 +65,16 @@ export const dashboardService = {
   },
   fetchSectorOutlook: async (opts = {}) =>
     normalizeSectorOutlookPayload(await apiGet('/sector-outlook', mergeApiOpts(opts, T.screen))),
-  fetchPriceShockers: async ({type = 'gainers', period = 'day', limit = 8, date, timeoutMs} = {}) => {
+  fetchPriceShockers: async ({type = 'gainers', period = 'day', limit = 8, date, timeoutMs, ...opts} = {}) => {
     const q = new URLSearchParams({
       type: String(type),
       period: String(period),
       limit: String(limit),
     });
     if (date) q.set('date', String(date));
+    const apiOpts = date ? mergeApiOpts(opts, timeoutMs ?? T.screenHeavy) : mergeLiveScreenApiOpts(opts, timeoutMs ?? T.screenHeavy);
     return parseStocksListResponse(
-      await apiGet(`/stocks/price-shockers?${q}`, {timeoutMs: timeoutMs ?? T.screenHeavy}),
+      await apiGet(`/stocks/price-shockers?${q}`, apiOpts),
     );
   },
   fetchAdvisorAlerts: async ({limit, timeoutMs, ...opts} = {}) => {
@@ -148,23 +149,24 @@ export const dashboardService = {
   fetchTrending: async (limit = 40, opts = {}) => {
     const q = new URLSearchParams({limit: String(limit)});
     if (opts?.date) q.set('date', String(opts.date));
+    const apiOpts = opts?.date
+      ? mergeApiOpts(opts, opts?.timeoutMs ?? T.screenHeavy)
+      : mergeLiveScreenApiOpts(opts, opts?.timeoutMs ?? T.screenHeavy);
     return parseStocksListResponse(
-      await apiGet(`/stocks/trending?${q}`, {
-        ...opts,
-        timeoutMs: opts?.timeoutMs ?? T.screenHeavy,
-      }),
+      await apiGet(`/stocks/trending?${q}`, apiOpts),
     );
   },
   fetchScreenDates: async (opts = {}) =>
     parseScreenDatesResponse(await apiGet('/stocks/screen-dates', mergeApiOpts(opts, T.screen))),
-  fetchVolumeShockers: async ({limit = 40, period = 'day', date, timeoutMs} = {}) => {
+  fetchVolumeShockers: async ({limit = 40, period = 'day', date, timeoutMs, ...opts} = {}) => {
     const q = new URLSearchParams({
       limit: String(limit),
       period: String(period),
     });
     if (date) q.set('date', String(date));
+    const apiOpts = date ? mergeApiOpts(opts, timeoutMs ?? T.screenHeavy) : mergeLiveScreenApiOpts(opts, timeoutMs ?? T.screenHeavy);
     return parseStocksListResponse(
-      await apiGet(`/stocks/volume-shockers?${q}`, {timeoutMs: timeoutMs ?? T.screenHeavy}),
+      await apiGet(`/stocks/volume-shockers?${q}`, apiOpts),
     );
   },
   fetchWeeklyPicks: async (opts = {}) =>
@@ -187,14 +189,15 @@ export const dashboardService = {
       await apiGet(`/ipo?${q.toString()}`, {timeoutMs: timeoutMs ?? T.screen}),
     );
   },
-  fetchRelativePerformance: async ({period = '1w', limit = 50, date, timeoutMs} = {}) => {
+  fetchRelativePerformance: async ({period = '1w', limit = 50, date, timeoutMs, ...opts} = {}) => {
     const q = new URLSearchParams({
       period: String(period),
       limit: String(limit),
     });
     if (date) q.set('date', String(date));
+    const apiOpts = date ? mergeApiOpts(opts, timeoutMs ?? T.screenHeavy) : mergeLiveScreenApiOpts(opts, timeoutMs ?? T.screenHeavy);
     return parseStocksListResponse(
-      await apiGet(`/stocks/relative-performance?${q}`, {timeoutMs: timeoutMs ?? T.screenHeavy}),
+      await apiGet(`/stocks/relative-performance?${q}`, apiOpts),
     );
   },
 };

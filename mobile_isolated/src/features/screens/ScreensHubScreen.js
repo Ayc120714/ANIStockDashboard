@@ -21,9 +21,10 @@ import {formatMarketCap, formatINR} from '@core/utils/formatMarket';
 import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
-import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {MOBILE_PAGE_CACHE_KEYS, LEGACY_SCREENS_HUB_CACHE_PREFIXES} from '@core/utils/dashboardCachePolicy';
 import {MOBILE_SCREEN_LIST_LIMIT} from '@core/utils/advisorWebParity';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
+import {clearPageCachesByPrefix} from '@core/storage/pageCache';
 import {
   runScreenPayloadFetch,
   SCREEN_LIVE_POLL_MS,
@@ -289,6 +290,10 @@ export function ScreensHubScreen({navigation}) {
   }, [alphaHor, applyScreensPayload, gl, ipoFilter, main, perM, perV, screenDate, screensPayloadUsable]);
 
   useEffect(() => {
+    void Promise.all(LEGACY_SCREENS_HUB_CACHE_PREFIXES.map(prefix => clearPageCachesByPrefix(prefix)));
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     initialLoadDone.current = false;
     (async () => {
@@ -298,7 +303,10 @@ export function ScreensHubScreen({navigation}) {
         hasUsable: screensPayloadUsable,
       });
       if (cancelled) return;
-      await load({silent: hadCache});
+      const session = await ensureMarketSession();
+      const forceLive =
+        LIVE_SCREEN_TABS.has(main) && !screenDate && shouldPollLiveMarket(session);
+      await load({silent: hadCache, forceRefresh: forceLive});
       initialLoadDone.current = true;
     })();
     return () => {

@@ -54,6 +54,7 @@ import {AI_ANALYSIS_SETUPS, getAnalysisSetupLabel} from '@core/utils/aiAnalysisS
 import {loadUserEnabledSymbols} from '@core/utils/userEnabledSymbols';
 import {AdvisorSignalsSection} from './AdvisorSignalsSection';
 import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
+import {RenkoSmartSignalsSection} from './RenkoSmartSignalsSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -62,6 +63,7 @@ const TREND_TIER_PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
 
 const TABS = [
   {id: 'sig', label: 'Signals & alerts'},
+  {id: 'renko', label: 'Renko Smart'},
   {id: 'trend', label: 'Trend reversal'},
   {id: 'chart', label: 'Chart & fundamental'},
   {id: 'ai', label: 'AI analysis'},
@@ -663,6 +665,27 @@ export function AdvisorHubScreen({navigation}) {
             loading={loading}
             cacheHydrated={cacheHydrated}
           />
+        </ScrollView>
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'renko') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={styles.pad}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                /* Section owns its network refresh via Refresh button / poll */
+              }}
+            />
+          }>
+          {head}
+          <RenkoSmartSignalsSection />
         </ScrollView>
       </MobileChrome>
     );

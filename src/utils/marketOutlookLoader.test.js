@@ -51,6 +51,11 @@ describe('marketOutlookLoader', () => {
       },
     });
     expect(stale).toBe(true);
-    expect(fiiDiiHasUsable({ daily: [{ date: '24-Jun-2026' }] })).toBe(true);
+    expect(fiiDiiHasUsable({ daily: [{ date: '24-Jun-2026' }] })).toBe(false);
+    expect(fiiDiiHasUsable({
+      daily: [{ date: '24-Jun-2026' }],
+      quarterly: [],
+      yearly: [],
+    })).toBe(true);
   });
 });

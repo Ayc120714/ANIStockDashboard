@@ -1,0 +1,17 @@
+import { resolveAdvisorTabIndex } from './advisorTabIndex';
+
+describe('advisor Renko Smart tab routing', () => {
+  it('maps renko advisorTab keys to index 1', () => {
+    expect(resolveAdvisorTabIndex('renko')).toBe(1);
+    expect(resolveAdvisorTabIndex('renko_smart')).toBe(1);
+    expect(resolveAdvisorTabIndex('RenkoSmart')).toBe(1);
+  });
+
+  it('keeps legacy tabs shifted after Renko', () => {
+    expect(resolveAdvisorTabIndex('signals')).toBe(0);
+    expect(resolveAdvisorTabIndex('trend')).toBe(2);
+    expect(resolveAdvisorTabIndex('chart')).toBe(3);
+    expect(resolveAdvisorTabIndex('ai')).toBe(4);
+    expect(resolveAdvisorTabIndex('portfolio')).toBe(5);
+  });
+});

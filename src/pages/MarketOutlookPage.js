@@ -14,8 +14,14 @@ import {
   loadFiiDiiWithCache,
   marketOutlookHasUsable,
   normalizeMarketOutlookPayload,
-  parseIsoLikeDate,
 } from '../utils/marketOutlookLoader';
+import {
+  buildFiiDiiCard,
+  FII_DII_FETCH_DAYS,
+  fmtCr,
+  periodCircleShownPoint,
+} from '../utils/fiiDiiPayload';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { runLiveMarketPageMountPoll, runScreenPayloadFetch } from '../utils/screenPageLoader';
 import {
   CardContainer,
@@ -33,6 +39,11 @@ import {
   SmallCardContainer,
   SmallFull,
   SmallHalf,
+  FiiDiiPeriodSection,
+  FiiDiiPeriodRow,
+  FiiDiiPeriodItem,
+  FiiDiiPeriodLabel,
+  FiiDiiPeriodCircle,
   TableSection,
   TableTitle,
   TableWrapper,
@@ -50,17 +61,10 @@ import {
 } from '../utils/marketSession';
 import { readPageCache } from '../utils/pageDataCache';
 
-const MIN_FII_DII_DAYS = 20;
-const MARKET_OUTLOOK_CACHE_KEY = 'marketOutlookData_v3';
-const FII_DII_CACHE_KEY = 'marketOutlookFiiDii_v2';
+const MARKET_OUTLOOK_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.marketOutlook;
+const FII_DII_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.fiiDii;
 const MARKET_REFRESH_MS = 30000;
 const INDICES_TABLE_ROWS_PER_PAGE_OPTIONS = [10, 15, 25, 50];
-
-const normalizeRecentDaily = (daily, limit) => {
-  if (!Array.isArray(daily)) return [];
-  const sorted = [...daily].sort((a, b) => parseIsoLikeDate(b?.date) - parseIsoLikeDate(a?.date));
-  return sorted.slice(0, limit);
-};
 
 const PLACEHOLDER_OUTLOOK_CARD = {
   title: '—',
@@ -75,6 +79,56 @@ const EMPTY_OUTLOOK_CARD_ROW = [
   PLACEHOLDER_OUTLOOK_CARD,
   PLACEHOLDER_OUTLOOK_CARD,
 ];
+
+function FiiDiiPeriodCircles({ title, circles, yearRow = false, onHover }) {
+  if (!circles?.length) return null;
+
+  return (
+    <FiiDiiPeriodSection role="group" aria-label={title}>
+      <FiiDiiPeriodRow className={yearRow ? 'year-row' : undefined}>
+        {circles.map((circle) => (
+          <FiiDiiPeriodItem key={`${title}-${circle.label}`}>
+            <FiiDiiPeriodLabel>{circle.label}</FiiDiiPeriodLabel>
+            <FiiDiiPeriodCircle
+              $color={circle.color}
+              $neutral={!circle.hasData}
+              role="button"
+              tabIndex={circle.hasData ? 0 : -1}
+              aria-label={circle.ariaLabel}
+              title={circle.ariaLabel}
+              onMouseEnter={() => onHover?.(periodCircleShownPoint(circle))}
+              onMouseLeave={() => onHover?.(null)}
+              onFocus={() => onHover?.(periodCircleShownPoint(circle))}
+              onBlur={() => onHover?.(null)}
+            >
+              {circle.display}
+            </FiiDiiPeriodCircle>
+          </FiiDiiPeriodItem>
+        ))}
+      </FiiDiiPeriodRow>
+    </FiiDiiPeriodSection>
+  );
+}
+
+function FiiDiiPeriodTotals({ card }) {
+  const totals = [
+    ['MTD', card.mtdNet],
+    ['QTD', card.qtdNet],
+    ['YTD', card.ytdNet],
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+      {totals.map(([label, net]) => (
+        <div key={label} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>{label}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: net == null ? '#9aa0a6' : net >= 0 ? '#28a745' : '#dc3545' }}>
+            {fmtCr(net)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function MarketOutlookContent({ apiReady, timedOut }) {
   const { outlookPremium } = useAuth();
@@ -91,6 +145,8 @@ function MarketOutlookContent({ apiReady, timedOut }) {
   const [loadError, setLoadError] = useState(null);
   const [fiiHoverIdx, setFiiHoverIdx] = useState(null);
   const [diiHoverIdx, setDiiHoverIdx] = useState(null);
+  const [fiiPeriodHover, setFiiPeriodHover] = useState(null);
+  const [diiPeriodHover, setDiiPeriodHover] = useState(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const [isLiveRefresh, setIsLiveRefresh] = useState(false);
   const [dataLooksStale, setDataLooksStale] = useState(false);
@@ -146,7 +202,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
       if (!isMounted) return;
       await loadFiiDiiWithCache({
         cacheKey: FII_DII_CACHE_KEY,
-        minDays: MIN_FII_DII_DAYS,
+        minDays: FII_DII_FETCH_DAYS,
         setData: setFiiDiiData,
         setLoadState: setFiiDiiLoadState,
         forceNetwork,
@@ -243,79 +299,67 @@ function MarketOutlookContent({ apiReady, timedOut }) {
     { key: 'year3y', label: '3Y' }
   ];
 
-  const fmtCr = (val) => {
-    if (val == null || isNaN(val)) return '—';
-    const abs = Math.abs(val);
-    const formatted = abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return `${val < 0 ? '-' : '+'}₹${formatted} Cr`;
-  };
+  const fmtCrDisplay = fmtCr;
+
+  const effectiveYear = fiiDiiData?.effective_year ?? fiiDiiData?.effectiveYear ?? new Date().getFullYear();
 
   const fiiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
-    const daily = normalizeRecentDaily(fiiDiiData.daily, MIN_FII_DII_DAYS);
-    const latest = daily[0];
-    const mtdNet = Number(fiiDiiData.mtd?.fii?.net ?? 0) || 0;
-    let series = [...daily].reverse().map((d) => ({
-      date: d?.date ?? '',
-      net: Number(d?.fii?.net ?? 0) || 0,
-    }));
-    let bars = series.map((d) => d.net);
-    // Backend may return empty daily[] but still send MTD — show one bar so the chart isn't blank.
-    if (bars.length < 1 && Number.isFinite(mtdNet)) {
-      series = [{ date: 'MTD', net: mtdNet }];
-      bars = [mtdNet];
+    if (!fiiDiiData) {
+      return {
+        value: '—',
+        latestNet: null,
+        latestDate: '',
+        mtdNet: null,
+        bars: [],
+        series: [],
+        quarters: [],
+        years: [],
+      };
     }
-    const latestNet = latest != null ? (Number(latest?.fii?.net ?? 0) || 0) : null;
+    const card = buildFiiDiiCard(fiiDiiData, 'fii');
     return {
-      value: latest != null ? fmtCr(latestNet) : mtdNet !== 0 ? fmtCr(mtdNet) : '—',
-      latestNet: latestNet ?? mtdNet,
-      latestDate: latest?.date ?? '',
-      mtdNet,
-      bars,
-      series,
+      ...card,
+      value: card.latestDate ? fmtCrDisplay(card.latestNet) : card.mtdNet !== 0 ? fmtCrDisplay(card.mtdNet) : '—',
     };
   }, [fiiDiiData]);
 
   const diiCard = useMemo(() => {
-    if (!fiiDiiData) return { value: '—', latestNet: null, latestDate: '', mtdNet: null, bars: [], series: [] };
-    const daily = normalizeRecentDaily(fiiDiiData.daily, MIN_FII_DII_DAYS);
-    const latest = daily[0];
-    const mtdNet = Number(fiiDiiData.mtd?.dii?.net ?? 0) || 0;
-    let series = [...daily].reverse().map((d) => ({
-      date: d?.date ?? '',
-      net: Number(d?.dii?.net ?? 0) || 0,
-    }));
-    let bars = series.map((d) => d.net);
-    if (bars.length < 1 && Number.isFinite(mtdNet)) {
-      series = [{ date: 'MTD', net: mtdNet }];
-      bars = [mtdNet];
+    if (!fiiDiiData) {
+      return {
+        value: '—',
+        latestNet: null,
+        latestDate: '',
+        mtdNet: null,
+        bars: [],
+        series: [],
+        quarters: [],
+        years: [],
+      };
     }
-    const latestNet = latest != null ? (Number(latest?.dii?.net ?? 0) || 0) : null;
+    const card = buildFiiDiiCard(fiiDiiData, 'dii');
     return {
-      value: latest != null ? fmtCr(latestNet) : mtdNet !== 0 ? fmtCr(mtdNet) : '—',
-      latestNet: latestNet ?? mtdNet,
-      latestDate: latest?.date ?? '',
-      mtdNet,
-      bars,
-      series,
+      ...card,
+      value: card.latestDate ? fmtCrDisplay(card.latestNet) : card.mtdNet !== 0 ? fmtCrDisplay(card.mtdNet) : '—',
     };
   }, [fiiDiiData]);
 
   const fiiShownPoint = useMemo(() => {
+    if (fiiPeriodHover) return fiiPeriodHover;
     if (!fiiCard.series?.length) return { net: fiiCard.latestNet, date: fiiCard.latestDate };
     if (fiiHoverIdx != null && fiiCard.series[fiiHoverIdx]) {
       return fiiCard.series[fiiHoverIdx];
     }
     return fiiCard.series[fiiCard.series.length - 1];
-  }, [fiiCard, fiiHoverIdx]);
+  }, [fiiCard, fiiHoverIdx, fiiPeriodHover]);
 
   const diiShownPoint = useMemo(() => {
+    if (diiPeriodHover) return diiPeriodHover;
     if (!diiCard.series?.length) return { net: diiCard.latestNet, date: diiCard.latestDate };
     if (diiHoverIdx != null && diiCard.series[diiHoverIdx]) {
       return diiCard.series[diiHoverIdx];
     }
     return diiCard.series[diiCard.series.length - 1];
-  }, [diiCard, diiHoverIdx]);
+  }, [diiCard, diiHoverIdx, diiPeriodHover]);
 
   const getTrendClass = (trend) => {
     if (/bullish|up|↗/i.test(trend)) return 'up';
@@ -438,12 +482,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
               {fiiShownPoint.date && (
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{fiiShownPoint.date}</div>
               )}
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: fiiCard.mtdNet >= 0 ? '#28a745' : '#dc3545' }}>
-                  {fmtCr(fiiCard.mtdNet)}
-                </span>
-              </div>
+              <FiiDiiPeriodTotals card={fiiCard} />
               <BarChart>
                 {bars ? (
                   <svg
@@ -478,6 +517,17 @@ function MarketOutlookContent({ apiReady, timedOut }) {
                   </svg>
                 )}
               </BarChart>
+              <FiiDiiPeriodCircles
+                title={`FII quarterly activity ${effectiveYear}`}
+                circles={fiiCard.quarters}
+                onHover={setFiiPeriodHover}
+              />
+              <FiiDiiPeriodCircles
+                title="FII yearly activity"
+                circles={fiiCard.years}
+                yearRow
+                onHover={setFiiPeriodHover}
+              />
             </CashCard>
           );
         })()}
@@ -495,12 +545,7 @@ function MarketOutlookContent({ apiReady, timedOut }) {
               {diiShownPoint.date && (
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{diiShownPoint.date}</div>
               )}
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>MTD</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: diiCard.mtdNet >= 0 ? '#28a745' : '#dc3545' }}>
-                  {fmtCr(diiCard.mtdNet)}
-                </span>
-              </div>
+              <FiiDiiPeriodTotals card={diiCard} />
               <BarChart>
                 {bars ? (
                   <svg
@@ -535,11 +580,21 @@ function MarketOutlookContent({ apiReady, timedOut }) {
                   </svg>
                 )}
               </BarChart>
+              <FiiDiiPeriodCircles
+                title={`DII quarterly activity ${effectiveYear}`}
+                circles={diiCard.quarters}
+                onHover={setDiiPeriodHover}
+              />
+              <FiiDiiPeriodCircles
+                title="DII yearly activity"
+                circles={diiCard.years}
+                yearRow
+                onHover={setDiiPeriodHover}
+              />
             </CashCard>
           );
         })()}
 
-        {/* Smallcap column (right): top = full smallcap; bottom row = microcap + India VIX */}
         <SmallCardContainer>
           <SmallFull>
             <CardHeader>

@@ -8,6 +8,7 @@ import * as pageCache from '@core/storage/pageCache';
 import {writePageCache} from '@core/storage/pageCache';
 import {hasUsableAdvisorTrendPayload} from '@core/utils/advisorHubCache';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
+import {mergeLiveScreenApiOpts} from '@core/utils/screenDataFetch';
 import {
   buildTrendGrid,
   cachedTrendEnvelope,
@@ -26,6 +27,12 @@ jest.mock('@core/utils/marketSession', () => ({
 }));
 
 describe('screenPageLoader live polling fixes', () => {
+  it('live screen API opts bypass HTTP cache', () => {
+    expect(mergeLiveScreenApiOpts({timeoutMs: 5000})).toEqual(
+      expect.objectContaining({cache: 'no-store', liveScreen: true, timeoutMs: 5000}),
+    );
+  });
+
   it('exposes 30s live poll interval constant', () => {
     expect(SCREEN_LIVE_POLL_MS).toBe(30_000);
   });
@@ -92,6 +99,33 @@ describe('screenPageLoader live polling fixes', () => {
     expect(applyPayload).toHaveBeenCalled();
     expect(writeSpy).toHaveBeenCalled();
     writeSpy.mockRestore();
+  });
+
+  it('background payload refresh retries during live session when cache is hydrated', async () => {
+    const cacheKey = '@ani/test/screens-live-bg';
+    await writePageCache(cacheKey, {
+      weeklyMeta: {subtitle: 'Trending stocks'},
+      list: [{symbol: 'RELIANCE', day1d: 1.0}],
+    });
+    const applyPayload = jest.fn();
+    const fetcher = jest.fn(async () => ({
+      weeklyMeta: {subtitle: 'Trending stocks'},
+      list: [{symbol: 'RELIANCE', day1d: 2.5}],
+    }));
+
+    await runScreenPayloadFetch({
+      cacheKey,
+      fetcher,
+      applyPayload,
+      setLoading: jest.fn(),
+      setError: jest.fn(),
+      forceNetwork: false,
+      hasUsable: data => Array.isArray(data?.list) && data.list.length > 0,
+    });
+    await new Promise(resolve => setTimeout(resolve, 15));
+
+    expect(fetcher).toHaveBeenCalled();
+    expect(applyPayload.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('pull refresh shows cache immediately and does not block on network', async () => {

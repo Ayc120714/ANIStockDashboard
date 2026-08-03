@@ -175,7 +175,7 @@ export const BarChart = styled.div`
   width: 100%;
   height: 100px;
   margin-top: 16px;
-  flex: 1;
+  flex: 0 0 auto;
   overflow-x: auto;
   overflow-y: hidden;
 
@@ -183,6 +183,67 @@ export const BarChart = styled.div`
     width: 100%;
     height: 100%;
     display: block;
+  }
+`;
+
+export const FiiDiiPeriodSection = styled.div`
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`;
+
+export const FiiDiiPeriodRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+
+  &.year-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 900px) {
+    gap: 6px;
+  }
+`;
+
+export const FiiDiiPeriodItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+`;
+
+export const FiiDiiPeriodLabel = styled.span`
+  font-size: 10px;
+  font-weight: 700;
+  color: #666;
+  letter-spacing: 0.02em;
+`;
+
+export const FiiDiiPeriodCircle = styled.div`
+  width: 100%;
+  max-width: 72px;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 2px solid ${({ $neutral, $color }) => ($neutral ? '#d5d9de' : ($color || '#9aa0a6'))};
+  background: ${({ $neutral, $color }) => ($neutral ? '#eef1f4' : `${$color || '#9aa0a6'}12`)};
+  color: ${({ $color }) => $color || '#9aa0a6'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  word-break: break-word;
+  cursor: ${({ $neutral }) => ($neutral ? 'default' : 'pointer')};
+
+  &:focus-visible {
+    outline: 2px solid #1a3c5e;
+    outline-offset: 2px;
   }
 `;
 

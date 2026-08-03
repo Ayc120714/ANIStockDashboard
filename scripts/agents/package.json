@@ -6,7 +6,8 @@
   "scripts": {
     "verify": "bash verify-all-agents.sh",
     "run:context": "node run-context-agent.mjs",
-    "run:orchestrator": "node run-orchestrator-agent.mjs"
+    "run:orchestrator": "node run-orchestrator-agent.mjs",
+    "run:parity": "node run-web-mobile-parity-agent.mjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.19"

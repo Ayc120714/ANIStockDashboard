@@ -157,6 +157,27 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  fetchRenkoSmartSignals: async ({
+    limit = 500,
+    symbol_limit = 1500,
+    hits_only = true,
+    refresh = false,
+    rvol_min = 1.2,
+    timeoutMs,
+  } = {}) =>
+    // Renko Smart tab now serves the 44-50 fib-zone pullback flow.
+    apiGet(
+      `/advisor/signals/renko-fib-zone${toQuery({
+        limit,
+        symbol_limit,
+        rvol_min,
+        require_st_up: 'true',
+        require_rs_positive: 'true',
+        require_rvol: 'true',
+        ...(refresh ? {refresh: 'true'} : {}),
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionRecent: async ({
     lookback_days = null,
     timeframe = 'daily',

@@ -19,12 +19,14 @@ import {
 import TrendReversalTab from './TrendReversalTab';
 import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
 import RsRvolEma5mTable from '../components/RsRvolEma5mTable';
+import RenkoSmartTable from '../components/RenkoSmartTable';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
 import { ensureMarketSession, getMarketPollingIntervalMs } from '../utils/marketSession';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
 import { shouldSkipScreenFetch } from '../utils/screenPageLoader';
+import { resolveAdvisorTabIndex } from '../utils/advisorTabIndex';
 
 const trendColors = { bullish: '#1b5e20', bearish: '#c62828', sideways: '#f57f17' };
 const fmt = (v) => {
@@ -186,18 +188,6 @@ function getTrailingState(row) {
   return { t1Hit, costExit, effectiveStopLoss };
 }
 
-function resolveAdvisorTabIndex(advisorTab) {
-  const key = String(advisorTab || '').trim().toLowerCase();
-  if (!key) return 0;
-  if (key === 'signals' || key === 'sig' || key === 'alerts') return 0;
-  if (key === 'trend' || key === 'reversal' || key === 'trend_reversal') return 1;
-  if (key === 'chart' || key === 'fundamental') return 2;
-  if (key === 'analysis' || key === 'ai') return 3;
-  if (key === 'portfolio') return 4;
-  const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 4 ? n : 0;
-}
-
 function FinancialAdvisorPage() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => resolveAdvisorTabIndex(searchParams.get('advisorTab')));
@@ -223,16 +213,18 @@ function FinancialAdvisorPage() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tab label="Signals & Alerts" />
+        <Tab label="Renko Smart" />
         <Tab label="Trend Reversal" />
         <Tab label="Chart & Fundamental" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
-      {tab === 1 && <TrendReversalTab />}
-      {tab === 2 && <ChartFundamentalAgentTab />}
-      {tab === 3 && <AnalysisTab />}
-      {tab === 4 && <PortfolioTab />}
+      {tab === 1 && <RenkoSmartTable />}
+      {tab === 2 && <TrendReversalTab />}
+      {tab === 3 && <ChartFundamentalAgentTab />}
+      {tab === 4 && <AnalysisTab />}
+      {tab === 5 && <PortfolioTab />}
     </TableSection>
   );
 }

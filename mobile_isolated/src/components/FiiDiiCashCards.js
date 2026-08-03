@@ -2,19 +2,84 @@ import React, {useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {mobileStyles} from '@core/theme/mobileStyles';
-import {buildBarMetrics, buildFiiDiiCard, fmtCr} from '@core/utils/fiiDiiPayload';
+import {
+  buildBarMetrics,
+  buildFiiDiiCard,
+  buildPeriodAccessibilityLabel,
+  fmtCompactCr,
+  fmtCr,
+  NEUTRAL_PERIOD_COLOR,
+  periodCircleShownPoint,
+  periodCircleTone,
+} from '@core/utils/fiiDiiPayload';
 
 const POSITIVE = AYC.positive;
 const NEGATIVE = AYC.negative;
 
-function CashCard({title, subtitle, card, activeIndex, onSelectBar, loading}) {
+function toneColor(tone) {
+  if (tone === 'positive') return POSITIVE;
+  if (tone === 'negative') return NEGATIVE;
+  return NEUTRAL_PERIOD_COLOR;
+}
+
+function PeriodCircle({item, onSelect}) {
+  const tone = periodCircleTone(item.net, item.hasData);
+  const color = toneColor(tone);
+  const amount = item.hasData ? fmtCompactCr(item.net) : '—';
+  const accessibilityLabel = buildPeriodAccessibilityLabel(item.label, item.net, item.hasData, item.year);
+
+  return (
+    <Pressable
+      style={styles.periodCell}
+      accessible
+      accessibilityRole={item.hasData ? 'button' : undefined}
+      accessibilityLabel={accessibilityLabel}
+      disabled={!item.hasData}
+      onPressIn={() => onSelect?.(periodCircleShownPoint(item))}
+      onPressOut={() => onSelect?.(null)}>
+      <Text style={styles.periodLabel} numberOfLines={1}>
+        {item.label}
+      </Text>
+      <View style={[styles.periodCircle, {borderColor: color}]}>
+        <Text
+          style={[styles.periodAmount, {color}]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}>
+          {amount}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function PeriodCirclesRow({items, columns, onSelect}) {
+  if (!items?.length) return null;
+  const cellStyle = columns === 3 ? styles.periodCellYear : styles.periodCellQuarter;
+  return (
+    <View style={styles.periodRow}>
+      {items.map((item, index) => (
+        <View key={`${item.label}-${index}`} style={cellStyle}>
+          <PeriodCircle item={item} onSelect={onSelect} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CashCard({title, subtitle, card, activeIndex, onSelectBar, activePeriod, onSelectPeriod, loading}) {
   const shown =
-    activeIndex != null && card.series?.[activeIndex]
+    activePeriod ||
+    (activeIndex != null && card.series?.[activeIndex]
       ? card.series[activeIndex]
-      : card.shownPoint || {net: card.latestNet, date: card.latestDate};
+      : card.shownPoint || {net: card.latestNet, date: card.latestDate});
   const net = shown?.net ?? card.latestNet ?? 0;
   const netColor = net >= 0 ? POSITIVE : NEGATIVE;
-  const mtdColor = (card.mtdNet ?? 0) >= 0 ? POSITIVE : NEGATIVE;
+  const totals = [
+    ['MTD', card.mtdNet],
+    ['QTD', card.qtdNet],
+    ['YTD', card.ytdNet],
+  ];
   const bars = useMemo(() => buildBarMetrics(card.bars), [card.bars]);
 
   return (
@@ -33,15 +98,22 @@ function CashCard({title, subtitle, card, activeIndex, onSelectBar, loading}) {
             {fmtCr(net)}
           </Text>
           {shown?.date ? <Text style={mobileStyles.muted}>{shown.date}</Text> : null}
-          <View style={styles.mtdRow}>
-            <Text style={mobileStyles.label}>MTD</Text>
-            <Text
-              style={[styles.mtdValue, {color: mtdColor}]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}>
-              {fmtCr(card.mtdNet)}
-            </Text>
+          <View style={styles.totalsRow}>
+            {totals.map(([label, total]) => (
+              <View key={label} style={styles.totalItem}>
+                <Text style={styles.totalLabel}>{label}</Text>
+                <Text
+                  style={[
+                    styles.totalValue,
+                    {color: total == null ? NEUTRAL_PERIOD_COLOR : total >= 0 ? POSITIVE : NEGATIVE},
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}>
+                  {fmtCr(total)}
+                </Text>
+              </View>
+            ))}
           </View>
           <View style={styles.chartWrap}>
             <View style={styles.midLine} />
@@ -93,6 +165,8 @@ function CashCard({title, subtitle, card, activeIndex, onSelectBar, loading}) {
               <Text style={mobileStyles.muted}>{loading ? 'Loading…' : 'No chart data'}</Text>
             )}
           </View>
+          <PeriodCirclesRow items={card.quarters} columns={4} onSelect={onSelectPeriod} />
+          <PeriodCirclesRow items={card.years} columns={3} onSelect={onSelectPeriod} />
         </>
       )}
     </View>
@@ -102,6 +176,8 @@ function CashCard({title, subtitle, card, activeIndex, onSelectBar, loading}) {
 export function FiiDiiCashCards({data, loading = false}) {
   const [fiiIdx, setFiiIdx] = useState(null);
   const [diiIdx, setDiiIdx] = useState(null);
+  const [fiiPeriod, setFiiPeriod] = useState(null);
+  const [diiPeriod, setDiiPeriod] = useState(null);
 
   const fiiCard = useMemo(() => buildFiiDiiCard(data, 'fii'), [data]);
   const diiCard = useMemo(() => buildFiiDiiCard(data, 'dii'), [data]);
@@ -118,6 +194,8 @@ export function FiiDiiCashCards({data, loading = false}) {
         card={fiiCard}
         activeIndex={fiiIdx}
         onSelectBar={setFiiIdx}
+        activePeriod={fiiPeriod}
+        onSelectPeriod={setFiiPeriod}
         loading={loading}
       />
       <CashCard
@@ -126,6 +204,8 @@ export function FiiDiiCashCards({data, loading = false}) {
         card={diiCard}
         activeIndex={diiIdx}
         onSelectBar={setDiiIdx}
+        activePeriod={diiPeriod}
+        onSelectPeriod={setDiiPeriod}
         loading={loading}
       />
     </View>
@@ -149,12 +229,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 4,
   },
-  mtdRow: {flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 6},
-  mtdValue: {
-    flex: 1,
-    fontSize: AYC.type.caption,
+  totalsRow: {flexDirection: 'row', gap: 4, marginTop: 6, marginBottom: 6},
+  totalItem: {flex: 1, minWidth: 0, alignItems: 'center'},
+  totalLabel: {fontSize: 9, fontWeight: '700', color: AYC.textMuted},
+  totalValue: {
+    width: '100%',
+    fontSize: 9,
     fontWeight: '800',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   chartWrap: {height: 72, justifyContent: 'center', marginTop: 4},
   midLine: {
@@ -165,9 +247,48 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#ccc',
   },
-  chart: {flexDirection: 'row', alignItems: 'stretch', height: 68, gap: 2},
-  barCol: {flex: 1, height: 68},
+  chart: {flexDirection: 'row', alignItems: 'stretch', height: 68, gap: 1},
+  barCol: {flex: 1, height: 68, minWidth: 0},
   barHalfTop: {flex: 1, justifyContent: 'flex-end'},
   barHalfBottom: {flex: 1, justifyContent: 'flex-start'},
   bar: {borderRadius: 1, width: '100%'},
+  periodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 6,
+    gap: 4,
+  },
+  periodCellQuarter: {
+    width: '23%',
+    minWidth: 0,
+    flexGrow: 1,
+  },
+  periodCellYear: {
+    width: '31%',
+    minWidth: 0,
+    flexGrow: 1,
+  },
+  periodCell: {alignItems: 'center', gap: 2},
+  periodLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: AYC.textMuted,
+    textAlign: 'center',
+  },
+  periodCircle: {
+    width: '100%',
+    minHeight: 34,
+    borderWidth: 1,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+    backgroundColor: '#fff',
+  },
+  periodAmount: {
+    fontSize: 8,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
 });
