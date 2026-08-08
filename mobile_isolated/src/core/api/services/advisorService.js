@@ -210,6 +210,21 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  /** Hot Subsectors: ALL > 75 with top stocks by CHG% per subsector. */
+  fetchHotSubsectors: ({
+    all_threshold = 75,
+    top_stocks = 5,
+    max_subsectors = 40,
+    timeoutMs,
+  } = {}) =>
+    apiGet(
+      `/advisor/signals/hot-subsectors${toQuery({
+        all_threshold,
+        top_stocks,
+        max_subsectors,
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionHistory: async ({
     from_date,
     to_date,

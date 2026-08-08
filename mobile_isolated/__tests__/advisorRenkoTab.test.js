@@ -8,6 +8,7 @@ const TABS = [
   {id: 'chart', label: 'Chart & fundamental'},
   {id: 'ai', label: 'AI analysis'},
   {id: 'health', label: 'Portfolio health'},
+  {id: 'hot', label: 'Hot Subsectors'},
 ];
 
 describe('advisor Renko Smart mobile tab', () => {
@@ -17,6 +18,19 @@ describe('advisor Renko Smart mobile tab', () => {
   });
 
   it('places renko between signals and trend', () => {
-    expect(TABS.map(t => t.id)).toEqual(['sig', 'renko', 'trend', 'chart', 'ai', 'health']);
+    expect(TABS.map(t => t.id)).toEqual([
+      'sig',
+      'renko',
+      'trend',
+      'chart',
+      'ai',
+      'health',
+      'hot',
+    ]);
+  });
+
+  it('includes Hot Subsectors as a top-level Advisor tab', () => {
+    expect(TABS.some(t => t.id === 'hot')).toBe(true);
+    expect(TABS.find(t => t.id === 'hot')?.label).toBe('Hot Subsectors');
   });
 });

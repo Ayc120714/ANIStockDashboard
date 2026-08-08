@@ -55,6 +55,7 @@ import {loadUserEnabledSymbols} from '@core/utils/userEnabledSymbols';
 import {AdvisorSignalsSection} from './AdvisorSignalsSection';
 import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
 import {RenkoSmartSignalsSection} from './RenkoSmartSignalsSection';
+import {HotSubsectorsSignalsSection} from './HotSubsectorsSignalsSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -68,6 +69,7 @@ const TABS = [
   {id: 'chart', label: 'Chart & fundamental'},
   {id: 'ai', label: 'AI analysis'},
   {id: 'health', label: 'Portfolio health'},
+  {id: 'hot', label: 'Hot Subsectors'},
 ];
 
 function formatChgPct(v) {
@@ -686,6 +688,27 @@ export function AdvisorHubScreen({navigation}) {
           }>
           {head}
           <RenkoSmartSignalsSection />
+        </ScrollView>
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'hot') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={styles.pad}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                /* Section owns refresh via Refresh button / live poll */
+              }}
+            />
+          }>
+          {head}
+          <HotSubsectorsSignalsSection />
         </ScrollView>
       </MobileChrome>
     );

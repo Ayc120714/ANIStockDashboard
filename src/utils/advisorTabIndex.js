@@ -11,6 +11,14 @@ export function resolveAdvisorTabIndex(advisorTab) {
   if (key === 'chart' || key === 'fundamental') return 3;
   if (key === 'analysis' || key === 'ai') return 4;
   if (key === 'portfolio') return 5;
+  if (
+    key === 'hot' ||
+    key === 'hot_subsectors' ||
+    key === 'hotsubsectors' ||
+    key === 'subsectors'
+  ) {
+    return 6;
+  }
   const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 0;
+  return Number.isFinite(n) && n >= 0 && n <= 6 ? n : 0;
 }

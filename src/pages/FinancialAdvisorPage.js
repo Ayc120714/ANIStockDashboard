@@ -20,6 +20,7 @@ import TrendReversalTab from './TrendReversalTab';
 import ChartFundamentalAgentTab from './ChartFundamentalAgentTab';
 import RsRvolEma5mTable from '../components/RsRvolEma5mTable';
 import RenkoSmartTable from '../components/RenkoSmartTable';
+import HotSubsectorsTable from '../components/HotSubsectorsTable';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
@@ -218,6 +219,7 @@ function FinancialAdvisorPage() {
         <Tab label="Chart & Fundamental" />
         <Tab label="AI Analysis" />
         <Tab label="Portfolio Health" />
+        <Tab label="Hot Subsectors" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
       {tab === 1 && <RenkoSmartTable />}
@@ -225,6 +227,7 @@ function FinancialAdvisorPage() {
       {tab === 3 && <ChartFundamentalAgentTab />}
       {tab === 4 && <AnalysisTab />}
       {tab === 5 && <PortfolioTab />}
+      {tab === 6 && <HotSubsectorsTable />}
     </TableSection>
   );
 }

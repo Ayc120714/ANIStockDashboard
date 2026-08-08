@@ -418,6 +418,19 @@ export const fetchQuarterlyEarningsSetup = async ({
   return apiGet(`/advisor/signals/quarterly-earnings-setup?${params.toString()}`);
 };
 
+/** Hot Subsectors: ALL > 75 with top stocks by CHG% per subsector. */
+export const fetchHotSubsectors = async ({
+  all_threshold = 75,
+  top_stocks = 5,
+  max_subsectors = 40,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('all_threshold', String(all_threshold));
+  params.set('top_stocks', String(top_stocks));
+  params.set('max_subsectors', String(max_subsectors));
+  return apiGet(`/advisor/signals/hot-subsectors?${params.toString()}`);
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];
