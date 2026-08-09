@@ -1,11 +1,19 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {ListPagePager} from '@components/ListPagePager';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {advisorService} from '@core/api/services/advisorService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
-import {extractApiRows} from '@core/utils/apiPayload';
 import {
   ensureMarketSession,
   getCachedMarketSession,
@@ -14,17 +22,25 @@ import {
 } from '@core/utils/marketSession';
 import {formatINR} from '@core/utils/formatMarket';
 import {safeFetch} from '@core/utils/safeFetch';
+import {buildTradingViewSymbolsCsv} from '@core/utils/tradingViewCsv';
 import {usePagedList} from '@hooks/usePagedList';
 import {useTableSort} from '@hooks/useTableSort';
-import {AYC, mobileStyles} from '@core/theme/mobileStyles';
+import {AYC} from '@core/theme/mobileStyles';
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
 const PAGE_SIZE = MOBILE_TIER_TABLE_PAGE_SIZE;
 const POLL_MS = 5 * 60 * 1000;
+const LIST_LIMIT = 10;
 
 const COLS = [
   {key: 'symbol', label: 'Symbol'},
+  {key: 'signal_time_5m', label: 'Time'},
   {key: 'close', label: 'CMP'},
+  {key: 'upper_44', label: 'U44'},
+  {key: 'upper_50', label: 'U50'},
+  {key: 'ema10', label: 'EMA10'},
+  {key: 'ema30', label: 'EMA30'},
+  {key: 'supertrend', label: 'ST'},
   {key: 'target_1', label: 'T1'},
   {key: 'target_2', label: 'T2'},
   {key: 'stop_loss', label: 'SL'},
@@ -40,7 +56,8 @@ export function RenkoSmartSignalsSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [scanSymbols, setScanSymbols] = useState(0);
-  const {sortConfig, onSort} = useTableSort({defaultCol: 'symbol', defaultDir: 'asc'});
+  const [sessionDate, setSessionDate] = useState('');
+  const {sortConfig, onSort} = useTableSort({defaultCol: 'signal_time_5m', defaultDir: 'desc'});
 
   const load = useCallback(async ({silent = false, refresh = false} = {}) => {
     if (!silent) setLoading(true);
@@ -49,7 +66,7 @@ export function RenkoSmartSignalsSection() {
       const res = await safeFetch(
         () =>
           advisorService.fetchRenkoSmartSignals({
-            limit: 500,
+            limit: LIST_LIMIT,
             symbol_limit: 1500,
             hits_only: true,
             refresh,
@@ -57,9 +74,10 @@ export function RenkoSmartSignalsSection() {
           }),
         {label: 'Renko Smart', timeoutMs: API_TIMEOUT_MS.advisor, retries: 1},
       );
-      const data = extractApiRows(res, ['data']);
-      setRows(Array.isArray(data) ? data : []);
-      setScanSymbols(Number(res?.scan_symbols) || data?.length || 0);
+      const data = Array.isArray(res?.data) ? res.data : [];
+      setRows(data);
+      setScanSymbols(Number(res?.scan_symbols) || data.length || 0);
+      setSessionDate(String(res?.session_date || ''));
     } catch (e) {
       setError(String(e?.message || 'Could not load Renko Smart'));
     } finally {
@@ -90,8 +108,10 @@ export function RenkoSmartSignalsSection() {
     const list = [...rows];
     if (!col) return list;
     list.sort((a, b) => {
-      if (col === 'symbol') {
-        return dir * String(a[col] || '').localeCompare(String(b[col] || ''));
+      if (col === 'symbol' || col === 'signal_time_5m') {
+        const av = String(a[col] || a.bar_time_5m || '');
+        const bv = String(b[col] || b.bar_time_5m || '');
+        return dir * av.localeCompare(bv);
       }
       const na = Number(a[col]);
       const nb = Number(b[col]);
@@ -108,17 +128,51 @@ export function RenkoSmartSignalsSection() {
     resetDeps: [sorted.length, sortConfig.col, sortConfig.dir],
   });
 
+  const handleCopyCsv = async () => {
+    const csv = buildTradingViewSymbolsCsv(sorted.map(r => r.symbol));
+    if (!csv) return;
+    try {
+      await Share.share({message: csv, title: 'Renko Smart CSV'});
+    } catch (e) {
+      Alert.alert('Copy CSV', String(e?.message || 'Could not share CSV'));
+    }
+  };
+
+  const cellValue = (row, key) => {
+    if (key === 'signal_time_5m') {
+      const s = String(row.signal_time_5m || row.bar_time_5m || '');
+      const m = s.match(/(\d{2}:\d{2})/);
+      return m ? m[1] : s || '—';
+    }
+    if (key === 'close') return formatINR(row.close);
+    if (key === 'ema10') return fmtNum(row.ema10 ?? row.ma1);
+    if (key === 'ema30') return fmtNum(row.ema30 ?? row.ma2);
+    return fmtNum(row[key]);
+  };
+
   return (
     <View style={styles.block}>
       <View style={styles.head}>
         <Text style={styles.title}>Renko Smart</Text>
         <Text style={styles.count}>
-          {totalItems} · {scanSymbols} scanned
+          {totalItems}/{LIST_LIMIT} · {scanSymbols} scanned · 5m
+          {sessionDate ? ` · ${sessionDate}` : ''}
         </Text>
       </View>
-      <Pressable onPress={() => load({refresh: true})} style={styles.refreshBtn}>
-        <Text style={styles.refreshTxt}>Refresh</Text>
-      </Pressable>
+      <Text style={styles.subtitle}>
+        Latest {LIST_LIMIT} for session day · upper Renko 44–50% · cloud green · ST flip
+      </Text>
+      <View style={styles.actions}>
+        <Pressable onPress={() => load({refresh: true})} style={styles.refreshBtn}>
+          <Text style={styles.refreshTxt}>Refresh</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleCopyCsv}
+          disabled={!sorted.length}
+          style={[styles.refreshBtn, !sorted.length && styles.btnDisabled]}>
+          <Text style={styles.refreshTxt}>Copy CSV ({sorted.length})</Text>
+        </Pressable>
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {loading && rows.length === 0 ? (
         <ActivityIndicator color={AYC.accent} style={{marginVertical: 16}} />
@@ -141,17 +195,21 @@ export function RenkoSmartSignalsSection() {
               </View>
               {pagedItems.map(row => (
                 <View key={`${row.symbol}-${row.bar_time_5m || ''}`} style={styles.tr}>
-                  <View style={styles.symTd}>
-                    <TradingViewLink symbol={row.symbol} />
-                  </View>
-                  <Text style={styles.td}>{formatINR(row.close)}</Text>
-                  <Text style={styles.td}>{formatINR(row.target_1)}</Text>
-                  <Text style={styles.td}>{formatINR(row.target_2)}</Text>
-                  <Text style={styles.td}>{formatINR(row.stop_loss)}</Text>
+                  {COLS.map(col =>
+                    col.key === 'symbol' ? (
+                      <View key={col.key} style={styles.symTd}>
+                        <TradingViewLink symbol={row.symbol} />
+                      </View>
+                    ) : (
+                      <Text key={col.key} style={styles.td}>
+                        {cellValue(row, col.key)}
+                      </Text>
+                    ),
+                  )}
                 </View>
               ))}
               {pagedItems.length === 0 ? (
-                <Text style={styles.empty}>No Renko Smart setups yet.</Text>
+                <Text style={styles.empty}>No combined Renko Smart 5m setups yet.</Text>
               ) : null}
             </View>
           </ScrollView>
@@ -167,15 +225,17 @@ const styles = StyleSheet.create({
   head: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4},
   title: {fontSize: 16, fontWeight: '700', color: AYC.text},
   count: {fontSize: 12, color: AYC.muted},
+  subtitle: {fontSize: 11, color: AYC.muted, marginBottom: 8},
+  actions: {flexDirection: 'row', gap: 8, marginBottom: 8},
   refreshBtn: {
     alignSelf: 'flex-start',
-    marginBottom: 8,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: AYC.border,
     borderRadius: 6,
   },
+  btnDisabled: {opacity: 0.45},
   refreshTxt: {fontSize: 12, color: AYC.accent},
   error: {fontSize: 12, color: '#c62828', marginBottom: 8},
   thRow: {
@@ -185,8 +245,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     marginBottom: 4,
   },
-  th: {width: 72, fontSize: 11, fontWeight: '600', color: AYC.muted},
-  zoneTh: {width: 96, fontSize: 11, fontWeight: '600', color: AYC.muted},
+  th: {width: 64, fontSize: 11, fontWeight: '600', color: AYC.muted},
   symTh: {width: 88, fontSize: 11, fontWeight: '600', color: AYC.muted},
   tr: {
     flexDirection: 'row',
@@ -196,7 +255,6 @@ const styles = StyleSheet.create({
     borderBottomColor: AYC.border,
   },
   symTd: {width: 88},
-  td: {width: 72, fontSize: 12, color: AYC.text},
-  zoneTd: {width: 96, fontSize: 11, color: AYC.text},
+  td: {width: 64, fontSize: 12, color: AYC.text},
   empty: {padding: 16, fontSize: 12, color: AYC.muted, textAlign: 'center'},
 });

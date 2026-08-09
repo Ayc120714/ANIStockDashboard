@@ -146,6 +146,20 @@ export const dashboardService = {
   },
   fetchFiiDii: ({days = 20, timeoutMs} = {}) =>
     apiGet(`/fii-dii/?days=${encodeURIComponent(String(days))}`, {timeoutMs: timeoutMs ?? T.screen}),
+  fetchFiiSectorFlows: ({sort = 'fortnight_change', limit = 50, refresh = false, timeoutMs} = {}) => {
+    const q = new URLSearchParams({
+      sort: String(sort),
+      limit: String(limit),
+    });
+    if (refresh) q.set('refresh', 'true');
+    return apiGet(`/fii-dii/sectors?${q}`, {timeoutMs: timeoutMs ?? T.screen});
+  },
+  fetchFiiSectorStocks: ({sector, limit = 25, timeoutMs} = {}) => {
+    const name = encodeURIComponent(String(sector || '').trim());
+    return apiGet(`/fii-dii/sectors/${name}/stocks?limit=${encodeURIComponent(String(limit))}`, {
+      timeoutMs: timeoutMs ?? T.screen,
+    });
+  },
   fetchTrending: async (limit = 40, opts = {}) => {
     const q = new URLSearchParams({limit: String(limit)});
     if (opts?.date) q.set('date', String(opts.date));

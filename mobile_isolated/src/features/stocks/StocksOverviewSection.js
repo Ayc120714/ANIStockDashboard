@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {AYC} from '@core/theme/aycMobileTheme';
 import {FiiDiiCashCards} from '@components/FiiDiiCashCards';
+import {FiiSectorFlowsSection} from '@components/FiiSectorFlowsSection';
 import {ListPagePager} from '@components/ListPagePager';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {SubsectorStocksModal} from '@components/SubsectorStocksModal';
@@ -290,6 +291,7 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
   const renderMarket = () => (
     <View>
       <FiiDiiCashCards data={fii} loading={busy && !fii} />
+      <FiiSectorFlowsSection />
       <FlatList
         scrollEnabled={false}
         data={indices.filter(r => matchesSearch({name: r?.name || r?.symbol}, search))}

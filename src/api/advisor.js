@@ -259,7 +259,7 @@ export const fetchRsRvolEma5mSignals = async ({
 };
 
 export const fetchRenkoSmartSignals = async ({
-  limit = 300,
+  limit = 10,
   symbol_limit = 1500,
   hits_only = true,
   include_snapshots = false,
@@ -268,20 +268,17 @@ export const fetchRenkoSmartSignals = async ({
   refresh = false,
   rvol_min = 1.2,
 } = {}) => {
-  // Renko Smart tab now serves the 44-50 fib-zone pullback flow.
+  // Renko Smart: combined 5m upper Renko 44-50 + EMA cloud green + ST flip.
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('symbol_limit', String(symbol_limit));
-  params.set('rvol_min', String(rvol_min));
-  params.set('require_st_up', 'true');
-  params.set('require_rs_positive', 'true');
-  params.set('require_rvol', 'true');
+  params.set('hits_only', hits_only ? 'true' : 'false');
+  if (include_snapshots) params.set('include_snapshots', 'true');
   if (symbols && String(symbols).trim()) params.set('symbols', String(symbols).trim());
   if (as_of && String(as_of).trim()) params.set('as_of', String(as_of).trim());
   if (refresh) params.set('refresh', 'true');
-  void hits_only;
-  void include_snapshots;
-  return apiGet(`/advisor/signals/renko-fib-zone?${params.toString()}`);
+  void rvol_min;
+  return apiGet(`/advisor/signals/renko-smart?${params.toString()}`);
 };
 
 export const fetchLiveScreenerSignals = async ({

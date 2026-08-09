@@ -7,6 +7,7 @@ import { useBootstrapReadyState } from '../context/BootstrapReadyContext';
 import { OUTLOOK_PREMIUM_COLUMN_KEYS } from '../utils/outlookPremiumAccess';
 import UpgradeToPremiumBanner from '../components/UpgradeToPremiumBanner';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
+import FiiSectorFlowsSection from '../components/FiiSectorFlowsSection';
 import { getTradingViewChartSymbol } from '../utils/tradingViewOutlookSymbols';
 import { buildMarketBarChart } from '../utils/marketBarChart';
 import {
@@ -634,6 +635,8 @@ function MarketOutlookContent({ apiReady, timedOut }) {
           })}
         </SmallCardContainer>
       </CashCardContainer>
+
+      <FiiSectorFlowsSection />
 
       {/* Table Section */}
       <TableSection>

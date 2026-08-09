@@ -8,7 +8,12 @@ import {
   getNetSignKind,
   mapQuarterCircles,
   mapYearCircles,
+  normalizeFiiSectorFlowsPayload,
+  normalizeFiiSectorStocksPayload,
+  nextFiiSectorStockSort,
   periodCircleShownPoint,
+  sortFiiSectorRows,
+  sortFiiSectorStockRows,
   FII_DII_NEGATIVE_COLOR,
   FII_DII_NEUTRAL_COLOR,
   FII_DII_POSITIVE_COLOR,
@@ -112,5 +117,75 @@ describe('fiiDiiPayload', () => {
     expect(periodCircleShownPoint(card.quarters[2])).toEqual({ net: -4500, date: 'Q3 2026' });
     expect(periodCircleShownPoint(card.years[0])).toEqual({ net: 900, date: '2026' });
     expect(periodCircleShownPoint(card.quarters[3])).toBeNull();
+  });
+
+  it('normalizes and sorts Screener FII sector flow rows by fortnight change', () => {
+    const normalized = normalizeFiiSectorFlowsPayload({
+      ok: true,
+      as_of: '2026-07-31',
+      auth_required: false,
+      sectors: [
+        { sector: 'IT', fortnight_change: -10, flow_1y: 20, aum: 1 },
+        { sector: 'Banks', fortnight_change: 50, flow_1y: -5, aum: 2 },
+      ],
+    });
+    expect(normalized.asOf).toBe('2026-07-31');
+    const sorted = sortFiiSectorRows(normalized.sectors, 'fortnightChange');
+    expect(sorted.map((r) => r.sector)).toEqual(['Banks', 'IT']);
+    const stocks = normalizeFiiSectorStocksPayload({
+      sector: 'Banks',
+      stocks: [{ symbol: 'sbin', price: 800, day1d: 1.2, fii_pct: 10.5, fii_pct_delta: 0.3 }],
+    });
+    expect(stocks.stocks[0]).toMatchObject({ symbol: 'SBIN', day1d: 1.2, fiiPct: 10.5 });
+  });
+
+  it('sorts FII sector stocks up/down by each column (Symbol/CMP/CHG%/FII%/FII Δ)', () => {
+    const rows = [
+      { symbol: 'SAPPHIRE', price: 2240, day1d: 12.26, fiiPct: 25.25, fiiPctDelta: 0.34 },
+      { symbol: 'EMIL', price: 165.83, day1d: 7.75, fiiPct: 13.96, fiiPctDelta: -3.73 },
+      { symbol: 'PGHL', price: 2464.1, day1d: 10.02, fiiPct: 6.82, fiiPctDelta: 0.63 },
+    ];
+    expect(sortFiiSectorStockRows(rows, 'day1d', 'desc').map((r) => r.symbol)).toEqual([
+      'SAPPHIRE',
+      'PGHL',
+      'EMIL',
+    ]);
+    expect(sortFiiSectorStockRows(rows, 'day1d', 'asc').map((r) => r.symbol)).toEqual([
+      'EMIL',
+      'PGHL',
+      'SAPPHIRE',
+    ]);
+    expect(sortFiiSectorStockRows(rows, 'price', 'desc').map((r) => r.symbol)).toEqual([
+      'PGHL',
+      'SAPPHIRE',
+      'EMIL',
+    ]);
+    expect(sortFiiSectorStockRows(rows, 'fiiPct', 'asc').map((r) => r.symbol)).toEqual([
+      'PGHL',
+      'EMIL',
+      'SAPPHIRE',
+    ]);
+    expect(sortFiiSectorStockRows(rows, 'fiiPctDelta', 'asc').map((r) => r.symbol)).toEqual([
+      'EMIL',
+      'SAPPHIRE',
+      'PGHL',
+    ]);
+    expect(sortFiiSectorStockRows(rows, 'symbol', 'asc').map((r) => r.symbol)).toEqual([
+      'EMIL',
+      'PGHL',
+      'SAPPHIRE',
+    ]);
+    expect(nextFiiSectorStockSort({ key: 'day1d', direction: 'desc' }, 'day1d')).toEqual({
+      key: 'day1d',
+      direction: 'asc',
+    });
+    expect(nextFiiSectorStockSort({ key: 'day1d', direction: 'asc' }, 'fiiPct')).toEqual({
+      key: 'fiiPct',
+      direction: 'desc',
+    });
+    expect(nextFiiSectorStockSort({ key: 'day1d', direction: 'desc' }, 'symbol')).toEqual({
+      key: 'symbol',
+      direction: 'asc',
+    });
   });
 });

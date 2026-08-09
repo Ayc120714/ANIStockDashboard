@@ -29,6 +29,7 @@ export const INBOX_SOURCES = {
   CHART_MONTHLY: 'chart_monthly',
   PRICE_MOVERS: 'price_movers',
   VOLUME_MOVERS: 'volume_movers',
+  RENKO_SMART: 'renko_smart',
 };
 
 export const INBOX_SOURCE_LABELS = {
@@ -57,6 +58,7 @@ export const INBOX_SOURCE_LABELS = {
   [INBOX_SOURCES.CHART_MONTHLY]: 'Chart monthly',
   [INBOX_SOURCES.PRICE_MOVERS]: 'Price movers',
   [INBOX_SOURCES.VOLUME_MOVERS]: 'Volume movers',
+  [INBOX_SOURCES.RENKO_SMART]: 'Renko Smart',
 };
 
 export const INBOX_FILTER_CHIPS = [
@@ -85,6 +87,7 @@ export const INBOX_FILTER_CHIPS = [
   {id: INBOX_SOURCES.CHART_MONTHLY, label: 'M setup'},
   {id: INBOX_SOURCES.PRICE_MOVERS, label: 'Price movers'},
   {id: INBOX_SOURCES.VOLUME_MOVERS, label: 'Volume movers'},
+  {id: INBOX_SOURCES.RENKO_SMART, label: 'Renko Smart'},
   {id: INBOX_SOURCES.ADMIN, label: 'Admin'},
 ];
 
@@ -279,6 +282,7 @@ export function buildInboxSections({
     INBOX_SOURCES.CHART_MONTHLY,
     INBOX_SOURCES.PRICE_MOVERS,
     INBOX_SOURCES.VOLUME_MOVERS,
+    INBOX_SOURCES.RENKO_SMART,
   ];
 
   const sections = {
@@ -362,6 +366,7 @@ const TABLE_CHANGE_SOURCE_SET = new Set([
   INBOX_SOURCES.CHART_MONTHLY,
   INBOX_SOURCES.PRICE_MOVERS,
   INBOX_SOURCES.VOLUME_MOVERS,
+  INBOX_SOURCES.RENKO_SMART,
 ]);
 
 export function isTableChangeInboxItem(item) {

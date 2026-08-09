@@ -4,6 +4,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {SubsectorStocksModal} from '@components/SubsectorStocksModal';
 import {FiiDiiCashCards} from '@components/FiiDiiCashCards';
+import {FiiSectorFlowsSection} from '@components/FiiSectorFlowsSection';
 import {MarketIndexCardsRow} from '@components/MarketIndexCardsRow';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {dashboardService} from '@core/api/services/dashboardService';
@@ -184,6 +185,7 @@ export function MarketsHomeScreen({navigation}) {
             <MarketIndexCardsRow items={rows} showTrend />
 
             <FiiDiiCashCards data={fii} loading={busy && !fii} />
+            <FiiSectorFlowsSection />
           </>
         ) : null}
 

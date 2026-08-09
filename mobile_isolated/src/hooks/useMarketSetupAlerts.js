@@ -34,6 +34,11 @@ import {
   queueInAppSignalBanner,
   showSystemNotification,
 } from '@core/utils/signalNotifications';
+import {
+  isPushEligibleLiveAlert,
+  isPushEligibleTableKey,
+  isPushExcludedTableKey,
+} from '@core/utils/pushNotificationEligibility';
 
 const LIVE_ACTIVE_POLL_MS = 30_000;
 const LIVE_BACKGROUND_POLL_MS = 60_000;
@@ -50,7 +55,12 @@ function groupTableEvents(events = []) {
 }
 
 async function notifyTableChanges(newEvents = []) {
-  const grouped = groupTableEvents(newEvents);
+  const eligible = (newEvents || []).filter(event => {
+    const key = event?.tableKey || event?.source || '';
+    if (isPushExcludedTableKey(key)) return false;
+    return isPushEligibleTableKey(key, ADVISOR_TABLE_META);
+  });
+  const grouped = groupTableEvents(eligible);
   for (const [tableKey, rows] of grouped.entries()) {
     if (!rows.length) continue;
     const meta = ADVISOR_TABLE_META[tableKey] || {};
@@ -161,6 +171,7 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
       const fresh = diffNewLiveAlerts(prev, list).filter(row => {
         if (row?.is_read) return false;
         if (isDemoAlert(row)) return false;
+        if (!isPushEligibleLiveAlert(row)) return false;
         return isTodayInIST(row?.created_at || row?.alert_time || row?.updated_at);
       });
       for (const alert of fresh.slice(0, 5)) {

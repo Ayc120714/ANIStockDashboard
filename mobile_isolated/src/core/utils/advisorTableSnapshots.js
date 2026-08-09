@@ -24,6 +24,7 @@ export const ADVISOR_TABLE_KEYS = {
   CHART_MONTHLY: 'chart_monthly',
   PRICE_MOVERS: 'price_movers',
   VOLUME_MOVERS: 'volume_movers',
+  RENKO_SMART: 'renko_smart',
 };
 
 for (const tier of TREND_TIERS) {
@@ -83,6 +84,12 @@ export const ADVISOR_TABLE_META = {
     label: 'Volume movers',
     title: 'New in volume movers',
     screensMain: 'volume',
+  },
+  [ADVISOR_TABLE_KEYS.RENKO_SMART]: {
+    source: INBOX_SOURCES.RENKO_SMART,
+    label: 'Renko Smart',
+    title: 'New in Renko Smart',
+    advisorTab: 'renko',
   },
 };
 
@@ -157,7 +164,7 @@ function asStockRows(res) {
 
 /** Build symbol snapshots using the same APIs/limits as web advisor tabs. */
 export async function fetchAdvisorTableSnapshots() {
-  const [latestRes, monthlyRes, customRes, mondayRes, trendRes, chartRes, priceRes, volumeRes] =
+  const [latestRes, monthlyRes, customRes, mondayRes, trendRes, chartRes, priceRes, volumeRes, renkoRes] =
     await Promise.allSettled([
       signalsService.fetchLatestSignals({limit: ADVISOR_WEB_LIMITS.latestSignals}),
       advisorService.fetchMonthlyMacdSetup(ADVISOR_WEB_LIMITS.monthlyMacd),
@@ -177,6 +184,7 @@ export async function fetchAdvisorTableSnapshots() {
       }),
       dashboardService.fetchPriceShockers({type: 'gainers', period: 'day', limit: 50}),
       dashboardService.fetchVolumeShockers({limit: 50, period: 'day'}),
+      advisorService.fetchRenkoSmartSignals({limit: 10, symbol_limit: 1500, hits_only: true}),
     ]);
 
   const latest = latestRes.status === 'fulfilled' ? asRows(latestRes.value) : [];
@@ -188,6 +196,12 @@ export async function fetchAdvisorTableSnapshots() {
   const chartBlocks = chartPayload ? buildChartAgentBlocks(chartPayload) : [];
   const priceMovers = priceRes.status === 'fulfilled' ? asStockRows(priceRes.value) : [];
   const volumeMovers = volumeRes.status === 'fulfilled' ? asStockRows(volumeRes.value) : [];
+  const renko =
+    renkoRes.status === 'fulfilled'
+      ? Array.isArray(renkoRes.value?.data)
+        ? renkoRes.value.data
+        : asRows(renkoRes.value)
+      : [];
 
   const sigTierGrouped = groupLatestSignalsByTier(latest, new Map());
   const chartById = Object.fromEntries(chartBlocks.map(block => [block.id, block.rows || []]));
@@ -201,6 +215,7 @@ export async function fetchAdvisorTableSnapshots() {
     [ADVISOR_TABLE_KEYS.CHART_MONTHLY]: symbolsFromRows(chartById.monthly),
     [ADVISOR_TABLE_KEYS.PRICE_MOVERS]: symbolsFromRows(priceMovers),
     [ADVISOR_TABLE_KEYS.VOLUME_MOVERS]: symbolsFromRows(volumeMovers),
+    [ADVISOR_TABLE_KEYS.RENKO_SMART]: symbolsFromRows(renko),
   };
 
   for (const tier of TREND_TIERS) {

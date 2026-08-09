@@ -218,6 +218,119 @@ export function buildFiiDiiCard(fiiDiiData, kind) {
   };
 }
 
+/** Normalize Screener /fii/ sector ranking payload for Markets UI. */
+export function normalizeFiiSectorFlowsPayload(payload) {
+  const sectors = Array.isArray(payload?.sectors) ? payload.sectors : [];
+  return {
+    ok: payload?.ok !== false,
+    asOf: payload?.as_of || payload?.asOf || null,
+    sort: payload?.sort || 'fortnight_change',
+    source: payload?.source || 'screener.in/fii',
+    cadence: payload?.cadence || 'fortnightly',
+    label: payload?.label || 'FII sector additions (fortnightly)',
+    authRequired: Boolean(payload?.auth_required || payload?.authRequired),
+    message: payload?.message || null,
+    sectors: sectors
+      .map(row => ({
+        sector: String(row?.sector || '').trim(),
+        aum: row?.aum == null ? null : Number(row.aum),
+        fortnightChange: row?.fortnight_change ?? row?.fortnightChange ?? null,
+        flow1y: row?.flow_1y ?? row?.flow1y ?? null,
+        fiiOwnershipPct: row?.fii_ownership_pct ?? row?.fiiOwnershipPct ?? null,
+      }))
+      .filter(r => r.sector),
+    count: Number(payload?.count ?? sectors.length) || 0,
+  };
+}
+
+export function sortFiiSectorRows(rows, sortKey = 'fortnightChange') {
+  const list = Array.isArray(rows) ? [...rows] : [];
+  const key =
+    sortKey === 'flow_1y' || sortKey === 'flow1y' || sortKey === '1y'
+      ? 'flow1y'
+      : sortKey === 'aum'
+        ? 'aum'
+        : 'fortnightChange';
+  list.sort((a, b) => {
+    const av = a?.[key];
+    const bv = b?.[key];
+    if (av == null && bv == null) return String(a?.sector || '').localeCompare(String(b?.sector || ''));
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (Number(bv) !== Number(av)) return Number(bv) - Number(av);
+    return String(a?.sector || '').localeCompare(String(b?.sector || ''));
+  });
+  return list;
+}
+
+const FII_STOCK_SORT_KEYS = {
+  symbol: 'symbol',
+  price: 'price',
+  cmp: 'price',
+  day1d: 'day1d',
+  chg: 'day1d',
+  fiiPct: 'fiiPct',
+  fii_pct: 'fiiPct',
+  fiiPctDelta: 'fiiPctDelta',
+  fii_pct_delta: 'fiiPctDelta',
+};
+
+/** Sort stocks under a clicked FII sector (Symbol / CMP / CHG% / FII % / FII Δ). */
+export function sortFiiSectorStockRows(rows, sortKey = 'day1d', direction = 'desc') {
+  const list = Array.isArray(rows) ? [...rows] : [];
+  const key = FII_STOCK_SORT_KEYS[sortKey] || 'day1d';
+  const dir = direction === 'asc' ? 1 : -1;
+  list.sort((a, b) => {
+    if (key === 'symbol') {
+      return dir * String(a?.symbol || '').localeCompare(String(b?.symbol || ''));
+    }
+    const av = a?.[key];
+    const bv = b?.[key];
+    if (av == null && bv == null) {
+      return String(a?.symbol || '').localeCompare(String(b?.symbol || ''));
+    }
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (Number(av) !== Number(bv)) return dir * (Number(av) - Number(bv));
+    return String(a?.symbol || '').localeCompare(String(b?.symbol || ''));
+  });
+  return list;
+}
+
+export function nextFiiSectorStockSort(prev, column) {
+  const key = FII_STOCK_SORT_KEYS[column] || column;
+  if (prev?.key === key) {
+    return {key, direction: prev.direction === 'asc' ? 'desc' : 'asc'};
+  }
+  return {key, direction: key === 'symbol' ? 'asc' : 'desc'};
+}
+
+export function normalizeFiiSectorStocksPayload(payload) {
+  const stocks = Array.isArray(payload?.stocks) ? payload.stocks : [];
+  return {
+    ok: payload?.ok !== false,
+    sector: String(payload?.sector || '').trim(),
+    matchedSectors: Array.isArray(payload?.matched_sectors || payload?.matchedSectors)
+      ? payload.matched_sectors || payload.matchedSectors
+      : [],
+    stocks: stocks
+      .map(row => ({
+        symbol: String(row?.symbol || '')
+          .trim()
+          .toUpperCase(),
+        sector: row?.sector || '',
+        subsector: row?.subsector || '',
+        price: row?.price == null ? null : Number(row.price),
+        day1d: row?.day1d ?? row?.chg_pct ?? null,
+        fiiPct: row?.fii_pct ?? row?.fiiPct ?? null,
+        fiiPctDelta: row?.fii_pct_delta ?? row?.fiiPctDelta ?? null,
+        fiiPeriod: row?.fii_period ?? row?.fiiPeriod ?? null,
+      }))
+      .filter(r => r.symbol),
+    count: Number(payload?.count ?? stocks.length) || 0,
+  };
+}
+
 export function buildBarMetrics(values, height = 68) {
   if (!values?.length) return null;
   const safeVals = values.map(v => {

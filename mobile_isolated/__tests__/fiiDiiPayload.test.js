@@ -7,9 +7,14 @@ import {
   mapQuarterCircles,
   mapYearCircles,
   MIN_FII_DII_DAYS,
+  normalizeFiiSectorFlowsPayload,
+  normalizeFiiSectorStocksPayload,
+  nextFiiSectorStockSort,
   periodCircleShownPoint,
   periodCircleTone,
   periodFlowLabel,
+  sortFiiSectorRows,
+  sortFiiSectorStockRows,
 } from '@core/utils/fiiDiiPayload';
 
 describe('fiiDiiPayload', () => {
@@ -135,5 +140,37 @@ describe('fiiDiiPayload', () => {
     expect(card.bars).toEqual([999]);
     expect(card.latestNet).toBe(999);
     expect(card.mtdNet).toBe(999);
+  });
+
+  it('normalizes Screener FII sector flows and sorts by fortnight change', () => {
+    const normalized = normalizeFiiSectorFlowsPayload({
+      as_of: '2026-07-31',
+      sectors: [
+        {sector: 'IT', fortnight_change: -10, flow_1y: 5},
+        {sector: 'Banks', fortnight_change: 40, flow_1y: -2},
+      ],
+    });
+    expect(sortFiiSectorRows(normalized.sectors).map(r => r.sector)).toEqual(['Banks', 'IT']);
+    const stocks = normalizeFiiSectorStocksPayload({
+      stocks: [{symbol: 'hdfcbank', day1d: 1.1, fii_pct: 22}],
+    });
+    expect(stocks.stocks[0].symbol).toBe('HDFCBANK');
+  });
+
+  it('sorts FII sector stocks up/down by each column', () => {
+    const rows = [
+      {symbol: 'SAPPHIRE', price: 2240, day1d: 12.26, fiiPct: 25.25, fiiPctDelta: 0.34},
+      {symbol: 'EMIL', price: 165.83, day1d: 7.75, fiiPct: 13.96, fiiPctDelta: -3.73},
+      {symbol: 'PGHL', price: 2464.1, day1d: 10.02, fiiPct: 6.82, fiiPctDelta: 0.63},
+    ];
+    expect(sortFiiSectorStockRows(rows, 'fiiPctDelta', 'asc').map(r => r.symbol)).toEqual([
+      'EMIL',
+      'SAPPHIRE',
+      'PGHL',
+    ]);
+    expect(nextFiiSectorStockSort({key: 'price', direction: 'desc'}, 'price')).toEqual({
+      key: 'price',
+      direction: 'asc',
+    });
   });
 });
