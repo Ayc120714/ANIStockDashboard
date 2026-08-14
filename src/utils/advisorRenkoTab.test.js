@@ -20,4 +20,10 @@ describe('advisor Renko Smart tab routing', () => {
     expect(resolveAdvisorTabIndex('hot_subsectors')).toBe(6);
     expect(resolveAdvisorTabIndex('HotSubsectors')).toBe(6);
   });
+
+  it('maps ML setups advisorTab keys to index 7', () => {
+    expect(resolveAdvisorTabIndex('ml')).toBe(7);
+    expect(resolveAdvisorTabIndex('ml_setups')).toBe(7);
+    expect(resolveAdvisorTabIndex('live_ml')).toBe(7);
+  });
 });

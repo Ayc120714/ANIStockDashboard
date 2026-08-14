@@ -428,6 +428,21 @@ export const fetchHotSubsectors = async ({
   return apiGet(`/advisor/signals/hot-subsectors?${params.toString()}`);
 };
 
+/** Ranked live-market setups (ML score) for Advisor → ML Setups. */
+export const fetchMlSetups = async ({
+  min_score = 0.55,
+  setup_type = '',
+  side = '',
+  limit = 200,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('min_score', String(min_score));
+  params.set('limit', String(limit));
+  if (setup_type) params.set('setup_type', String(setup_type));
+  if (side !== '' && side != null) params.set('side', String(side));
+  return apiGet(`/advisor/signals/ml-setups?${params.toString()}`);
+};
+
 export const fetchSignals = async (symbol, limit = 10) => {
   const data = await apiGet(`/advisor/signals/${symbol}?limit=${limit}`);
   return data?.data ?? [];

@@ -56,6 +56,7 @@ import {AdvisorSignalsSection} from './AdvisorSignalsSection';
 import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
 import {RenkoSmartSignalsSection} from './RenkoSmartSignalsSection';
 import {HotSubsectorsSignalsSection} from './HotSubsectorsSignalsSection';
+import {MlSetupsSignalsSection} from './MlSetupsSignalsSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -70,6 +71,7 @@ const TABS = [
   {id: 'ai', label: 'AI analysis'},
   {id: 'health', label: 'Portfolio health'},
   {id: 'hot', label: 'Hot Subsectors'},
+  {id: 'ml', label: 'ML Setups'},
 ];
 
 function formatChgPct(v) {
@@ -709,6 +711,27 @@ export function AdvisorHubScreen({navigation}) {
           }>
           {head}
           <HotSubsectorsSignalsSection />
+        </ScrollView>
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'ml') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={styles.pad}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                /* Section owns refresh via Refresh button / live poll */
+              }}
+            />
+          }>
+          {head}
+          <MlSetupsSignalsSection />
         </ScrollView>
       </MobileChrome>
     );

@@ -9,6 +9,7 @@ const TABS = [
   {id: 'ai', label: 'AI analysis'},
   {id: 'health', label: 'Portfolio health'},
   {id: 'hot', label: 'Hot Subsectors'},
+  {id: 'ml', label: 'ML Setups'},
 ];
 
 describe('advisor Renko Smart mobile tab', () => {
@@ -26,11 +27,17 @@ describe('advisor Renko Smart mobile tab', () => {
       'ai',
       'health',
       'hot',
+      'ml',
     ]);
   });
 
   it('includes Hot Subsectors as a top-level Advisor tab', () => {
     expect(TABS.some(t => t.id === 'hot')).toBe(true);
     expect(TABS.find(t => t.id === 'hot')?.label).toBe('Hot Subsectors');
+  });
+
+  it('includes ML Setups as a top-level Advisor tab', () => {
+    expect(TABS.some(t => t.id === 'ml')).toBe(true);
+    expect(TABS.find(t => t.id === 'ml')?.label).toBe('ML Setups');
   });
 });

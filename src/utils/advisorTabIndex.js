@@ -19,6 +19,9 @@ export function resolveAdvisorTabIndex(advisorTab) {
   ) {
     return 6;
   }
+  if (key === 'ml' || key === 'ml_setups' || key === 'mlsetups' || key === 'live_ml') {
+    return 7;
+  }
   const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 6 ? n : 0;
+  return Number.isFinite(n) && n >= 0 && n <= 7 ? n : 0;
 }
