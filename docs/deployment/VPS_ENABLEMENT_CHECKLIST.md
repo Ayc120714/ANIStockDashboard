@@ -200,7 +200,7 @@ curl -sS "http://127.0.0.1:8000/api/fii-dii/refresh"
 | **Backend** | `app/api/auth.py` — `AUTH_SUPER_ADMIN_EMAILS` (comma list); admin APIs call `_require_super_admin()`. |
 
 **Frontend** super-admin list: `REACT_APP_SUPER_ADMIN_EMAILS` (optional) merged with defaults in `src/auth/AuthContext.js`.
-**Backend** must list the **same** emails: `AUTH_SUPER_ADMIN_EMAILS` in `backend_stockdashboard/.env` (defaults include `gvc1990@gmail.com`, `admin@aycindustries.com`).
+**Backend** must list the **same** emails: `AUTH_SUPER_ADMIN_EMAILS` in `backend_stockdashboard/.env` (default: `gvc1990@gmail.com`).
 
 If a normal user still **manually opens** `/admin-users`, they are redirected home; API calls from their token return **403** from protected admin routes.
 

@@ -8,6 +8,8 @@ describe('outlookTabUtils', () => {
   it('resolves outlook tab aliases to stable ids', () => {
     expect(resolveOutlookTab(null)).toBe('market');
     expect(resolveOutlookTab('')).toBe('market');
+    expect(resolveOutlookTab('daily')).toBe('daily');
+    expect(resolveOutlookTab('daily-update')).toBe('daily');
     expect(resolveOutlookTab('sector')).toBe('sector');
     expect(resolveOutlookTab('sub')).toBe('subsector');
     expect(resolveOutlookTab('subsector')).toBe('subsector');

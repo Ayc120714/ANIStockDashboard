@@ -70,13 +70,13 @@ curl -sS -H "Authorization: Bearer YOUR_ACCESS_TOKEN" https://www.aycindustries.
 curl -sS -H "Authorization: Bearer YOUR_ACCESS_TOKEN" "https://www.aycindustries.com/api/auth/admin/users?include_inactive=true"
 ```
 
-Super-admin list/create/delete APIs require the logged-in user’s email to match `AUTH_SUPER_ADMIN_EMAILS` (defaults: `gvc1990@gmail.com`, `admin@aycindustries.com`).
+Super-admin list/create/delete APIs require the logged-in user’s email to match `AUTH_SUPER_ADMIN_EMAILS` (default: `gvc1990@gmail.com`).
 
 ## 8. Env template (backend `.env`)
 
 ```env
 DATABASE_URL=postgresql+psycopg2://stockapp:choose_a_strong_password@127.0.0.1:5432/stockdb
-AUTH_SUPER_ADMIN_EMAILS=gvc1990@gmail.com,admin@aycindustries.com
+AUTH_SUPER_ADMIN_EMAILS=gvc1990@gmail.com
 ```
 
 Restart the API after any change:

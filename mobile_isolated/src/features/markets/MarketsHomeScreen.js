@@ -5,6 +5,7 @@ import {MobileChrome} from '@components/mobileChrome/MobileChrome';
 import {SubsectorStocksModal} from '@components/SubsectorStocksModal';
 import {FiiDiiCashCards} from '@components/FiiDiiCashCards';
 import {FiiSectorFlowsSection} from '@components/FiiSectorFlowsSection';
+import {DailyMarketUpdateSection} from '@components/DailyMarketUpdateSection';
 import {MarketIndexCardsRow} from '@components/MarketIndexCardsRow';
 import {SortableTableHeader} from '@components/SortableTableHeader';
 import {dashboardService} from '@core/api/services/dashboardService';
@@ -25,6 +26,7 @@ import {
 import {runScreenPayloadFetch, shouldRefreshPageCache} from '@core/utils/screenPageLoader';
 
 const TABS = [
+  {id: 'daily', label: 'Daily Update'},
   {id: 'market', label: 'Market Insights'},
   {id: 'sector', label: 'Sector Insights'},
   {id: 'subsector', label: 'SubSector'},
@@ -40,10 +42,16 @@ export function MarketsHomeScreen({navigation}) {
   const [fii, setFii] = useState(null);
   const [error, setError] = useState('');
   const [stocksModal, setStocksModal] = useState({visible: false, subsector: '', sector: ''});
+  const [dailyRefreshToken, setDailyRefreshToken] = useState(0);
   const tabSortKey = tab === 'subsector' ? 'all' : 'day1d';
   const {sortConfig, onSort, resetSort} = useTableSort(tabSortKey, false);
 
   const load = useCallback(async ({forceRefresh = false, silent = false} = {}) => {
+    if (tab === 'daily') {
+      if (forceRefresh) setDailyRefreshToken(t => t + 1);
+      setBusy(false);
+      return;
+    }
     const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
     await runScreenPayloadFetch({
       cacheKey,
@@ -79,6 +87,10 @@ export function MarketsHomeScreen({navigation}) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (tab === 'daily') {
+        setBusy(false);
+        return;
+      }
       const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
       const hadCache = await hydrateFromPageCache(cacheKey, {
         apply: payload => {
@@ -103,6 +115,7 @@ export function MarketsHomeScreen({navigation}) {
 
   useFocusEffect(
     useCallback(() => {
+      if (tab === 'daily') return;
       const cacheKey = MOBILE_PAGE_CACHE_KEYS.marketsOutlook(tab);
       const {listLength, fii: fiiSnap} = outlookFocusRef.current;
       refreshMarketsOutlookOnFocus({
@@ -177,8 +190,10 @@ export function MarketsHomeScreen({navigation}) {
           ))}
         </View>
 
-        {busy && !list.length && !fii ? <ActivityIndicator color={AYC.accent} /> : null}
-        {error ? <Text style={styles.err}>{error}</Text> : null}
+        {busy && tab !== 'daily' && !list.length && !fii ? <ActivityIndicator color={AYC.accent} /> : null}
+        {error && tab !== 'daily' ? <Text style={styles.err}>{error}</Text> : null}
+
+        {tab === 'daily' ? <DailyMarketUpdateSection refreshToken={dailyRefreshToken} /> : null}
 
         {tab === 'market' ? (
           <>
@@ -189,11 +204,13 @@ export function MarketsHomeScreen({navigation}) {
           </>
         ) : null}
 
+        {tab !== 'daily' ? (
         <Text style={styles.sectionTitle}>
           {tab === 'sector' ? 'SECTOR INDICES' : tab === 'subsector' ? 'SUBSECTOR OUTLOOK' : 'MARKET INDICES TABLE'}
         </Text>
+        ) : null}
 
-        {tab !== 'subsector' ? (
+        {tab !== 'daily' && tab !== 'subsector' ? (
           <>
             <View style={styles.tableHead}>
               {tableHeaders.map(h => (
@@ -234,7 +251,7 @@ export function MarketsHomeScreen({navigation}) {
               );
             })}
           </>
-        ) : (
+        ) : tab === 'subsector' ? (
           <>
             <View style={styles.tableHead}>
               <SortableTableHeader label="Sub Sector" sortKey="name" sortConfig={sortConfig} onSort={onSort} style={{flex: 1.2}} textStyle={styles.h} />
@@ -277,7 +294,7 @@ export function MarketsHomeScreen({navigation}) {
               );
             })}
           </>
-        )}
+        ) : null}
       </ScrollView>
       <SubsectorStocksModal
         visible={stocksModal.visible}

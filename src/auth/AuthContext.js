@@ -5,32 +5,18 @@ import { clearBrokerSession } from '../api/brokers';
 import { resolveOutlookPremiumAccess } from '../utils/outlookPremiumAccess';
 import { clearAllSessionPageCaches } from '../utils/pageDataCache';
 import { beginLogout, isLogoutActive, resetLogoutState } from './authSessionControl';
+import { buildAdminEmailSet } from './adminEmails';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY = 'auth_user';
 const LOGOUT_BROKERS = ['dhan', 'angelone', 'samco', 'upstox', 'kotak', 'fyers', 'zerodha'];
-const DEFAULT_ADMIN_EMAILS = ['gvc1990@gmail.com', 'admin@aycindustries.com'];
 
 const AuthContext = createContext(null);
-const ADMIN_EMAILS = new Set(
-  [
-    ...DEFAULT_ADMIN_EMAILS,
-    ...(process.env.REACT_APP_ADMIN_EMAILS || '').split(','),
-  ]
-    .map((v) => String(v).trim().toLowerCase())
-    .filter(Boolean)
-);
+const ADMIN_EMAILS = buildAdminEmailSet(process.env.REACT_APP_ADMIN_EMAILS);
 
 /** Admin Users + Telegram Admin routes only (not watchlist/order admin). */
-const SUPER_ADMIN_EMAILS = new Set(
-  [
-    ...DEFAULT_ADMIN_EMAILS,
-    ...(process.env.REACT_APP_SUPER_ADMIN_EMAILS || '').split(','),
-  ]
-    .map((v) => String(v).trim().toLowerCase())
-    .filter(Boolean)
-);
+const SUPER_ADMIN_EMAILS = buildAdminEmailSet(process.env.REACT_APP_SUPER_ADMIN_EMAILS);
 
 const clearLocalBrokerSessionMarkers = () => {
   try {

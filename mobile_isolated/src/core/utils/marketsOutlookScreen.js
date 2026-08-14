@@ -4,18 +4,20 @@
  */
 
 export function marketsOutlookListForTab(tab, {rows = [], sectorRows = [], subRows = []} = {}) {
+  if (tab === 'daily') return [];
   if (tab === 'market') return rows;
   if (tab === 'sector') return sectorRows;
   return subRows;
 }
 
 /** Silent background refresh when the screen already shows cached rows or FII/DII. */
-export function shouldMarketsFocusReloadSilent({listLength = 0, fii = null} = {}) {
-  return listLength > 0 || fii != null;
+export function shouldMarketsFocusReloadSilent({listLength = 0, fii = null, dailyOk = false} = {}) {
+  return listLength > 0 || fii != null || dailyOk;
 }
 
 export function marketsOutlookPayloadUsable(tab, data) {
   if (!data || typeof data !== 'object') return false;
+  if (tab === 'daily') return Boolean(data.dailyPayload?.asOfLabel || data.dailyPayload?.narratives);
   if (tab === 'market') return (data.rows?.length > 0) || data.fii != null;
   if (tab === 'sector') return data.sectorRows?.length > 0;
   return data.subRows?.length > 0;

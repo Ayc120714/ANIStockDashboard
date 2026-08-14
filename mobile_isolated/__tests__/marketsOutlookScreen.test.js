@@ -25,6 +25,10 @@ describe('marketsOutlookScreen helpers', () => {
       expect(marketsOutlookListForTab('subsector', payload)).toEqual(payload.subRows);
     });
 
+    it('returns empty list on daily tab (self-contained section)', () => {
+      expect(marketsOutlookListForTab('daily', payload)).toEqual([]);
+    });
+
     it('defaults to empty arrays when fields are missing', () => {
       expect(marketsOutlookListForTab('market')).toEqual([]);
       expect(marketsOutlookListForTab('sector')).toEqual([]);
@@ -48,6 +52,10 @@ describe('marketsOutlookScreen helpers', () => {
     it('is true when both rows and FII/DII are present', () => {
       expect(shouldMarketsFocusReloadSilent({listLength: 1, fii: {dii_net: 50}})).toBe(true);
     });
+
+    it('is true when daily payload is already shown', () => {
+      expect(shouldMarketsFocusReloadSilent({listLength: 0, fii: null, dailyOk: true})).toBe(true);
+    });
   });
 
   describe('marketsOutlookPayloadUsable', () => {
@@ -62,6 +70,15 @@ describe('marketsOutlookScreen helpers', () => {
     it('market tab: not usable when empty', () => {
       expect(marketsOutlookPayloadUsable('market', {rows: [], fii: null})).toBe(false);
       expect(marketsOutlookPayloadUsable('market', null)).toBe(false);
+    });
+
+    it('daily tab: usable with normalized daily payload', () => {
+      expect(
+        marketsOutlookPayloadUsable('daily', {
+          dailyPayload: {asOfLabel: 'Thursday, 13 August 2026', narratives: {headline: 'x'}},
+        }),
+      ).toBe(true);
+      expect(marketsOutlookPayloadUsable('daily', {dailyPayload: {}})).toBe(false);
     });
 
     it('sector tab: usable with sector rows', () => {

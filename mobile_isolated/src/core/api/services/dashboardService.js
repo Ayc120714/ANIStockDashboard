@@ -160,6 +160,14 @@ export const dashboardService = {
       timeoutMs: timeoutMs ?? T.screen,
     });
   },
+  fetchDailyMarketUpdate: ({volumeLimit = 10, sectorTopN = 5, signalSymbolLimit, timeoutMs} = {}) => {
+    const q = new URLSearchParams({
+      volume_limit: String(volumeLimit),
+      sector_top_n: String(sectorTopN),
+    });
+    if (signalSymbolLimit != null) q.set('signal_symbol_limit', String(signalSymbolLimit));
+    return apiGet(`/daily-market-update?${q}`, {timeoutMs: timeoutMs ?? T.screenHeavy});
+  },
   fetchTrending: async (limit = 40, opts = {}) => {
     const q = new URLSearchParams({limit: String(limit)});
     if (opts?.date) q.set('date', String(opts.date));

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useScrollActiveTabIntoView } from '../hooks/useScrollActiveTabIntoView';
 import MarketOutlookPage from './MarketOutlookPage';
+import DailyMarketUpdatePage from './DailyMarketUpdatePage';
 import { PageContainer, PageTitle, Tab, TabContainer, TabContent } from './OutlookPage.style';
 import SectorOutlookPage from './SectorOutlookPage';
 import SubSectorOutlookPage from './SubSectorOutlookPage';
@@ -56,6 +57,9 @@ function OutlookPage() {
     <PageContainer>
       <PageTitle>Overview</PageTitle>
       <TabContainer data-page-tabs>
+        <Tab ref={setTabRef('daily')} active={activeTab === 'daily'} onClick={() => updateTab('daily', { clearSector: true })}>
+          Daily Update
+        </Tab>
         <Tab ref={setTabRef('market')} active={activeTab === 'market'} onClick={() => updateTab('market', { clearSector: true })}>
           Market Insights
         </Tab>
@@ -71,6 +75,10 @@ function OutlookPage() {
           SubSector Insights
         </Tab>
       </TabContainer>
+
+      <TabContent active={activeTab === 'daily'} style={activeTab === 'daily' ? { padding: 0, background: 'transparent', boxShadow: 'none' } : undefined}>
+        <DailyMarketUpdatePage />
+      </TabContent>
 
       <TabContent active={activeTab === 'market'}>
         <MarketOutlookPage />
