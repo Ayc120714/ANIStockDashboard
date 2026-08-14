@@ -2,6 +2,7 @@ import {
   formatMlSetupType,
   mlSetupDirectionLabel,
   normalizeMlSetupsPayload,
+  ensureMlSetupRows,
 } from '../src/core/utils/mlSetupsAdvisor';
 
 describe('Advisor ML Setups payload (mobile)', () => {
@@ -33,5 +34,10 @@ describe('Advisor ML Setups payload (mobile)', () => {
     });
     expect(normalized.live_enabled).toBe(false);
     expect(normalized.ready_for_open).toBe(true);
+  });
+
+  it('never treats a cache object as the row list (blank Advisor crash)', () => {
+    expect(ensureMlSetupRows({data: [{symbol: 'HAL'}], meta: {}})).toEqual([]);
+    expect(ensureMlSetupRows([{symbol: 'HAL'}])).toEqual([{symbol: 'HAL'}]);
   });
 });

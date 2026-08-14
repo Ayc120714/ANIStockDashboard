@@ -964,7 +964,14 @@ export function AdvisorHubScreen({navigation}) {
     );
   }
 
-  return null;
+  return (
+    <MobileChrome navigation={navigation}>
+      <ScrollView style={{flex: 1}} contentContainerStyle={styles.pad}>
+        {head}
+        <Text style={styles.empty}>This Advisor tab is unavailable. Pick another tab above.</Text>
+      </ScrollView>
+    </MobileChrome>
+  );
 }
 
 const styles = StyleSheet.create({

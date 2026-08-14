@@ -9,15 +9,18 @@ import { formatAlertTimeIST } from '../utils/alertInboxUtils';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
 import { runLiveMarketPageMountPoll } from '../utils/screenPageLoader';
 import {
+  ensureMlSetupRows,
   formatMlSetupType,
   mlSetupDirectionLabel,
+  mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
 } from '../utils/mlSetupsAdvisor';
 
 const POLL_MS = 30 * 1000;
 const PAGE_SIZE = 25;
-const CACHE_KEY = 'advisor_ml_setups_v2';
+const CACHE_KEY = 'advisor_ml_setups_v3';
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
+const symbolTdStyle = symbolCellTdStyle(compact);
 
 const COLS = [
   { key: 'ml_score', label: 'ML', numeric: true },
@@ -43,12 +46,46 @@ const fmtNum = (v, digits = 2) => {
 const fmtPct = (v) => {
   if (v == null || Number.isNaN(Number(v))) return '—';
   const n = Number(v) * 100;
+  if (!Number.isFinite(n)) return '—';
   return `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
 };
 
-export default function MlSetupsTable() {
+const fmtScore = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : '—';
+};
+
+class MlSetupsTabGuard extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <Typography color="error" variant="body2" sx={{ py: 2 }}>
+          ML Setups failed to render. Refresh the Advisor page.
+        </Typography>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function MlSetupsTableInner() {
   const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState({ ready_for_open: false, feature_symbols: 0, high_conviction: 0, session_date: '' });
+  const [meta, setMeta] = useState({
+    ready_for_open: false,
+    live_enabled: false,
+    feature_symbols: 0,
+    high_conviction: 0,
+    session_date: '',
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [setupType, setSetupType] = useState('');
@@ -63,9 +100,10 @@ export default function MlSetupsTable() {
     try {
       if (!forceNetwork) {
         const cached = readPageCache(CACHE_KEY);
-        if (cached?.data?.length) {
-          setRows(cached.data);
-          setMeta(cached.meta || {});
+        const hydrated = mlSetupsRowsAndMetaFromCache(cached);
+        if (hydrated.rows.length) {
+          setRows(hydrated.rows);
+          setMeta((prev) => ({ ...prev, ...hydrated.meta }));
           if (!silent) setLoading(false);
         }
       }
@@ -76,7 +114,8 @@ export default function MlSetupsTable() {
         limit: 200,
       });
       const normalized = normalizeMlSetupsPayload(payload);
-      setRows(normalized.data);
+      const nextRows = ensureMlSetupRows(normalized.data);
+      setRows(nextRows);
       const nextMeta = {
         ready_for_open: normalized.ready_for_open,
         live_enabled: normalized.live_enabled,
@@ -88,7 +127,7 @@ export default function MlSetupsTable() {
         metrics: normalized.metrics,
       };
       setMeta(nextMeta);
-      writePageCache(CACHE_KEY, { data: normalized.data, meta: nextMeta });
+      writePageCache(CACHE_KEY, { data: nextRows, meta: nextMeta });
     } catch (e) {
       setError(String(e?.message || 'Could not load ML setups'));
     } finally {
@@ -106,8 +145,10 @@ export default function MlSetupsTable() {
     return () => { if (cleanup) cleanup(); };
   }, [load]);
 
+  const safeRows = ensureMlSetupRows(rows);
+
   const sorted = useMemo(() => {
-    const list = [...rows];
+    const list = [...safeRows];
     const mul = sortDir === 'asc' ? 1 : -1;
     list.sort((a, b) => {
       if (sortCol === 'symbol' || sortCol === 'alert_type' || sortCol === 'direction') {
@@ -125,11 +166,13 @@ export default function MlSetupsTable() {
       return mul * (av - bv);
     });
     return list;
-  }, [rows, sortCol, sortDir]);
+  }, [safeRows, sortCol, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const auc = meta?.metrics?.roc_auc;
+  const safePage = Math.min(page, pageCount);
+  const paged = sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const aucRaw = Number(meta?.metrics?.roc_auc);
+  const auc = Number.isFinite(aucRaw) ? aucRaw : null;
 
   const toggleSort = (key) => {
     if (sortCol === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -141,9 +184,9 @@ export default function MlSetupsTable() {
   };
 
   const setupOptions = useMemo(() => {
-    const types = new Set(rows.map((r) => r.alert_type).filter(Boolean));
+    const types = new Set(safeRows.map((r) => r.alert_type).filter(Boolean));
     return [...types].sort();
-  }, [rows]);
+  }, [safeRows]);
 
   return (
     <Box id="advisor-ml-setups" sx={{ mb: 2 }}>
@@ -160,13 +203,13 @@ export default function MlSetupsTable() {
           color={meta.live_enabled ? 'success' : meta.ready_for_open ? 'success' : 'warning'}
           label={meta.live_enabled ? 'Live market on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming data'}
         />
-        <Chip size="small" variant="outlined" label={`${meta.high_conviction || rows.length} high conviction`} />
+        <Chip size="small" variant="outlined" label={`${meta.high_conviction || safeRows.length} high conviction`} />
         <Chip size="small" variant="outlined" label={`${meta.feature_symbols || 0} symbols with live features`} />
         {meta.session_date ? (
           <Chip size="small" variant="outlined" label={`Session ${meta.session_date}`} />
         ) : null}
         {auc != null ? (
-          <Chip size="small" variant="outlined" label={`AUC ${Number(auc).toFixed(2)}`} />
+          <Chip size="small" variant="outlined" label={`AUC ${auc.toFixed(2)}`} />
         ) : null}
         <Select
           size="small"
@@ -195,12 +238,12 @@ export default function MlSetupsTable() {
           Refresh
         </Button>
       </Box>
-      {loading && !rows.length ? <CircularProgress size={22} /> : null}
+      {loading && !safeRows.length ? <CircularProgress size={22} /> : null}
       {error ? <Typography color="error" variant="body2">{error}</Typography> : null}
-      {!loading && !error && !rows.length ? (
+      {!loading && !error && !safeRows.length ? (
         <Typography variant="body2" color="text.secondary">No high-conviction setups yet. Data is prepared at 08:50 IST.</Typography>
       ) : null}
-      {rows.length ? (
+      {safeRows.length ? (
         <>
           <TableWrapper>
             <Table>
@@ -219,8 +262,8 @@ export default function MlSetupsTable() {
               <tbody>
                 {paged.map((row, idx) => (
                   <tr key={`${row.symbol}-${row.alert_type}-${idx}`}>
-                    <td style={compact}>{Number(row.ml_score).toFixed(2)}</td>
-                    <td style={symbolCellTdStyle}>
+                    <td style={compact}>{fmtScore(row.ml_score)}</td>
+                    <td style={symbolTdStyle}>
                       <SymbolWithTradingView symbol={row.symbol} />
                     </td>
                     <td style={compact}>{formatMlSetupType(row.alert_type)}</td>
@@ -238,7 +281,7 @@ export default function MlSetupsTable() {
           </TableWrapper>
           {pageCount > 1 ? (
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-              <Pagination count={pageCount} page={page} onChange={(_, p) => setPage(p)} size="small" />
+              <Pagination count={pageCount} page={safePage} onChange={(_, p) => setPage(p)} size="small" />
             </Box>
           ) : null}
           {meta.checkpoint ? (
@@ -250,5 +293,13 @@ export default function MlSetupsTable() {
         </>
       ) : null}
     </Box>
+  );
+}
+
+export default function MlSetupsTable() {
+  return (
+    <MlSetupsTabGuard>
+      <MlSetupsTableInner />
+    </MlSetupsTabGuard>
   );
 }

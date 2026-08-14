@@ -39,3 +39,29 @@ export function mlSetupDirectionLabel(row) {
   if (side === -1 || String(row?.direction || '').toUpperCase() === 'SHORT') return 'Short';
   return '—';
 }
+
+/**
+ * pageDataCache wraps values as `{ data, updatedAt }`. ML Setups stores
+ * `{ data: rows, meta }` inside that, so rows live at `cached.data.data`.
+ * Never treat a non-array cache object as the row list (spreading it crashes React).
+ */
+export function mlSetupsRowsAndMetaFromCache(cached) {
+  const wrap = cached && typeof cached === 'object' ? cached : {};
+  const inner = wrap.data;
+  if (Array.isArray(inner)) {
+    return { rows: inner.filter((row) => row && String(row.symbol || '').trim()), meta: {} };
+  }
+  if (inner && typeof inner === 'object') {
+    const rows = Array.isArray(inner.data) ? inner.data : [];
+    const meta = inner.meta && typeof inner.meta === 'object' ? inner.meta : {};
+    return {
+      rows: rows.filter((row) => row && String(row.symbol || '').trim()),
+      meta,
+    };
+  }
+  return { rows: [], meta: {} };
+}
+
+export function ensureMlSetupRows(rows) {
+  return Array.isArray(rows) ? rows : [];
+}

@@ -39,3 +39,7 @@ export function mlSetupDirectionLabel(row) {
   if (side === -1 || String(row?.direction || '').toUpperCase() === 'SHORT') return 'Short';
   return '—';
 }
+
+export function ensureMlSetupRows(rows) {
+  return Array.isArray(rows) ? rows : [];
+}

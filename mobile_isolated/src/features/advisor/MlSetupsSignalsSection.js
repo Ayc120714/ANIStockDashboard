@@ -13,6 +13,7 @@ import {
   formatMlSetupType,
   mlSetupDirectionLabel,
   normalizeMlSetupsPayload,
+  ensureMlSetupRows,
 } from '@core/utils/mlSetupsAdvisor';
 import {formatINR} from '@core/utils/formatMarket';
 import {safeFetch} from '@core/utils/safeFetch';
@@ -45,7 +46,7 @@ export function MlSetupsSignalsSection() {
         {label: 'ML Setups', timeoutMs: API_TIMEOUT_MS.advisor, retries: 1},
       );
       const normalized = normalizeMlSetupsPayload(res);
-      setRows(normalized.data);
+      setRows(ensureMlSetupRows(normalized.data));
       setMeta({
         ready_for_open: normalized.ready_for_open,
         live_enabled: normalized.live_enabled,

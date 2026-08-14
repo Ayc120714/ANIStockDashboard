@@ -1,6 +1,8 @@
 import {
+  ensureMlSetupRows,
   formatMlSetupType,
   mlSetupDirectionLabel,
+  mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
 } from './mlSetupsAdvisor';
 
@@ -36,5 +38,24 @@ describe('Advisor ML Setups payload', () => {
     });
     expect(normalized.live_enabled).toBe(false);
     expect(normalized.ready_for_open).toBe(true);
+  });
+
+  it('does not treat a wrapped cache object as the row list (blank Advisor crash)', () => {
+    const rows = [{ symbol: 'HAL', alert_type: 'weekly_cross_down_high', ml_score: 0.76 }];
+    const fromWrap = mlSetupsRowsAndMetaFromCache({
+      data: { data: rows, meta: { live_enabled: true, session_date: '2026-08-14' } },
+      updatedAt: 1,
+    });
+    expect(fromWrap.rows.map((r) => r.symbol)).toEqual(['HAL']);
+    expect(fromWrap.meta.live_enabled).toBe(true);
+
+    const poisoned = mlSetupsRowsAndMetaFromCache({
+      data: { data: rows, meta: { ready_for_open: true } },
+    });
+    expect(Array.isArray(poisoned.rows)).toBe(true);
+    expect(() => [...ensureMlSetupRows(poisoned.rows)]).not.toThrow();
+
+    const objectAsRows = { data: rows, meta: { ready_for_open: true } };
+    expect(ensureMlSetupRows(objectAsRows)).toEqual([]);
   });
 });
