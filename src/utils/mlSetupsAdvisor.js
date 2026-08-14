@@ -16,6 +16,7 @@ export function normalizeMlSetupsPayload(payload) {
     session_date: String(data.session_date || ''),
     checkpoint: String(data.checkpoint || ''),
     ready_for_open: Boolean(data.ready_for_open),
+    live_enabled: Boolean(data.live_enabled),
     min_score: Number.isFinite(minScore) ? minScore : ML_SETUPS_DEFAULT_MIN_SCORE,
     feature_symbols: Number(data.feature_symbols) || 0,
     total_scored: Number(data.total_scored) || rows.length,

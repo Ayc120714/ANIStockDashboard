@@ -14,9 +14,9 @@ import {
   normalizeMlSetupsPayload,
 } from '../utils/mlSetupsAdvisor';
 
-const POLL_MS = 60 * 1000;
+const POLL_MS = 30 * 1000;
 const PAGE_SIZE = 25;
-const CACHE_KEY = 'advisor_ml_setups_v1';
+const CACHE_KEY = 'advisor_ml_setups_v2';
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 
 const COLS = [
@@ -79,6 +79,7 @@ export default function MlSetupsTable() {
       setRows(normalized.data);
       const nextMeta = {
         ready_for_open: normalized.ready_for_open,
+        live_enabled: normalized.live_enabled,
         feature_symbols: normalized.feature_symbols,
         high_conviction: normalized.high_conviction,
         total_scored: normalized.total_scored,
@@ -151,13 +152,13 @@ export default function MlSetupsTable() {
       </TableTitle>
       <Typography variant="body2" sx={{ mb: 1.5, color: 'text.secondary', maxWidth: 760 }}>
         Ranked live-market setups using complete quotes (last 5-minute bar + live price).
-        Model retrains at EOD; data is warmed before 09:00 IST. Only score ≥ 0.55 is shown.
+        Updates every 5 minutes in session; model retrains at EOD. Only score ≥ 0.55 is shown.
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 }}>
         <Chip
           size="small"
-          color={meta.ready_for_open ? 'success' : 'warning'}
-          label={meta.ready_for_open ? 'Ready before 9 AM' : 'Warming data'}
+          color={meta.live_enabled ? 'success' : meta.ready_for_open ? 'success' : 'warning'}
+          label={meta.live_enabled ? 'Live market on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming data'}
         />
         <Chip size="small" variant="outlined" label={`${meta.high_conviction || rows.length} high conviction`} />
         <Chip size="small" variant="outlined" label={`${meta.feature_symbols || 0} symbols with live features`} />

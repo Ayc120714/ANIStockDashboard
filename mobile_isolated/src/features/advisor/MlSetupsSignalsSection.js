@@ -18,7 +18,7 @@ import {formatINR} from '@core/utils/formatMarket';
 import {safeFetch} from '@core/utils/safeFetch';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
-const POLL_MS = 60 * 1000;
+const POLL_MS = 30 * 1000;
 
 function fmtScore(v) {
   const n = Number(v);
@@ -27,7 +27,7 @@ function fmtScore(v) {
 
 export function MlSetupsSignalsSection() {
   const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState({ready_for_open: false, feature_symbols: 0, session_date: ''});
+  const [meta, setMeta] = useState({ready_for_open: false, live_enabled: false, feature_symbols: 0, session_date: ''});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -48,6 +48,7 @@ export function MlSetupsSignalsSection() {
       setRows(normalized.data);
       setMeta({
         ready_for_open: normalized.ready_for_open,
+        live_enabled: normalized.live_enabled,
         feature_symbols: normalized.feature_symbols,
         high_conviction: normalized.high_conviction,
         session_date: normalized.session_date,
@@ -81,11 +82,11 @@ export function MlSetupsSignalsSection() {
     <View style={styles.wrap}>
       <Text style={mobileStyles.sectionTitle}>ML Setups</Text>
       <Text style={styles.hint}>
-        Complete live quotes · score ≥ 0.55 · retrains at EOD · ready before 09:00 IST
+        Complete live quotes · score ≥ 0.55 · updates in session · retrains at EOD
       </Text>
       <View style={styles.metaRow}>
         <Text style={styles.meta}>
-          {meta.ready_for_open ? 'Ready before 9 AM' : 'Warming'} · {rows.length} setups
+          {meta.live_enabled ? 'Live on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming'} · {rows.length} setups
         </Text>
         <Pressable onPress={() => load()} style={styles.refreshBtn}>
           <Text style={styles.refreshText}>Refresh</Text>
