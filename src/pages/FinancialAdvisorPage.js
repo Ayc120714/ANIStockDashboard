@@ -148,12 +148,6 @@ function deriveStrategyTags(row) {
   if (hasBullishMacdCross(row, 'monthly') && hasGreenHistogramBuilding(row, 'monthly') && hasMonthlyMacdBullCondition(row)) {
     tags.push({ label: 'Monthly MACD Cross + Red->Green Hist', tone: 'bull' });
   }
-  if (row?.vwap_cross_quarter_above) {
-    tags.push({ label: 'VWAP > QVWAP Cross', tone: 'bull' });
-  }
-  if (row?.vwap_cross_quarter_below) {
-    tags.push({ label: 'VWAP < QVWAP Cross', tone: 'bear' });
-  }
   return tags;
 }
 
@@ -789,10 +783,6 @@ function SignalsAlertsTab() {
         && hasGreenHistogramBuilding(s, 'monthly')
         && hasMonthlyMacdBullCondition(s)
       ) || s.monthly_setup_rule || s.monthly_psar_macd_rule || s.monthly_qualified);
-    } else if (strategyFilter === 'vwap_cross_above') {
-      rows = rows.filter(s => s.vwap_cross_quarter_above || s.vwap_cross_above || s.vwap_above_state);
-    } else if (strategyFilter === 'vwap_cross_below') {
-      rows = rows.filter(s => s.vwap_cross_quarter_below || s.vwap_cross_below || s.vwap_below_state);
     }
     return dedupeSignalsBySymbol(rows);
   }, [signalData, monthlySetupData, deferredSymbolFilter, convFilters, recoFilter, strategyFilter]);
@@ -2072,8 +2062,6 @@ function SignalsAlertsTab() {
               <MenuItem value="monthly_psar_macd">Monthly MACD+PSAR</MenuItem>
               <MenuItem value="macd_cross_up_weekly">Weekly MACD Cross + Red-&gt;Green Hist</MenuItem>
               <MenuItem value="macd_cross_up_monthly">Monthly MACD Cross + Red-&gt;Green Hist</MenuItem>
-              <MenuItem value="vwap_cross_above">VWAP Cross Above</MenuItem>
-              <MenuItem value="vwap_cross_below">VWAP Cross Below</MenuItem>
             </Select>
             <Box sx={{ display: 'flex', border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
               {[

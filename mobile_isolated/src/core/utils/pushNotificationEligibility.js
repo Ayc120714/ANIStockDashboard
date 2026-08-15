@@ -1,12 +1,8 @@
 /**
- * Which live DB alerts may fire Android system push notifications.
- *
- * Scope: Renko Smart (this release) + already-submitted entry/exit lifecycle
- * alerts. New advisor tabs (e.g. Hot Subsectors) must not be added here until
- * explicitly released for push.
+ * Which live DB alerts may fire Android system push + vibration.
+ * Only ML Setups with score >= 0.70. Table-change scanners never push.
  */
-import {isDemoAlert} from '@core/utils/alertInboxUtils';
-import {isLiveEntryExitAlert} from '@core/utils/signalsTabPayload';
+import {isDemoAlert, isMlHighConvictionAlert, isVwapCrossAlert} from '@core/utils/alertInboxUtils';
 
 /** Renko Smart / fib-zone alert types persisted by the Renko agent. */
 export function isRenkoPushAlert(alert) {
@@ -15,14 +11,12 @@ export function isRenkoPushAlert(alert) {
 }
 
 /**
- * True when a live advisor DB row may trigger a system push.
- * Demo / test rows are never eligible.
+ * True when a live advisor DB row may trigger a system push + vibration.
+ * Only ML Setups with score >= 0.70. VWAP / demo / other scanners never fire.
  */
 export function isPushEligibleLiveAlert(alert) {
-  if (!alert || isDemoAlert(alert)) return false;
-  if (isRenkoPushAlert(alert)) return true;
-  // Already-submitted live lifecycle alerts (ENTRY_READY, EXIT_READY, …).
-  return isLiveEntryExitAlert(alert);
+  if (!alert || isDemoAlert(alert) || isVwapCrossAlert(alert)) return false;
+  return isMlHighConvictionAlert(alert);
 }
 
 /** Explicitly excluded from table-change push (not yet submitted for push). */
@@ -37,13 +31,7 @@ export function isPushExcludedTableKey(tableKey) {
  * (existing submitted tables + Renko Smart). Excluded keys never push.
  */
 export function isPushEligibleTableKey(tableKey, tableMeta = null) {
-  const key = String(tableKey || '');
-  if (!key || isPushExcludedTableKey(key)) return false;
-  if (tableMeta && typeof tableMeta === 'object') {
-    return Boolean(tableMeta[key]);
-  }
-  // Lazy require avoids circular import at module load.
-  // eslint-disable-next-line global-require
-  const {ADVISOR_TABLE_META} = require('@core/utils/advisorTableSnapshots');
-  return Boolean(ADVISOR_TABLE_META[key]);
+  void tableKey;
+  void tableMeta;
+  return false;
 }

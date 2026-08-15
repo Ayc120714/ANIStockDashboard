@@ -14,35 +14,42 @@ import {buildTradingViewSymbolsCsv} from '@core/utils/tradingViewCsv';
 describe('push notification eligibility', () => {
   it('allows Renko Smart live alerts for push', () => {
     expect(isRenkoPushAlert({alert_type: 'renko_smart_long'})).toBe(true);
-    expect(isPushEligibleLiveAlert({alert_type: 'renko_smart_long', symbol: 'SBIN'})).toBe(true);
-    expect(isPushEligibleLiveAlert({alert_type: 'renko_fib_zone_long', symbol: 'TCS'})).toBe(true);
+    expect(
+      isPushEligibleLiveAlert({
+        alert_type: 'renko_smart_long',
+        symbol: 'SBIN',
+        ml_score: 0.81,
+        source: 'ml_setup',
+      }),
+    ).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'renko_smart_long', symbol: 'SBIN'})).toBe(false);
+    expect(isPushEligibleLiveAlert({alert_type: 'renko_fib_zone_long', symbol: 'TCS'})).toBe(false);
   });
 
-  it('allows already-submitted entry/exit live alerts for push', () => {
-    expect(isPushEligibleLiveAlert({alert_type: 'ENTRY_READY', symbol: 'INFY'})).toBe(true);
-    expect(isPushEligibleLiveAlert({alert_type: 'EXIT_READY', symbol: 'INFY'})).toBe(true);
-  });
-
-  it('blocks demo alerts and non-submitted alert types from push', () => {
+  it('blocks entry/exit without ML score, VWAP, and sub-70 rows from push', () => {
+    expect(isPushEligibleLiveAlert({alert_type: 'ENTRY_READY', symbol: 'INFY'})).toBe(false);
+    expect(isPushEligibleLiveAlert({alert_type: 'EXIT_READY', symbol: 'INFY'})).toBe(false);
+    expect(isPushEligibleLiveAlert({alert_type: 'vwap_cross_above', ml_score: 0.99})).toBe(false);
     expect(
       isPushEligibleLiveAlert({
         alert_type: 'renko_smart_long',
         source: 'demo',
         symbol: 'DEMO',
         message: '[DEMO] test',
+        ml_score: 0.99,
       }),
     ).toBe(false);
-    expect(isPushEligibleLiveAlert({alert_type: 'hot_subsectors_scan', symbol: 'SBIN'})).toBe(false);
-    expect(isPushEligibleLiveAlert({alert_type: 'indicator_5m_rsi_gt', symbol: 'SBIN'})).toBe(false);
+    expect(isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_high', ml_score: 0.69, source: 'ml_setup'})).toBe(
+      false,
+    );
   });
 
-  it('includes Renko Smart in table-change push allowlist and excludes Hot Subsectors', () => {
+  it('does not push table-change events; Hot Subsectors stays excluded', () => {
     expect(ADVISOR_TABLE_KEYS.RENKO_SMART).toBe('renko_smart');
     expect(ADVISOR_TABLE_META[ADVISOR_TABLE_KEYS.RENKO_SMART]?.advisorTab).toBe('renko');
-    expect(isPushEligibleTableKey('renko_smart', ADVISOR_TABLE_META)).toBe(true);
-    expect(isPushEligibleTableKey('trend_b1_weekly', ADVISOR_TABLE_META)).toBe(true);
+    expect(isPushEligibleTableKey('renko_smart', ADVISOR_TABLE_META)).toBe(false);
+    expect(isPushEligibleTableKey('trend_b1_weekly', ADVISOR_TABLE_META)).toBe(false);
     expect(isPushExcludedTableKey('hot_subsectors')).toBe(true);
-    expect(isPushEligibleTableKey('hot_subsectors', ADVISOR_TABLE_META)).toBe(false);
   });
 });
 

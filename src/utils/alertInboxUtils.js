@@ -99,6 +99,10 @@ const dateKeyIST = d =>
     day: '2-digit',
   }).format(d);
 
+export const HOT_ALERT_RETENTION_DAYS = 3;
+export const ML_ALERT_MIN_SCORE = 0.7;
+export const ML_ALERT_SOURCE = 'ml_setup';
+
 /** True for mobile notification test rows — never push or show in live UI. */
 export function isDemoAlert(row) {
   if (!row || typeof row !== 'object') return false;
@@ -114,6 +118,34 @@ export function isDemoAlert(row) {
   const message = String(row?.message || '').trim().toUpperCase();
   if (message.startsWith('[DEMO]')) return true;
   return false;
+}
+
+export function isVwapCrossAlert(row) {
+  const type = String(row?.alert_type || '').trim().toLowerCase();
+  return type.startsWith('vwap_cross');
+}
+
+export function mlScoreFromAlert(row) {
+  const raw = row?.ml_score ?? row?.signal_detail?.ml_score;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const score = n > 1 ? n / 100 : n;
+  if (score < 0 || score > 1) return null;
+  return score;
+}
+
+export function isWithinHotAlertWindow(value, now = new Date()) {
+  const ms = parseAdvisorAlertMs(value);
+  if (!ms) return false;
+  const maxAgeMs = HOT_ALERT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return now.getTime() - ms <= maxAgeMs;
+}
+
+/** Live push/vibration: ML Setups score >= 0.70 only (no VWAP, no demo). */
+export function isMlHighConvictionAlert(row) {
+  if (!row || isDemoAlert(row) || isVwapCrossAlert(row)) return false;
+  const score = mlScoreFromAlert(row);
+  return score != null && score >= ML_ALERT_MIN_SCORE;
 }
 
 export function parseAdvisorAlertMs(ts) {
@@ -180,9 +212,9 @@ function normalizeAdvisorRow(row, source) {
 export function normalizeLiveAdvisorRows(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .filter(row => {
-      if (isDemoAlert(row)) return false;
-      const t = String(row?.alert_type || '').toLowerCase();
-      return !t.startsWith('weekly_cross_') && !t.startsWith('rsi_divergence_');
+      if (!isMlHighConvictionAlert(row)) return false;
+      const ts = row?.timestamp || row?.created_at || row?.alert_time || row?.updated_at;
+      return isWithinHotAlertWindow(ts);
     })
     .map(row => normalizeAdvisorRow(row, INBOX_SOURCES.LIVE))
     .sort((a, b) => b.timestampMs - a.timestampMs);

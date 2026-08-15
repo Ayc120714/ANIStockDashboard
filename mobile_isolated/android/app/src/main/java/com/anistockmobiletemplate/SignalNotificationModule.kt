@@ -22,12 +22,13 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
       return
     }
     val manager = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
     if (manager.getNotificationChannel(CHANNEL_ID) != null) {
       return
     }
     val channel =
         NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
-          description = "New advisor and entry-ready trading signals"
+          description = "ML Setups with score 70% or higher"
           enableVibration(true)
           vibrationPattern = VIBRATION_PATTERN
         }
@@ -55,12 +56,12 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
               .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
               .setAutoCancel(true)
 
+      builder.setVibrate(VIBRATION_PATTERN)
       if (silentOrVibrateOnly) {
         builder.setSound(null)
-        builder.setVibrate(VIBRATION_PATTERN)
         builder.setDefaults(NotificationCompat.DEFAULT_VIBRATE)
       } else {
-        builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+        builder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
       }
 
       val manager = NotificationManagerCompat.from(reactContext)
@@ -73,8 +74,9 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
   }
 
   companion object {
-    private const val CHANNEL_ID = "advisor_signals"
-    private const val CHANNEL_NAME = "Advisor signals"
+    private const val LEGACY_CHANNEL_ID = "advisor_signals"
+    private const val CHANNEL_ID = "advisor_ml_alerts_v1"
+    private const val CHANNEL_NAME = "AYC ML setup alerts"
     private val VIBRATION_PATTERN = longArrayOf(0, 280, 120, 280)
   }
 }

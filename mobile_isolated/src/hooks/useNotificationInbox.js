@@ -22,8 +22,6 @@ import {
   markTableChangeEventRead,
 } from '@core/utils/advisorTableChangeAlerts';
 
-import {MOBILE_ALERTS_LIMIT} from '@core/utils/advisorWebParity';
-
 import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '@core/utils/marketSession';
 
 const LIVE_POLL_MS = 30_000;
@@ -126,7 +124,7 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
 
       const lightFetch = background && hasCachedRows;
       const [liveRes, specialRes, priceRes, adminRes, tableRes] = await Promise.allSettled([
-        alertsService.fetchLiveAdvisorAlerts({limit: MOBILE_ALERTS_LIMIT}),
+        alertsService.fetchLiveAdvisorAlerts({source: 'ml_setup', limit: 80}),
         alertsService.fetchSpecialAlerts({
           limit: lightFetch ? 80 : 200,
           currentDayOnly: lightFetch,

@@ -85,7 +85,7 @@ export function useNotificationInbox({ enabled = true, userId = '', isSuperAdmin
         : Promise.resolve(null);
 
       const [liveRes, specialRes, priceRes, adminRes] = await Promise.allSettled([
-        fetchAlerts({ limit: 120 }),
+        fetchAlerts({ source: 'ml_setup', limit: 120 }),
         fetchSpecialAlerts({ limit: 300, currentDayOnly: false, includeHistory: true }),
         userId ? fetchPriceAlertTriggers({ userId, limit: 200 }) : Promise.resolve([]),
         adminPromise,

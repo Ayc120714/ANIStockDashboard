@@ -73,12 +73,6 @@ export function deriveStrategyTags(row) {
   ) {
     tags.push('M MACD↑');
   }
-  if (row?.vwap_cross_quarter_above || row?.vwap_cross_above || row?.vwap_above_state) {
-    tags.push('VWAP↑');
-  }
-  if (row?.vwap_cross_quarter_below || row?.vwap_cross_below || row?.vwap_below_state) {
-    tags.push('VWAP↓');
-  }
   return tags;
 }
 
@@ -133,10 +127,6 @@ export function filterAdvisorSignals(
         s.monthly_psar_macd_rule ||
         s.monthly_qualified,
     );
-  } else if (strategyFilter === 'vwap_cross_above') {
-    rows = rows.filter(s => s.vwap_cross_quarter_above || s.vwap_cross_above || s.vwap_above_state);
-  } else if (strategyFilter === 'vwap_cross_below') {
-    rows = rows.filter(s => s.vwap_cross_quarter_below || s.vwap_cross_below || s.vwap_below_state);
   }
 
   return dedupeSignalsBySymbol(rows);
@@ -179,8 +169,6 @@ export const ADVISOR_STRATEGY_OPTIONS = [
   {id: 'monthly_psar_macd', label: 'Monthly MACD+PSAR'},
   {id: 'macd_cross_up_weekly', label: 'Weekly MACD Cross + Red->Green Hist'},
   {id: 'macd_cross_up_monthly', label: 'Monthly MACD Cross + Red->Green Hist'},
-  {id: 'vwap_cross_above', label: 'VWAP Cross Above'},
-  {id: 'vwap_cross_below', label: 'VWAP Cross Below'},
 ];
 
 export const ADVISOR_RECO_OPTIONS = [
