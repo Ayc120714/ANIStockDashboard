@@ -153,7 +153,7 @@ describe('notification inbox read state', () => {
   it('detects demo test alerts and drops them from live inbox rows', () => {
     expect(isDemoAlert({source: 'demo', symbol: 'DEMO', alert_type: 'demo_mobile_test'})).toBe(true);
     expect(normalizeLiveAdvisorRows([
-      {id: 1, symbol: 'RELIANCE', alert_type: 'ENTRY_READY', timestamp: hoursAgoIso(1), ml_score: 0.74, source: 'ml_setup'},
+      {id: 1, symbol: 'RELIANCE', alert_type: 'renko_smart_long', timestamp: hoursAgoIso(1), ml_score: 0.74, source: 'ml_setup'},
       {id: 2, symbol: 'DEMO', alert_type: 'demo_mobile_test', source: 'demo', timestamp: hoursAgoIso(1), ml_score: 0.99},
     ])).toHaveLength(1);
   });
@@ -177,10 +177,13 @@ describe('ML high-conviction live alerts (score >= 0.70, last 3 days, no VWAP)',
     expect(isVwapCrossAlert({alert_type: 'vwap_cross_below'})).toBe(true);
   });
 
-  it('treats percent scores such as 74 as 0.74', () => {
-    expect(isMlHighConvictionAlert({alert_type: 'macd_bull', ml_score: 74, source: 'ml_setup'})).toBe(true);
-    expect(isMlHighConvictionAlert({alert_type: 'macd_bull', signal_detail: {ml_score: 0.7}})).toBe(true);
-    expect(isMlHighConvictionAlert({alert_type: 'macd_bull', ml_score: 0.699})).toBe(false);
+  it('treats percent scores such as 74 as 0.74 for enabled families', () => {
+    expect(isMlHighConvictionAlert({alert_type: 'renko_smart_long', ml_score: 74, source: 'ml_setup'})).toBe(true);
+    expect(isMlHighConvictionAlert({alert_type: 'weekly_cross_up_high', signal_detail: {ml_score: 0.7}})).toBe(true);
+    expect(isMlHighConvictionAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 2.2})).toBe(true);
+    expect(isMlHighConvictionAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 1.5})).toBe(false);
+    expect(isMlHighConvictionAlert({alert_type: 'macd_bull', ml_score: 74, source: 'ml_setup'})).toBe(false);
+    expect(isMlHighConvictionAlert({alert_type: 'renko_smart_long', ml_score: 0.699})).toBe(false);
   });
 
   it('vibrates only for ML score >= 0.70, never Renko/ENTRY_READY/VWAP without that score', () => {

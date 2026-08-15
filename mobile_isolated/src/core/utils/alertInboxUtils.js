@@ -102,6 +102,17 @@ const dateKeyIST = d =>
 export const HOT_ALERT_RETENTION_DAYS = 3;
 export const ML_ALERT_MIN_SCORE = 0.7;
 export const ML_ALERT_SOURCE = 'ml_setup';
+export const LIVE_ML_RVOL_MIN = 2;
+export const LIVE_ML_RENKO_TYPES = Object.freeze([
+  'renko_smart_long',
+  'renko_smart_short',
+  'renko_fib_zone_long',
+]);
+export const LIVE_ML_CLOSE_HIGH_TYPES = Object.freeze([
+  'weekly_cross_up_high',
+  'prev_day_high_breakout',
+]);
+export const LIVE_ML_RVOL_TYPES = Object.freeze(['unusual_volume']);
 
 /** True for mobile notification test rows — never push or show in live UI. */
 export function isDemoAlert(row) {
@@ -141,9 +152,34 @@ export function isWithinHotAlertWindow(value, now = new Date()) {
   return now.getTime() - ms <= maxAgeMs;
 }
 
-/** Live push/vibration: ML Setups score >= 0.70 only (no VWAP, no demo). */
+export function liveVolumeRatio(row) {
+  const raw =
+    row?.vol_ratio
+    ?? row?.volume_ratio
+    ?? row?.relative_volume
+    ?? row?.signal_detail?.vol_ratio
+    ?? row?.signal_detail?.volume_ratio
+    ?? row?.signal_detail?.relative_volume;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+export function isEnabledLiveMlSetup(row) {
+  const type = String(row?.alert_type || '').trim();
+  if (LIVE_ML_RENKO_TYPES.includes(type) || LIVE_ML_CLOSE_HIGH_TYPES.includes(type)) {
+    return true;
+  }
+  if (LIVE_ML_RVOL_TYPES.includes(type)) {
+    const vol = liveVolumeRatio(row);
+    return vol != null && vol >= LIVE_ML_RVOL_MIN;
+  }
+  return false;
+}
+
+/** Live push/vibration: Renko, close-cross high, or RVOL>2, and ML score >= 0.70. */
 export function isMlHighConvictionAlert(row) {
   if (!row || isDemoAlert(row) || isVwapCrossAlert(row)) return false;
+  if (!isEnabledLiveMlSetup(row)) return false;
   const score = mlScoreFromAlert(row);
   return score != null && score >= ML_ALERT_MIN_SCORE;
 }

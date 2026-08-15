@@ -23,6 +23,8 @@ describe('live inbox ML alert policy', () => {
       { id: 4, symbol: 'SBIN', alert_type: 'renko_smart_long', timestamp: hoursAgoIso(24 * 5), ml_score: 0.92, source: 'ml_setup' },
     ]);
     expect(kept.map((row) => row.id)).toEqual(['1']);
-    expect(isMlHighConvictionAlert({ alert_type: 'macd_bull', ml_score: 74 })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'renko_smart_long', ml_score: 74 })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 2.1 })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'macd_bull', ml_score: 74 })).toBe(false);
   });
 });

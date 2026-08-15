@@ -42,6 +42,12 @@ describe('push notification eligibility', () => {
     expect(isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_high', ml_score: 0.69, source: 'ml_setup'})).toBe(
       false,
     );
+    expect(
+      isPushEligibleLiveAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 2.1, source: 'ml_setup'}),
+    ).toBe(true);
+    expect(
+      isPushEligibleLiveAlert({alert_type: 'prev_day_high_breakout', ml_score: 0.8, source: 'ml_setup'}),
+    ).toBe(true);
   });
 
   it('does not push table-change events; Hot Subsectors stays excluded', () => {
