@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {advisorService} from '@core/api/services/advisorService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
@@ -14,7 +14,9 @@ import {
   mlSetupDirectionLabel,
   normalizeMlSetupsPayload,
   ensureMlSetupRows,
+  symbolsFromMlSetupRows,
 } from '@core/utils/mlSetupsAdvisor';
+import {buildTradingViewSymbolsCsv} from '@core/utils/tradingViewCsv';
 import {formatINR} from '@core/utils/formatMarket';
 import {safeFetch} from '@core/utils/safeFetch';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
@@ -79,6 +81,18 @@ export function MlSetupsSignalsSection() {
     };
   }, [load]);
 
+  const csvSymbols = symbolsFromMlSetupRows(rows);
+
+  const handleCopyCsv = async () => {
+    const csv = buildTradingViewSymbolsCsv(csvSymbols);
+    if (!csv) return;
+    try {
+      await Share.share({message: csv, title: 'ML Setups CSV'});
+    } catch (e) {
+      Alert.alert('Copy CSV', String(e?.message || 'Could not share CSV'));
+    }
+  };
+
   return (
     <View style={styles.wrap}>
       <Text style={mobileStyles.sectionTitle}>ML Setups</Text>
@@ -89,8 +103,16 @@ export function MlSetupsSignalsSection() {
         <Text style={styles.meta}>
           {meta.live_enabled ? 'Live on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming'} · {rows.length} setups
         </Text>
+      </View>
+      <View style={styles.actions}>
         <Pressable onPress={() => load()} style={styles.refreshBtn}>
           <Text style={styles.refreshText}>Refresh</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleCopyCsv}
+          disabled={!csvSymbols.length}
+          style={[styles.refreshBtn, !csvSymbols.length && styles.btnDisabled]}>
+          <Text style={styles.refreshText}>Copy CSV ({csvSymbols.length})</Text>
         </Pressable>
       </View>
       {loading && !rows.length ? <ActivityIndicator color={AYC.accent} style={{marginVertical: 16}} /> : null}
@@ -141,7 +163,9 @@ const styles = StyleSheet.create({
   hint: {color: AYC.textMuted, fontSize: 12, marginBottom: 8, lineHeight: 16},
   metaRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8},
   meta: {color: AYC.textSecondary, fontSize: 12, flex: 1, paddingRight: 8},
+  actions: {flexDirection: 'row', gap: 8, marginBottom: 8},
   refreshBtn: {borderWidth: 1, borderColor: AYC.border, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4},
+  btnDisabled: {opacity: 0.45},
   refreshText: {color: AYC.accent, fontSize: 12, fontWeight: '600'},
   error: {color: AYC.negative, marginBottom: 8},
   empty: {color: AYC.textMuted, marginVertical: 12},

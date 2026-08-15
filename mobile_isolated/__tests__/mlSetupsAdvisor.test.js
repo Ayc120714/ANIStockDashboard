@@ -3,7 +3,9 @@ import {
   mlSetupDirectionLabel,
   normalizeMlSetupsPayload,
   ensureMlSetupRows,
+  symbolsFromMlSetupRows,
 } from '../src/core/utils/mlSetupsAdvisor';
+import {buildTradingViewSymbolsCsv} from '../src/core/utils/tradingViewCsv';
 
 describe('Advisor ML Setups payload (mobile)', () => {
   it('keeps high-conviction rows and ready-for-open flag for the new Advisor tab', () => {
@@ -39,5 +41,17 @@ describe('Advisor ML Setups payload (mobile)', () => {
   it('never treats a cache object as the row list (blank Advisor crash)', () => {
     expect(ensureMlSetupRows({data: [{symbol: 'HAL'}], meta: {}})).toEqual([]);
     expect(ensureMlSetupRows([{symbol: 'HAL'}])).toEqual([{symbol: 'HAL'}]);
+  });
+
+  it('builds unique TradingView CSV from ML setup rows in display order', () => {
+    const csv = buildTradingViewSymbolsCsv(
+      symbolsFromMlSetupRows([
+        {symbol: 'varroc', alert_type: 'weekly_cross_up_high'},
+        {symbol: 'HAL', alert_type: 'weekly_cross_down_high'},
+        {symbol: 'VARROC', alert_type: 'vwap_cross_above'},
+        {symbol: '', alert_type: 'unusual_volume'},
+      ]),
+    );
+    expect(csv).toBe('NSE:VARROC,NSE:HAL');
   });
 });

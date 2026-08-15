@@ -4,7 +4,9 @@ import {
   mlSetupDirectionLabel,
   mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
+  symbolsFromMlSetupRows,
 } from './mlSetupsAdvisor';
+import { buildTradingViewSymbolsCsv } from '../components/TradingViewLink';
 
 describe('Advisor ML Setups payload', () => {
   it('keeps high-conviction rows and ready-for-open flag for the new Advisor tab', () => {
@@ -57,5 +59,17 @@ describe('Advisor ML Setups payload', () => {
 
     const objectAsRows = { data: rows, meta: { ready_for_open: true } };
     expect(ensureMlSetupRows(objectAsRows)).toEqual([]);
+  });
+
+  it('builds unique TradingView CSV from ML setup rows in display order', () => {
+    const csv = buildTradingViewSymbolsCsv(
+      symbolsFromMlSetupRows([
+        { symbol: 'varroc', alert_type: 'weekly_cross_up_high' },
+        { symbol: 'HAL', alert_type: 'weekly_cross_down_high' },
+        { symbol: 'VARROC', alert_type: 'vwap_cross_above' },
+        { symbol: '', alert_type: 'unusual_volume' },
+      ]),
+    );
+    expect(csv).toBe('NSE:VARROC,NSE:HAL');
   });
 });

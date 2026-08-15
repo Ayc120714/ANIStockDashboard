@@ -4,7 +4,7 @@ import { Box, Button, Chip, CircularProgress, MenuItem, Select, Typography } fro
 import Pagination from '@mui/material/Pagination';
 import { FaSort, FaSortDown, FaSortUp } from 'react-icons/fa';
 import { fetchMlSetups } from '../api/advisor';
-import { SymbolWithTradingView, symbolCellTdStyle } from './TradingViewLink';
+import { SymbolWithTradingView, symbolCellTdStyle, buildTradingViewSymbolsCsv } from './TradingViewLink';
 import { formatAlertTimeIST } from '../utils/alertInboxUtils';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
 import { runLiveMarketPageMountPoll } from '../utils/screenPageLoader';
@@ -14,6 +14,7 @@ import {
   mlSetupDirectionLabel,
   mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
+  symbolsFromMlSetupRows,
 } from '../utils/mlSetupsAdvisor';
 
 const POLL_MS = 30 * 1000;
@@ -88,6 +89,7 @@ function MlSetupsTableInner() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
   const [setupType, setSetupType] = useState('');
   const [side, setSide] = useState('');
   const [page, setPage] = useState(1);
@@ -168,6 +170,20 @@ function MlSetupsTableInner() {
     return list;
   }, [safeRows, sortCol, sortDir]);
 
+  const csvSymbols = useMemo(() => symbolsFromMlSetupRows(sorted), [sorted]);
+
+  const handleCopyCsv = async () => {
+    const csv = buildTradingViewSymbolsCsv(csvSymbols);
+    if (!csv) return;
+    try {
+      await navigator.clipboard.writeText(csv);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError('Could not copy CSV (use HTTPS or allow clipboard access)');
+    }
+  };
+
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -236,6 +252,15 @@ function MlSetupsTableInner() {
         </Select>
         <Button size="small" variant="outlined" onClick={() => load({ forceNetwork: true })}>
           Refresh
+        </Button>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={!csvSymbols.length}
+          onClick={handleCopyCsv}
+          sx={{ textTransform: 'none', fontSize: 12 }}
+        >
+          {copied ? 'Copied!' : `Copy CSV (${csvSymbols.length})`}
         </Button>
       </Box>
       {loading && !safeRows.length ? <CircularProgress size={22} /> : null}

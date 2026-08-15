@@ -65,3 +65,16 @@ export function mlSetupsRowsAndMetaFromCache(cached) {
 export function ensureMlSetupRows(rows) {
   return Array.isArray(rows) ? rows : [];
 }
+
+/** Unique symbols in display order for TradingView Copy CSV. */
+export function symbolsFromMlSetupRows(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of ensureMlSetupRows(rows)) {
+    const symbol = String(row?.symbol || '').trim().toUpperCase();
+    if (!symbol || seen.has(symbol)) continue;
+    seen.add(symbol);
+    out.push(symbol);
+  }
+  return out;
+}
