@@ -1,4 +1,5 @@
 import { getEffectiveGetCacheTtlMs } from '../utils/marketSession';
+import { resolveFetchCacheMode } from '../utils/liveFetchPolicy';
 
 const resolveDefaultApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.origin) {
@@ -229,7 +230,11 @@ export const apiRequest = async (endpoint, options = {}) => {
   try {
     response = await fetch(buildUrl(endpoint), {
       ...config,
-      cache: options.cache ?? config.cache,
+      cache: options.cache ?? resolveFetchCacheMode({
+        skipCache: skipGetCache,
+        getCacheTtlMs: cacheTtlMs,
+        explicit: config.cache,
+      }),
     });
   } catch (_) {
     throw new Error('Unable to reach server. Please check backend and network.');

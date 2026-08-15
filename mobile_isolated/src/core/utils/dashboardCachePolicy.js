@@ -1,7 +1,7 @@
 import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
 
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v20',
+  dashboard: '@ani/mobile/page-cache/dashboard-v21',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v7-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
@@ -9,7 +9,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v6-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v5-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v10',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v11',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v4',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
@@ -150,6 +150,7 @@ export const LEGACY_DASHBOARD_CACHE_KEYS = [
   '@ani/mobile/page-cache/dashboard-v15',
   '@ani/mobile/page-cache/dashboard-v16',
   '@ani/mobile/page-cache/dashboard-v17',
+  '@ani/mobile/page-cache/dashboard-v20',
 ];
 
 /** Prior cache keys — cleared on upgrade so empty/stale shells are not reused. */
@@ -160,4 +161,5 @@ export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [
   '@ani/mobile/page-cache/advisor-hub-trend-v7',
   '@ani/mobile/page-cache/advisor-hub-trend-v8',
   '@ani/mobile/page-cache/advisor-hub-trend-v9',
+  '@ani/mobile/page-cache/advisor-hub-trend-v10',
 ];

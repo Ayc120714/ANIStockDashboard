@@ -3,7 +3,7 @@
  * Keep versions in sync across pages, prefetchAppShellData, and tests.
  */
 export const LIVE_PAGE_CACHE_KEYS = {
-  dashboard: 'dashboard_overview_cache_v14',
+  dashboard: 'dashboard_overview_cache_v15',
   marketOutlook: 'marketOutlookData_v3',
   fiiDii: 'marketOutlookFiiDii_v5',
   sectorOutlook: 'sectorOutlookData_v2',

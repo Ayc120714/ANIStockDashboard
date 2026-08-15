@@ -1,10 +1,17 @@
-import { isPostMarketPageCacheStale, nseCloseEpochMsForDateIso } from './marketSession';
+import { isPostMarketPageCacheStale, LIVE_GET_CACHE_MS, LIVE_PAGE_CACHE_MAX_AGE_MS, nseCloseEpochMsForDateIso } from './marketSession';
 
 describe('nseCloseEpochMsForDateIso', () => {
   test('parses reference trading date to 15:30 IST epoch', () => {
     expect(nseCloseEpochMsForDateIso('2026-07-03')).toBe(
       Date.parse('2026-07-03T15:30:00+05:30'),
     );
+  });
+});
+
+describe('live client cache windows', () => {
+  test('live GET memo is off by default so Redis-backed APIs are not shadowed', () => {
+    expect(LIVE_GET_CACHE_MS).toBe(0);
+    expect(LIVE_PAGE_CACHE_MAX_AGE_MS).toBe(8_000);
   });
 });
 

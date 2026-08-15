@@ -2,7 +2,7 @@ import { LIVE_PAGE_CACHE_KEYS } from './livePageCacheKeys';
 
 describe('livePageCacheKeys', () => {
   it('exposes stable keys for live-market page cache policy', () => {
-    expect(LIVE_PAGE_CACHE_KEYS.dashboard).toBe('dashboard_overview_cache_v14');
+    expect(LIVE_PAGE_CACHE_KEYS.dashboard).toBe('dashboard_overview_cache_v15');
     expect(LIVE_PAGE_CACHE_KEYS.sectorOutlook).toBe('sectorOutlookData_v2');
     expect(LIVE_PAGE_CACHE_KEYS.fiiDii).toBe('marketOutlookFiiDii_v5');
     expect(LIVE_PAGE_CACHE_KEYS.liveSetups).toBe('liveSetupsEntryReady_v1');

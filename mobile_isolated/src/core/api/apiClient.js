@@ -5,6 +5,7 @@ import {STORAGE_KEYS} from '@core/storage/keys';
 import {decodeObfuscatedPayload, isObfuscatedEnvelope} from '@core/utils/obfuscation';
 import {formatHttpStatusMessage, isRetryableGatewayStatus, sanitizeApiErrorText} from '@core/utils/apiHttpErrors';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
+import {LIVE_FETCH_CACHE_MODE} from '@core/utils/liveFetchPolicy';
 import {withRequestGate} from '@core/api/requestGate';
 import {isLogoutActive} from '@core/auth/authSessionControl';
 
@@ -116,6 +117,7 @@ const apiRequestCore = async (endpoint, options = {}) => {
     fetch(buildUrl(env.apiUrl, endpoint), {
       ...baseConfig,
       signal,
+      cache: options.cache || baseConfig.cache || LIVE_FETCH_CACHE_MODE,
       headers: {
         ...baseConfig.headers,
         ...(token ? {Authorization: `Bearer ${token}`} : {}),

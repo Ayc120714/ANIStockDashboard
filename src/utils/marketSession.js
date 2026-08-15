@@ -4,6 +4,8 @@
  * so tab switches do not refetch the same DB-backed data.
  */
 
+import { LIVE_GET_CACHE_MS_DEFAULT, LIVE_PAGE_CACHE_MAX_AGE_MS } from './liveFetchPolicy';
+
 const SESSION_STORAGE_KEY = 'market_session_v1';
 const LIVE_STATUS_REFRESH_MS = 60_000;
 const CLOSED_STATUS_REFRESH_MS = 30 * 60_000;
@@ -13,7 +15,7 @@ export const LIVE_GET_CACHE_MS = (() => {
   const raw = process.env.REACT_APP_API_GET_CACHE_MS;
   if (raw === '0' || raw === '') return 0;
   const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.min(n, 120_000) : 8_000;
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 120_000) : LIVE_GET_CACHE_MS_DEFAULT;
 })();
 
 /** GET cache TTL when market is not live (same data until next session). */
@@ -23,7 +25,7 @@ export const CLOSED_GET_CACHE_MS = 24 * 60 * 60_000;
 export const CLOSED_PAGE_CACHE_MS = 24 * 60 * 60_000;
 
 /** During NSE session, page cache older than this is treated as stale (Overview / screens). */
-export const LIVE_PAGE_CACHE_MAX_AGE_MS = 90_000;
+export { LIVE_PAGE_CACHE_MAX_AGE_MS };
 
 const IST_TZ = 'Asia/Kolkata';
 

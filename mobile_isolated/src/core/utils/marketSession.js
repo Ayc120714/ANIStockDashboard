@@ -3,13 +3,14 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {apiGet} from '@core/api/apiClient';
+import {LIVE_PAGE_CACHE_MAX_AGE_MS} from '@core/utils/liveFetchPolicy';
 
 const SESSION_STORAGE_KEY = '@ani/mobile/market-session-v1';
 const LIVE_STATUS_REFRESH_MS = 60_000;
 const CLOSED_STATUS_REFRESH_MS = 30 * 60_000;
 
 export const CLOSED_PAGE_CACHE_MS = 24 * 60 * 60_000;
-export const LIVE_PAGE_CACHE_MAX_AGE_MS = 90_000;
+export {LIVE_PAGE_CACHE_MAX_AGE_MS};
 
 const IST_TZ = 'Asia/Kolkata';
 

@@ -18,10 +18,10 @@ import {
 
 describe('dashboard cache policy fixes', () => {
   it('uses bumped cache keys for dashboard and trend reversal', () => {
-    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v20');
+    expect(MOBILE_PAGE_CACHE_KEYS.dashboard).toBe('@ani/mobile/page-cache/dashboard-v21');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorSignals).toBe('@ani/mobile/page-cache/advisor-signals-v6');
     expect(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend).toBe(
-      '@ani/mobile/page-cache/advisor-hub-trend-v10',
+      '@ani/mobile/page-cache/advisor-hub-trend-v11',
     );
     expect(MOBILE_PAGE_CACHE_KEYS.marketsOutlook('market')).toContain('markets-outlook-v4');
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v6');
@@ -40,7 +40,7 @@ describe('dashboard cache policy fixes', () => {
   it('tracks legacy dashboard cache keys for upgrade cleanup', () => {
     expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v15');
     expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v16');
-    expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v17');
+    expect(LEGACY_DASHBOARD_CACHE_KEYS).toContain('@ani/mobile/page-cache/dashboard-v20');
     expect(LEGACY_DASHBOARD_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.dashboard);
   });
 
@@ -64,6 +64,7 @@ describe('dashboard cache policy fixes', () => {
       '@ani/mobile/page-cache/advisor-hub-trend-v7',
       '@ani/mobile/page-cache/advisor-hub-trend-v8',
       '@ani/mobile/page-cache/advisor-hub-trend-v9',
+      '@ani/mobile/page-cache/advisor-hub-trend-v10',
     ]);
     expect(LEGACY_ADVISOR_TREND_CACHE_KEYS).not.toContain(MOBILE_PAGE_CACHE_KEYS.advisorHubTrend);
   });
