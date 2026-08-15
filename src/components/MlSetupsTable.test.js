@@ -14,4 +14,13 @@ describe('MlSetupsTable', () => {
     expect(src).toMatch(/buildTradingViewSymbolsCsv/);
     expect(src).toMatch(/navigator\.clipboard\.writeText/);
   });
+
+  it('pages 10 rows and starts sorted by RVOL descending', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, './MlSetupsTable.js'), 'utf8');
+    expect(src).toMatch(/ML_SETUPS_PAGE_SIZE/);
+    expect(src).toMatch(/ML_SETUPS_DEFAULT_SORT_COL/);
+    expect(src).toMatch(/sortMlSetupRows/);
+    expect(src).not.toMatch(/const PAGE_SIZE = 25/);
+    expect(src).not.toMatch(/useState\('ml_score'\)/);
+  });
 });

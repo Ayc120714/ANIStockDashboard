@@ -3,6 +3,10 @@
  */
 
 export const ML_SETUPS_DEFAULT_MIN_SCORE = 0.55;
+export const ML_SETUPS_PAGE_SIZE = 10;
+export const ML_SETUPS_DEFAULT_SORT_COL = 'vol_ratio';
+export const ML_SETUPS_DEFAULT_SORT_DIR = 'desc';
+export const ML_SETUPS_FETCH_LIMIT = 500;
 
 export function normalizeMlSetupsPayload(payload) {
   const data = payload && typeof payload === 'object' ? payload : {};
@@ -64,6 +68,29 @@ export function mlSetupsRowsAndMetaFromCache(cached) {
 
 export function ensureMlSetupRows(rows) {
   return Array.isArray(rows) ? rows : [];
+}
+
+/** Sort ML setup rows; default is RVOL descending with missing values last. */
+export function sortMlSetupRows(rows, sortCol = ML_SETUPS_DEFAULT_SORT_COL, sortDir = ML_SETUPS_DEFAULT_SORT_DIR) {
+  const list = [...ensureMlSetupRows(rows)];
+  const mul = sortDir === 'asc' ? 1 : -1;
+  const col = sortCol || ML_SETUPS_DEFAULT_SORT_COL;
+  list.sort((a, b) => {
+    if (col === 'symbol' || col === 'alert_type' || col === 'direction') {
+      const sa = String(a[col] || a.alert_type || '');
+      const sb = String(b[col] || b.alert_type || '');
+      return mul * sa.localeCompare(sb);
+    }
+    if (col === 'aligned') {
+      return mul * (Number(Boolean(a.aligned)) - Number(Boolean(b.aligned)));
+    }
+    const na = Number(a[col]);
+    const nb = Number(b[col]);
+    const av = Number.isFinite(na) ? na : -Infinity;
+    const bv = Number.isFinite(nb) ? nb : -Infinity;
+    return mul * (av - bv);
+  });
+  return list;
 }
 
 /** Unique symbols in display order for TradingView Copy CSV. */

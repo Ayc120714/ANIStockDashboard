@@ -4,6 +4,10 @@ import {
   normalizeMlSetupsPayload,
   ensureMlSetupRows,
   symbolsFromMlSetupRows,
+  sortMlSetupRows,
+  ML_SETUPS_PAGE_SIZE,
+  ML_SETUPS_DEFAULT_SORT_COL,
+  ML_SETUPS_DEFAULT_SORT_DIR,
 } from '../src/core/utils/mlSetupsAdvisor';
 import {buildTradingViewSymbolsCsv} from '../src/core/utils/tradingViewCsv';
 
@@ -53,5 +57,30 @@ describe('Advisor ML Setups payload (mobile)', () => {
       ]),
     );
     expect(csv).toBe('NSE:VARROC,NSE:HAL');
+  });
+
+  it('defaults to 10 rows per page sorted by RVOL descending', () => {
+    expect(ML_SETUPS_PAGE_SIZE).toBe(10);
+    expect(ML_SETUPS_DEFAULT_SORT_COL).toBe('vol_ratio');
+    expect(ML_SETUPS_DEFAULT_SORT_DIR).toBe('desc');
+    const sorted = sortMlSetupRows([
+      {symbol: 'LOW', vol_ratio: 0.4, ml_score: 0.9},
+      {symbol: 'HIGH', vol_ratio: 3.2, ml_score: 0.6},
+      {symbol: 'MID', vol_ratio: 1.1, ml_score: 0.7},
+    ]);
+    expect(sorted.map(r => r.symbol)).toEqual(['HIGH', 'MID', 'LOW']);
+  });
+
+  it('pages ML Setups 10 at a time instead of slicing the first 80 rows', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(
+      path.resolve(__dirname, '../src/features/advisor/MlSetupsSignalsSection.js'),
+      'utf8',
+    );
+    expect(src).toMatch(/ML_SETUPS_PAGE_SIZE/);
+    expect(src).toMatch(/usePagedList/);
+    expect(src).toMatch(/sortKey="vol_ratio"/);
+    expect(src).not.toMatch(/slice\(0,\s*80\)/);
   });
 });

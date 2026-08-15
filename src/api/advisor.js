@@ -433,7 +433,7 @@ export const fetchMlSetups = async ({
   min_score = 0.55,
   setup_type = '',
   side = '',
-  limit = 200,
+  limit = 500,
 } = {}) => {
   const params = new URLSearchParams();
   params.set('min_score', String(min_score));

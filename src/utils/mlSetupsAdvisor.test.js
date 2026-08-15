@@ -5,6 +5,10 @@ import {
   mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
   symbolsFromMlSetupRows,
+  sortMlSetupRows,
+  ML_SETUPS_PAGE_SIZE,
+  ML_SETUPS_DEFAULT_SORT_COL,
+  ML_SETUPS_DEFAULT_SORT_DIR,
 } from './mlSetupsAdvisor';
 import { buildTradingViewSymbolsCsv } from '../components/TradingViewLink';
 
@@ -71,5 +75,17 @@ describe('Advisor ML Setups payload', () => {
       ]),
     );
     expect(csv).toBe('NSE:VARROC,NSE:HAL');
+  });
+
+  it('defaults to 10 rows per page sorted by RVOL descending', () => {
+    expect(ML_SETUPS_PAGE_SIZE).toBe(10);
+    expect(ML_SETUPS_DEFAULT_SORT_COL).toBe('vol_ratio');
+    expect(ML_SETUPS_DEFAULT_SORT_DIR).toBe('desc');
+    const sorted = sortMlSetupRows([
+      { symbol: 'LOW', vol_ratio: 0.4, ml_score: 0.9 },
+      { symbol: 'HIGH', vol_ratio: 3.2, ml_score: 0.6 },
+      { symbol: 'MID', vol_ratio: 1.1, ml_score: 0.7 },
+    ]);
+    expect(sorted.map((r) => r.symbol)).toEqual(['HIGH', 'MID', 'LOW']);
   });
 });

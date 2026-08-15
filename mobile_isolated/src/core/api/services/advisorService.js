@@ -223,7 +223,7 @@ export const advisorService = {
       {timeoutMs: timeoutMs ?? T},
     ),
   /** Ranked live-market setups for Advisor → ML Setups. */
-  fetchMlSetups: ({min_score = 0.55, setup_type = '', side = '', limit = 200, timeoutMs} = {}) =>
+  fetchMlSetups: ({min_score = 0.55, setup_type = '', side = '', limit = 500, timeoutMs} = {}) =>
     apiGet(
       `/advisor/signals/ml-setups${toQuery({
         min_score,

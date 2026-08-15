@@ -1,5 +1,7 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
+import {ListPagePager} from '@components/ListPagePager';
+import {SortableTableHeader} from '@components/SortableTableHeader';
 import {TradingViewLink} from '@components/TradingViewLink';
 import {advisorService} from '@core/api/services/advisorService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
@@ -15,17 +17,30 @@ import {
   normalizeMlSetupsPayload,
   ensureMlSetupRows,
   symbolsFromMlSetupRows,
+  sortMlSetupRows,
+  ML_SETUPS_PAGE_SIZE,
+  ML_SETUPS_DEFAULT_SORT_COL,
+  ML_SETUPS_DEFAULT_SORT_DIR,
+  ML_SETUPS_FETCH_LIMIT,
 } from '@core/utils/mlSetupsAdvisor';
 import {buildTradingViewSymbolsCsv} from '@core/utils/tradingViewCsv';
 import {formatINR} from '@core/utils/formatMarket';
 import {safeFetch} from '@core/utils/safeFetch';
+import {usePagedList} from '@hooks/usePagedList';
+import {useTableSort} from '@hooks/useTableSort';
 import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
 const POLL_MS = 30 * 1000;
+const PAGE_SIZE = ML_SETUPS_PAGE_SIZE;
 
 function fmtScore(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(2) : '—';
+}
+
+function fmtNum(v, digits = 2) {
+  if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
+  return Number(v).toFixed(digits);
 }
 
 export function MlSetupsSignalsSection() {
@@ -33,6 +48,10 @@ export function MlSetupsSignalsSection() {
   const [meta, setMeta] = useState({ready_for_open: false, live_enabled: false, feature_symbols: 0, session_date: ''});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const {sortConfig, onSort} = useTableSort(
+    ML_SETUPS_DEFAULT_SORT_COL,
+    ML_SETUPS_DEFAULT_SORT_DIR === 'asc',
+  );
 
   const load = useCallback(async ({silent = false} = {}) => {
     if (!silent) setLoading(true);
@@ -42,7 +61,7 @@ export function MlSetupsSignalsSection() {
         () =>
           advisorService.fetchMlSetups({
             min_score: 0.55,
-            limit: 200,
+            limit: ML_SETUPS_FETCH_LIMIT,
             timeoutMs: API_TIMEOUT_MS.advisor,
           }),
         {label: 'ML Setups', timeoutMs: API_TIMEOUT_MS.advisor, retries: 1},
@@ -81,7 +100,15 @@ export function MlSetupsSignalsSection() {
     };
   }, [load]);
 
-  const csvSymbols = symbolsFromMlSetupRows(rows);
+  const sorted = useMemo(
+    () => sortMlSetupRows(rows, sortConfig.key, sortConfig.ascending ? 'asc' : 'desc'),
+    [rows, sortConfig.ascending, sortConfig.key],
+  );
+  const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(sorted, {
+    pageSize: PAGE_SIZE,
+    resetDeps: [sorted.length, sortConfig.key, sortConfig.ascending],
+  });
+  const csvSymbols = symbolsFromMlSetupRows(sorted);
 
   const handleCopyCsv = async () => {
     const csv = buildTradingViewSymbolsCsv(csvSymbols);
@@ -97,11 +124,11 @@ export function MlSetupsSignalsSection() {
     <View style={styles.wrap}>
       <Text style={mobileStyles.sectionTitle}>ML Setups</Text>
       <Text style={styles.hint}>
-        Complete live quotes · score ≥ 0.55 · updates in session · retrains at EOD
+        Complete live quotes · score ≥ 0.55 · {PAGE_SIZE} per page · RVOL desc · retrains at EOD
       </Text>
       <View style={styles.metaRow}>
         <Text style={styles.meta}>
-          {meta.live_enabled ? 'Live on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming'} · {rows.length} setups
+          {meta.live_enabled ? 'Live on' : meta.ready_for_open ? 'Ready before 9 AM' : 'Warming'} · {totalItems} setups
         </Text>
       </View>
       <View style={styles.actions}>
@@ -121,38 +148,43 @@ export function MlSetupsSignalsSection() {
         <Text style={styles.empty}>No high-conviction setups yet. Data is prepared at 08:50 IST.</Text>
       ) : null}
       {rows.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View>
-            <View style={styles.thRow}>
-              <Text style={[styles.th, styles.colScore]}>ML</Text>
-              <Text style={[styles.th, styles.colSym]}>Symbol</Text>
-              <Text style={[styles.th, styles.colTv]} />
-              <Text style={[styles.th, styles.colSetup]}>Setup</Text>
-              <Text style={[styles.th, styles.colSide]}>Side</Text>
-              <Text style={[styles.th, styles.colNum]}>Live</Text>
-              <Text style={[styles.th, styles.colAlign]}>Align</Text>
-            </View>
-            {rows.slice(0, 80).map((row, idx) => (
-              <View key={`${row.symbol}-${row.alert_type}-${idx}`} style={[styles.tr, idx % 2 === 0 ? styles.trAlt : null]}>
-                <Text style={[styles.td, styles.colScore, styles.symBold]}>{fmtScore(row.ml_score)}</Text>
-                <Text style={[styles.td, styles.colSym, styles.symBold]} numberOfLines={1}>
-                  {row.symbol}
-                </Text>
-                <View style={styles.colTv}>
-                  <TradingViewLink symbol={row.symbol} />
-                </View>
-                <Text style={[styles.td, styles.colSetup]} numberOfLines={1}>
-                  {formatMlSetupType(row.alert_type)}
-                </Text>
-                <Text style={[styles.td, styles.colSide]}>{mlSetupDirectionLabel(row)}</Text>
-                <Text style={[styles.td, styles.colNum]}>
-                  {row.live_price != null ? formatINR(row.live_price) : '—'}
-                </Text>
-                <Text style={[styles.td, styles.colAlign]}>{row.aligned ? 'Yes' : 'Check'}</Text>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View>
+              <View style={styles.thRow}>
+                <SortableTableHeader label="ML" sortKey="ml_score" sortConfig={sortConfig} onSort={onSort} style={styles.colScore} textStyle={styles.th} />
+                <SortableTableHeader label="Symbol" sortKey="symbol" sortConfig={sortConfig} onSort={onSort} style={styles.colSym} textStyle={styles.th} />
+                <Text style={[styles.th, styles.colTv]} />
+                <SortableTableHeader label="Setup" sortKey="alert_type" sortConfig={sortConfig} onSort={onSort} style={styles.colSetup} textStyle={styles.th} />
+                <SortableTableHeader label="Side" sortKey="direction" sortConfig={sortConfig} onSort={onSort} style={styles.colSide} textStyle={styles.th} />
+                <SortableTableHeader label="Live" sortKey="live_price" sortConfig={sortConfig} onSort={onSort} style={styles.colNum} textStyle={styles.th} />
+                <SortableTableHeader label="RVOL" sortKey="vol_ratio" sortConfig={sortConfig} onSort={onSort} style={styles.colNum} textStyle={styles.th} />
+                <SortableTableHeader label="Align" sortKey="aligned" sortConfig={sortConfig} onSort={onSort} style={styles.colAlign} textStyle={styles.th} />
               </View>
-            ))}
-          </View>
-        </ScrollView>
+              {pagedItems.map((row, idx) => (
+                <View key={`${row.symbol}-${row.alert_type}-${idx}`} style={[styles.tr, idx % 2 === 0 ? styles.trAlt : null]}>
+                  <Text style={[styles.td, styles.colScore, styles.symBold]}>{fmtScore(row.ml_score)}</Text>
+                  <Text style={[styles.td, styles.colSym, styles.symBold]} numberOfLines={1}>
+                    {row.symbol}
+                  </Text>
+                  <View style={styles.colTv}>
+                    <TradingViewLink symbol={row.symbol} />
+                  </View>
+                  <Text style={[styles.td, styles.colSetup]} numberOfLines={1}>
+                    {formatMlSetupType(row.alert_type)}
+                  </Text>
+                  <Text style={[styles.td, styles.colSide]}>{mlSetupDirectionLabel(row)}</Text>
+                  <Text style={[styles.td, styles.colNum]}>
+                    {row.live_price != null ? formatINR(row.live_price) : '—'}
+                  </Text>
+                  <Text style={[styles.td, styles.colNum]}>{fmtNum(row.vol_ratio, 2)}</Text>
+                  <Text style={[styles.td, styles.colAlign]}>{row.aligned ? 'Yes' : 'Check'}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+          <ListPagePager page={page} totalPages={totalPages} onPageChange={setPage} totalItems={totalItems} />
+        </>
       ) : null}
     </View>
   );

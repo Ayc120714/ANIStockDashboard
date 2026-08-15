@@ -14,11 +14,16 @@ import {
   mlSetupDirectionLabel,
   mlSetupsRowsAndMetaFromCache,
   normalizeMlSetupsPayload,
+  sortMlSetupRows,
   symbolsFromMlSetupRows,
+  ML_SETUPS_PAGE_SIZE,
+  ML_SETUPS_DEFAULT_SORT_COL,
+  ML_SETUPS_DEFAULT_SORT_DIR,
+  ML_SETUPS_FETCH_LIMIT,
 } from '../utils/mlSetupsAdvisor';
 
 const POLL_MS = 30 * 1000;
-const PAGE_SIZE = 25;
+const PAGE_SIZE = ML_SETUPS_PAGE_SIZE;
 const CACHE_KEY = 'advisor_ml_setups_v3';
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
 const symbolTdStyle = symbolCellTdStyle(compact);
@@ -93,8 +98,8 @@ function MlSetupsTableInner() {
   const [setupType, setSetupType] = useState('');
   const [side, setSide] = useState('');
   const [page, setPage] = useState(1);
-  const [sortCol, setSortCol] = useState('ml_score');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortCol, setSortCol] = useState(ML_SETUPS_DEFAULT_SORT_COL);
+  const [sortDir, setSortDir] = useState(ML_SETUPS_DEFAULT_SORT_DIR);
 
   const load = useCallback(async ({ silent = false, forceNetwork = false } = {}) => {
     if (!silent) setLoading(true);
@@ -113,7 +118,7 @@ function MlSetupsTableInner() {
         min_score: 0.55,
         setup_type: setupType,
         side,
-        limit: 200,
+        limit: ML_SETUPS_FETCH_LIMIT,
       });
       const normalized = normalizeMlSetupsPayload(payload);
       const nextRows = ensureMlSetupRows(normalized.data);
@@ -149,26 +154,10 @@ function MlSetupsTableInner() {
 
   const safeRows = ensureMlSetupRows(rows);
 
-  const sorted = useMemo(() => {
-    const list = [...safeRows];
-    const mul = sortDir === 'asc' ? 1 : -1;
-    list.sort((a, b) => {
-      if (sortCol === 'symbol' || sortCol === 'alert_type' || sortCol === 'direction') {
-        const sa = String(a[sortCol] || a.alert_type || '');
-        const sb = String(b[sortCol] || b.alert_type || '');
-        return mul * sa.localeCompare(sb);
-      }
-      if (sortCol === 'aligned') {
-        return mul * (Number(Boolean(a.aligned)) - Number(Boolean(b.aligned)));
-      }
-      const na = Number(a[sortCol]);
-      const nb = Number(b[sortCol]);
-      const av = Number.isFinite(na) ? na : -Infinity;
-      const bv = Number.isFinite(nb) ? nb : -Infinity;
-      return mul * (av - bv);
-    });
-    return list;
-  }, [safeRows, sortCol, sortDir]);
+  const sorted = useMemo(
+    () => sortMlSetupRows(safeRows, sortCol, sortDir),
+    [safeRows, sortCol, sortDir],
+  );
 
   const csvSymbols = useMemo(() => symbolsFromMlSetupRows(sorted), [sorted]);
 
@@ -305,7 +294,10 @@ function MlSetupsTableInner() {
             </Table>
           </TableWrapper>
           {pageCount > 1 ? (
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1.5, mt: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {sorted.length} setups · {PAGE_SIZE} per page
+              </Typography>
               <Pagination count={pageCount} page={safePage} onChange={(_, p) => setPage(p)} size="small" />
             </Box>
           ) : null}
