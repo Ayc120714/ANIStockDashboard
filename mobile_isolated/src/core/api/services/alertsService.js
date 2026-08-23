@@ -1,5 +1,5 @@
 import {apiGet, apiPost, apiRequest} from '@core/api/apiClient';
-import {tradeApiGet} from '@core/api/tradeApiClient';
+import {tradeApiGet, tradeApiPost, tradeApiRequest} from '@core/api/tradeApiClient';
 import {extractApiRows} from '@core/utils/apiPayload';
 import {parseAlertsResponse} from '@core/utils/webParity';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
@@ -17,11 +17,45 @@ const toQuery = params => {
   return raw ? `?${raw}` : '';
 };
 
+const withUser = (userId, extra = {}) => {
+  const q = new URLSearchParams();
+  q.set('user_id', String(userId || ''));
+  Object.entries(extra).forEach(([k, v]) => {
+    if (v == null || v === '') return;
+    q.set(k, String(v));
+  });
+  return q.toString();
+};
+
 export const alertsService = {
-  fetchPriceAlerts: (opts = {}) => apiGet('/price-alerts', {timeoutMs: opts.timeoutMs ?? T.screen}),
-  createPriceAlert: payload => apiPost('/price-alerts', payload),
+  /** Match web `priceAlerts.js` — trade API + user_id / list_type. */
+  fetchPriceAlerts: async ({userId, listType, activeOnly = true, timeoutMs} = {}) => {
+    if (!userId) return [];
+    const query = withUser(userId, {list_type: listType, active_only: String(Boolean(activeOnly))});
+    const data = await tradeApiGet(`/price-alerts?${query}`, {timeoutMs: timeoutMs ?? T.screen});
+    return extractApiRows(data, ['data']);
+  },
+  createPriceAlert: ({userId, listType, symbol, direction, thresholdPrice, isActive = true, timeoutMs} = {}) =>
+    tradeApiPost(
+      '/price-alerts',
+      {
+        user_id: userId,
+        list_type: listType,
+        symbol,
+        direction,
+        threshold_price: Number(thresholdPrice),
+        is_active: Boolean(isActive),
+      },
+      {timeoutMs: timeoutMs ?? T.screen},
+    ),
   updatePriceAlert: (id, payload) => apiPost(`/price-alerts/${encodeURIComponent(String(id))}`, payload),
-  deletePriceAlert: id => apiRequest(`/price-alerts/${encodeURIComponent(String(id))}`, {method: 'DELETE'}),
+  deletePriceAlert: ({userId, alertId, timeoutMs} = {}) => {
+    const query = withUser(userId);
+    return tradeApiRequest(`/price-alerts/${encodeURIComponent(String(alertId))}?${query}`, {
+      method: 'DELETE',
+      timeoutMs: timeoutMs ?? T.screen,
+    });
+  },
   fetchAdvisorAlerts: async (opts = {}) =>
     parseAlertsResponse(await apiGet('/advisor/alerts', {timeoutMs: opts.timeoutMs ?? T.screen, cache: 'no-store'})),
   fetchLiveAdvisorAlerts: async ({source, severity, symbol, limit = 80, timeoutMs} = {}) =>

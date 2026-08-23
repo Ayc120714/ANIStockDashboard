@@ -37,10 +37,10 @@ import {extractApiRows, parseSignalRows, parseWatchlistRows} from '@core/utils/a
 import {parsePercentLike} from '@core/utils/outlookPayload';
 import {parseStockListResponse, stockRowPct} from '@core/utils/stockListPayload';
 import {navigateToMainTab, navigateToStocksAlerts, navigateToStocksBrokers} from '@nav/navigationHelpers';
-
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {fetchWithRetry} from '@core/utils/fetchWithRetry';
 import {dedupeWeeklyEntriesBySymbol, parseWeeklyEntriesResponse} from '@core/utils/webParity';
+import {isAnyBrokerConnected} from '@core/utils/brokerConnection';
 
 const DASHBOARD_CACHE_KEY = MOBILE_PAGE_CACHE_KEYS.dashboard;
 const DASH_MS = API_TIMEOUT_MS.dashboardParallel;
@@ -74,15 +74,13 @@ function stockPct(row) {
 function formatPct(v) {
   if (v == null || Number.isNaN(Number(v))) return '--';
   const n = Number(v);
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${n.toFixed(2)}%`;
+  // Match web DashboardPage fmtPct (`>= 0`).
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
 function stockLabel(row) {
   return row?.symbol || row?.ticker || row?.name || '--';
 }
-
-import {isAnyBrokerConnected} from '@core/utils/brokerConnection';
 
 function normalizeWeeklyEntries(res) {
   if (Array.isArray(res)) return dedupeWeeklyEntriesBySymbol(res);
@@ -146,7 +144,7 @@ function QuarterlyEarningsSetupSection() {
     let mounted = true;
     (async () => {
       try {
-        const res = await advisorService.fetchQuarterlyEarningsSetup({limit: 15});
+        const res = await advisorService.fetchQuarterlyEarningsSetup({limit: 30});
         if (mounted) setPayload(res);
       } catch (_) {
         if (mounted) setFailed(true);

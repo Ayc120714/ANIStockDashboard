@@ -26,7 +26,8 @@ describe('fetchAdvisorTrendPayload', () => {
     expect(result.trendGrid).toBeUndefined();
     expect(hasUsableAdvisorTrendPayload(result)).toBe(true);
     expect(mockFetchBuyTier).toHaveBeenCalledWith(
-      expect.objectContaining({symbol_limit: 800, timeoutMs: 120_000}),
+      // Match web ADVISOR_WEB_LIMITS.buyTierSymbolLimit (was mobile-only 800).
+      expect.objectContaining({symbol_limit: 400, timeoutMs: 120_000}),
     );
   });
 

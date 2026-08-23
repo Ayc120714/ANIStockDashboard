@@ -23,6 +23,7 @@ import {getWatchlistSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {mergeWatchlistWithSignals} from '@core/utils/mergeWatchlistSignals';
+import {normalizeWatchlistTradeLevels} from '@core/utils/normalizeTradeLevels';
 import {navigateToStocksAlerts, navigateToStocksBrokers, navigateToStocksOrders} from '@nav/navigationHelpers';
 import {readPageCache, writePageCache, clearPageCache} from '@core/storage/pageCache';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
@@ -128,13 +129,16 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
         timeoutMs: WATCHLIST_FETCH_MS,
       });
       if (gen != null && gen !== loadGenRef.current) return;
-      const merged = mergeWatchlistWithSignals(baseRows, signals);
+      const merged = normalizeWatchlistTradeLevels(
+        mergeWatchlistWithSignals(baseRows, signals),
+        horizon,
+      );
       setRows(merged);
       await writePageCache(cacheKey, merged);
     } catch (_) {
       // Keep base watchlist rows; intraday signals are optional enrichment.
     }
-  }, [cacheKey]);
+  }, [cacheKey, horizon]);
 
   const loadSymbols = useCallback(async () => {
     try {
@@ -166,7 +170,10 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
           try {
             const wl = await fetchWatchlistRows();
             if (cancelled || gen !== loadGenRef.current) return;
-            const baseRows = Array.isArray(wl) ? wl : [];
+            const baseRows = normalizeWatchlistTradeLevels(
+              Array.isArray(wl) ? wl : [],
+              horizon,
+            );
             setRows(baseRows);
             await writePageCache(cacheKey, baseRows);
             mergeSignalsIntoRows(baseRows, undefined, gen);
@@ -181,7 +188,10 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       try {
         const wl = await fetchWatchlistRows();
         if (cancelled || gen !== loadGenRef.current) return;
-        const baseRows = Array.isArray(wl) ? wl : [];
+        const baseRows = normalizeWatchlistTradeLevels(
+          Array.isArray(wl) ? wl : [],
+          horizon,
+        );
         setRows(baseRows);
         setLoading(false);
         setLoadError(null);
@@ -203,7 +213,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       cancelled = true;
       clearTimeout(symTimer);
     };
-  }, [cacheKey, fetchWatchlistRows, loadSymbols, mergeSignalsIntoRows]);
+  }, [cacheKey, fetchWatchlistRows, loadSymbols, mergeSignalsIntoRows, horizon]);
 
   const onRefresh = useCallback(async () => {
     const gen = ++loadGenRef.current;
@@ -219,8 +229,10 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
         }),
       ]);
       if (gen !== loadGenRef.current) return;
-      const baseRows =
-        wlResult.status === 'fulfilled' && Array.isArray(wlResult.value) ? wlResult.value : [];
+      const baseRows = normalizeWatchlistTradeLevels(
+        wlResult.status === 'fulfilled' && Array.isArray(wlResult.value) ? wlResult.value : [],
+        horizon,
+      );
       setRows(baseRows);
       await writePageCache(cacheKey, baseRows);
       if (sigResult.status === 'fulfilled') {
@@ -232,7 +244,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     } finally {
       if (gen === loadGenRef.current) setRefreshing(false);
     }
-  }, [cacheKey, fetchWatchlistRows, mergeSignalsIntoRows]);
+  }, [cacheKey, fetchWatchlistRows, mergeSignalsIntoRows, horizon]);
 
   const applyOptimisticMutation = useCallback((mutation = {}) => {
     const removed = new Set(
@@ -267,7 +279,10 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     try {
       const wl = await fetchWatchlistRows({cacheBust: forceRefresh});
       if (gen !== loadGenRef.current) return [];
-      const baseRows = Array.isArray(wl) ? wl : [];
+      const baseRows = normalizeWatchlistTradeLevels(
+        Array.isArray(wl) ? wl : [],
+        horizon,
+      );
       setRows(baseRows);
       await writePageCache(cacheKey, baseRows);
       await mergeSignalsIntoRows(baseRows, undefined, gen);
@@ -278,7 +293,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       }
       return [];
     }
-  }, [applyOptimisticMutation, cacheKey, fetchWatchlistRows, mergeSignalsIntoRows]);
+  }, [applyOptimisticMutation, cacheKey, fetchWatchlistRows, mergeSignalsIntoRows, horizon]);
 
   const sortedRows = useMemo(
     () => sortRows(rows, sortConfig, (row, key) => getWatchlistSortValue(row, key, horizon)),
@@ -317,6 +332,11 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       await watchlistService.addToWatchlist(symbol, horizon);
       setAddSym('');
       setSym(symbol);
+      try {
+        await watchlistService.backfillWatchlistMarketData([symbol]);
+      } catch (_) {
+        // Backfill is best-effort; reload still shows the symbol.
+      }
       await reloadWatchlist({
         forceRefresh: true,
         optimistic: {added: [symbol]},

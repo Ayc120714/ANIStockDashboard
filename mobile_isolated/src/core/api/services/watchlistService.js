@@ -51,4 +51,15 @@ export const watchlistService = {
     await invalidateWatchlistCache(listType);
     return res;
   },
+
+  /** Samco candles + technical + rating for symbols already on the watchlist (web parity). */
+  backfillWatchlistMarketData: async (symbols, opts = {}) => {
+    const list = (Array.isArray(symbols) ? symbols : [])
+      .map(normalizeWatchlistSymbol)
+      .filter(Boolean);
+    if (!list.length) return {ok: true, skipped: true};
+    return apiPost('/watchlist/backfill-market-data', {symbols: list}, {
+      timeoutMs: opts.timeoutMs ?? API_TIMEOUT_MS.screenHeavy,
+    });
+  },
 };

@@ -22,7 +22,7 @@ import {sortRows} from '@core/utils/tableSort';
 import {getScreenSortValue} from '@core/utils/screenSortValues';
 import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS, LEGACY_SCREENS_HUB_CACHE_PREFIXES} from '@core/utils/dashboardCachePolicy';
-import {MOBILE_SCREEN_LIST_LIMIT} from '@core/utils/advisorWebParity';
+import {MOBILE_MOVERS_LIMIT, MOBILE_SCREEN_LIST_LIMIT} from '@core/utils/advisorWebParity';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
 import {clearPageCachesByPrefix} from '@core/storage/pageCache';
 import {
@@ -223,6 +223,8 @@ export function ScreensHubScreen({navigation}) {
               dashboardService.fetchPriceShockers({
                 type: gl,
                 period: perM,
+                // Match web PriceShockersPage (200); default service limit is dashboard-sized.
+                limit: MOBILE_MOVERS_LIMIT,
                 date: screenDate || undefined,
                 timeoutMs: API_TIMEOUT_MS.screen,
               }),

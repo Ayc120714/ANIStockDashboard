@@ -37,6 +37,21 @@ describe('watchlistService', () => {
     expect(mockClearPageCache).toHaveBeenCalled();
   });
 
+  it('backfills market data for symbols (web parity)', async () => {
+    await watchlistService.backfillWatchlistMarketData(['reliance', 'infy']);
+    expect(mockApiPost).toHaveBeenCalledWith(
+      '/watchlist/backfill-market-data',
+      {symbols: ['RELIANCE', 'INFY']},
+      expect.objectContaining({timeoutMs: expect.any(Number)}),
+    );
+  });
+
+  it('skips backfill when symbol list is empty', async () => {
+    const res = await watchlistService.backfillWatchlistMarketData([]);
+    expect(res).toEqual({ok: true, skipped: true});
+    expect(mockApiPost).not.toHaveBeenCalled();
+  });
+
   it('deletes symbol from short term watchlist', async () => {
     await watchlistService.removeFromWatchlist('infy', 'short_term');
     expect(mockApiRequest).toHaveBeenCalledWith(

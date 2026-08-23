@@ -1,16 +1,16 @@
 import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
 
 export const MOBILE_PAGE_CACHE_KEYS = {
-  dashboard: '@ani/mobile/page-cache/dashboard-v21',
-  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v6',
+  dashboard: '@ani/mobile/page-cache/dashboard-v22',
+  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v7',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
-    `@ani/mobile/page-cache/screens-v7-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
-  marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v4-${tab}`,
-  stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v6-${tab}`,
-  watchlist: listType => `@ani/mobile/page-cache/watchlist-v5-${listType}`,
-  advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v3',
-  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v11',
-  advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v4',
+    `@ani/mobile/page-cache/screens-v8-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
+  marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v5-${tab}`,
+  stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v7-${tab}`,
+  watchlist: listType => `@ani/mobile/page-cache/watchlist-v6-${listType}`,
+  advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v4',
+  advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v12',
+  advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v5',
   portfolio: '@ani/mobile/page-cache/portfolio-v2',
   orders: '@ani/mobile/page-cache/orders-v2',
   brokersSetup: userId => `@ani/mobile/page-cache/brokers-setup-v2-${userId || 'anon'}`,
@@ -89,6 +89,7 @@ export function isDashboardCacheIncomplete(cached) {
 /** Prior screens hub cache keys — cleared on upgrade so stale EOD shells are not reused. */
 export const LEGACY_SCREENS_HUB_CACHE_PREFIXES = [
   '@ani/mobile/page-cache/screens-v6-',
+  '@ani/mobile/page-cache/screens-v7-',
 ];
 
 /** Which dashboard sections should be refetched (without clearing the whole cache). */
@@ -151,6 +152,7 @@ export const LEGACY_DASHBOARD_CACHE_KEYS = [
   '@ani/mobile/page-cache/dashboard-v16',
   '@ani/mobile/page-cache/dashboard-v17',
   '@ani/mobile/page-cache/dashboard-v20',
+  '@ani/mobile/page-cache/dashboard-v21',
 ];
 
 /** Prior cache keys — cleared on upgrade so empty/stale shells are not reused. */
@@ -162,4 +164,5 @@ export const LEGACY_ADVISOR_TREND_CACHE_KEYS = [
   '@ani/mobile/page-cache/advisor-hub-trend-v8',
   '@ani/mobile/page-cache/advisor-hub-trend-v9',
   '@ani/mobile/page-cache/advisor-hub-trend-v10',
+  '@ani/mobile/page-cache/advisor-hub-trend-v11',
 ];

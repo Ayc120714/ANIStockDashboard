@@ -239,7 +239,7 @@ export const PAGE_CONNECTIVITY_CHECKS = [
     page: 'Alerts',
     name: 'Price alerts',
     run: async () => {
-      const res = await alertsService.fetchPriceAlerts();
+      const res = await alertsService.fetchPriceAlerts({userId: 'connectivity-check'});
       return `rows=${countRows(res?.data ?? res)}`;
     },
   },

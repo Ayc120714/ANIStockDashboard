@@ -24,7 +24,8 @@ export function stockRowPct(row, period = 'day') {
 export function formatPct(v) {
   if (v == null || Number.isNaN(Number(v))) return '—';
   const n = Number(v);
-  const sign = n > 0 ? '+' : '';
+  // Match web DashboardPage fmtPct (`>= 0`) so 0.00% shows as +0.00%.
+  const sign = n >= 0 ? '+' : '';
   return `${sign}${n.toFixed(2)}%`;
 }
 

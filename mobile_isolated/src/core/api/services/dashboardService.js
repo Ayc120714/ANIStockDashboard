@@ -65,7 +65,8 @@ export const dashboardService = {
   },
   fetchSectorOutlook: async (opts = {}) =>
     normalizeSectorOutlookPayload(await apiGet('/sector-outlook', mergeApiOpts(opts, T.screen))),
-  fetchPriceShockers: async ({type = 'gainers', period = 'day', limit = 8, date, timeoutMs, ...opts} = {}) => {
+  // Default 50 matches web screen lists; dashboard/movers callers pass explicit limits.
+  fetchPriceShockers: async ({type = 'gainers', period = 'day', limit = 50, date, timeoutMs, ...opts} = {}) => {
     const q = new URLSearchParams({
       type: String(type),
       period: String(period),

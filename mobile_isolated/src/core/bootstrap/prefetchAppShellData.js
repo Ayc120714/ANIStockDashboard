@@ -6,7 +6,7 @@ import {dashboardService} from '@core/api/services/dashboardService';
 import {advisorService} from '@core/api/services/advisorService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {MOBILE_SCREEN_LIST_LIMIT, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
+import {MOBILE_MOVERS_LIMIT, MOBILE_SCREEN_LIST_LIMIT, MOBILE_SIGNALS_TAB_LIMIT} from '@core/utils/advisorWebParity';
 import {MIN_FII_DII_DAYS} from '@core/utils/fiiDiiPayload';
 import {normalizeMarketIndicesCards} from '@core/utils/marketIndicesCards';
 import {parseStockListResponse} from '@core/utils/stockListPayload';
@@ -112,7 +112,7 @@ async function prefetchScreensHub(main, gl = 'gainers', perM = 'day', perV = 'da
         const res = await dashboardService.fetchPriceShockers({
           type: gl,
           period: perM,
-          limit: MOBILE_SCREEN_LIST_LIMIT,
+          limit: MOBILE_MOVERS_LIMIT,
           timeoutMs: HEAVY,
         });
         return {

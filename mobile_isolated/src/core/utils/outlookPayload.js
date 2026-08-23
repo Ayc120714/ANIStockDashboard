@@ -86,6 +86,13 @@ export function normalizeSectorOutlookRow(row, index = 0) {
   const year3 = parsePercentLike(row?.year3y) ?? parsePercentLike(row?.change_3y) ?? parsePercentLike(row?.perf_3y);
   const {trend, trendDirection} = deriveSectorTrend(day);
 
+  const rawCount = row?.stock_count ?? row?.stocks ?? row?.constituents;
+  // Do not use Number(null) — that is 0 and made cards show "0 stocks".
+  const stock_count =
+    rawCount != null && rawCount !== '' && Number.isFinite(Number(rawCount))
+      ? Number(rawCount)
+      : null;
+
   return {
     id: row?.id ?? index + 1,
     name,
@@ -105,6 +112,7 @@ export function normalizeSectorOutlookRow(row, index = 0) {
     week1wNum: week,
     month1mNum: month,
     avg_day_change: day != null && Number.isFinite(day) ? day : null,
+    stock_count,
   };
 }
 
