@@ -85,7 +85,7 @@ const parseError = async response => {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** True for login/signup/refresh routes that must work while signed out. */
-function isPublicAuthEndpoint(endpoint) {
+export function isPublicAuthEndpoint(endpoint) {
   const path = String(endpoint || '').split('?')[0].replace(/^\//, '');
   return path === 'auth' || path.startsWith('auth/');
 }
@@ -149,7 +149,14 @@ const apiRequestCore = async (endpoint, options = {}) => {
     }
     let intercepted = await runResponseInterceptors(response);
 
-    if (intercepted.status === 401 && unauthorizedHandler && !isLogoutActive()) {
+    // Never recurse refresh on auth/login/refresh itself — that hung the app in a
+    // 401 → refresh → 401 loop when the refresh token was already dead.
+    if (
+      intercepted.status === 401
+      && unauthorizedHandler
+      && !isLogoutActive()
+      && !isPublicAuthEndpoint(endpoint)
+    ) {
       const nextToken = await unauthorizedHandler(intercepted);
       if (isLogoutActive()) {
         throw new Error('Signed out.');
@@ -157,6 +164,8 @@ const apiRequestCore = async (endpoint, options = {}) => {
       if (nextToken) {
         bearerToken = nextToken;
         intercepted = await runResponseInterceptors(await requestWithTimeout(nextToken));
+      } else {
+        throw new Error('Session expired. Please sign in again.');
       }
     }
 

@@ -5,6 +5,7 @@ import {dashboardService} from '@core/api/services/dashboardService';
 import {stopAppShellAutoRefresh} from '@core/bootstrap/bootstrapAppShellData';
 import {env} from '@core/config/env';
 import {beginLogout, isLogoutActive, resetLogoutState} from '@core/auth/authSessionControl';
+import {resolveBootstrapAuthOutcome} from '@core/auth/bootstrapAuthOutcome';
 import {sessionStorage} from '@core/storage/sessionStorage';
 import {tokenStorage} from '@core/storage/tokenStorage';
 import {clearAllSessionPageCaches} from '@core/storage/pageCache';
@@ -22,21 +23,33 @@ export const AuthProvider = ({children}) => {
   const [user, setUser] = useState(null);
   const [tokens, setTokens] = useState({accessToken: null, refreshToken: null});
   const bootstrapRunRef = useRef(0);
+  const refreshInflightRef = useRef(null);
 
   const refreshAccessToken = useCallback(async () => {
     if (isLogoutActive()) return null;
-    const refreshToken = await tokenStorage.getRefreshToken();
-    if (!refreshToken || isLogoutActive()) return null;
-    const session = await authService.refreshSession(refreshToken);
-    if (isLogoutActive()) return null;
-    const nextTokens = {
-      accessToken: session?.access_token || session?.accessToken || null,
-      refreshToken: session?.refresh_token || refreshToken,
-    };
-    await tokenStorage.saveTokens(nextTokens);
-    if (isLogoutActive()) return null;
-    setTokens(nextTokens);
-    return nextTokens.accessToken;
+    if (refreshInflightRef.current) {
+      return refreshInflightRef.current;
+    }
+    refreshInflightRef.current = (async () => {
+      try {
+        const refreshToken = await tokenStorage.getRefreshToken();
+        if (!refreshToken || isLogoutActive()) return null;
+        const session = await authService.refreshSession(refreshToken);
+        if (isLogoutActive()) return null;
+        const nextTokens = {
+          accessToken: session?.access_token || session?.accessToken || null,
+          refreshToken: session?.refresh_token || refreshToken,
+        };
+        if (!nextTokens.accessToken) return null;
+        await tokenStorage.saveTokens(nextTokens);
+        if (isLogoutActive()) return null;
+        setTokens(nextTokens);
+        return nextTokens.accessToken;
+      } finally {
+        refreshInflightRef.current = null;
+      }
+    })();
+    return refreshInflightRef.current;
   }, []);
 
   const clearLocalSession = useCallback(async () => {
@@ -47,6 +60,7 @@ export const AuthProvider = ({children}) => {
     setTokens({accessToken: null, refreshToken: null});
     try {
       await sessionStorage.clear();
+      await tokenStorage.clearTokens();
     } catch (_) {
       /* ignore */
     }
@@ -56,6 +70,7 @@ export const AuthProvider = ({children}) => {
     beginLogout();
     stopAppShellAutoRefresh();
     bootstrapRunRef.current += 1;
+    refreshInflightRef.current = null;
 
     setIsAuthenticated(false);
     setUser(null);
@@ -80,6 +95,7 @@ export const AuthProvider = ({children}) => {
       }
       try {
         await sessionStorage.clear();
+        await tokenStorage.clearTokens();
       } catch (_) {
         /* ignore */
       }
@@ -117,7 +133,12 @@ export const AuthProvider = ({children}) => {
       onUnauthorized: async () => {
         if (isLogoutActive()) return null;
         try {
-          return await refreshAccessToken();
+          const next = await refreshAccessToken();
+          if (!next) {
+            logout();
+            return null;
+          }
+          return next;
         } catch (_) {
           logout();
           return null;
@@ -148,18 +169,32 @@ export const AuthProvider = ({children}) => {
             return;
           }
           setTokens({accessToken, refreshToken});
-          setIsAuthenticated(true);
-          if (mounted) {
-            setIsBootstrapping(false);
-          }
+          // Do not mark authenticated until /auth/me (or refresh+me) succeeds.
+          // Dead tokens + empty page caches left the UI stuck on "Loading…".
           try {
             const me = await authService.fetchMe({timeoutMs: 8000});
             if (!mounted || isLogoutActive() || bootstrapRunRef.current !== runId) return;
             setUser(me);
             await sessionStorage.saveUser(me);
+            if (resolveBootstrapAuthOutcome({meOk: true, refreshOk: false}) === 'authenticated') {
+              setIsAuthenticated(true);
+            }
           } catch (_) {
-            if (mounted && !storedUser) {
-              await clearLocalSession();
+            try {
+              const nextAccess = await refreshAccessToken();
+              const refreshOk = Boolean(nextAccess);
+              if (!refreshOk) throw new Error('refresh failed');
+              const me = await authService.fetchMe({timeoutMs: 8000});
+              if (!mounted || isLogoutActive() || bootstrapRunRef.current !== runId) return;
+              setUser(me);
+              await sessionStorage.saveUser(me);
+              if (resolveBootstrapAuthOutcome({meOk: true, refreshOk: true}) === 'authenticated') {
+                setIsAuthenticated(true);
+              }
+            } catch (_) {
+              if (mounted && resolveBootstrapAuthOutcome({meOk: false, refreshOk: false}) === 'logout') {
+                logout();
+              }
             }
           }
           return;
@@ -178,7 +213,7 @@ export const AuthProvider = ({children}) => {
     return () => {
       mounted = false;
     };
-  }, [clearLocalSession, logout]);
+  }, [clearLocalSession, logout, refreshAccessToken]);
 
   const checkBootstrapReadiness = useCallback(() => dashboardService.fetchSystemReadiness(), []);
 

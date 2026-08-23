@@ -596,12 +596,23 @@ export const DashboardScreen = ({navigation}) => {
     };
   }, [snapshot.nearEntry, watchlistAll]);
 
-  if (loading && !hasDashboardContent(data)) {
+  if (loading && !hasDashboardContent(data) && !error) {
     return (
       <MobileChrome navigation={navigation}>
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={AYC.accent} />
           <Text style={styles.loadingText}>Loading dashboard...</Text>
+        </View>
+      </MobileChrome>
+    );
+  }
+
+  if (!hasDashboardContent(data) && error && isAuthFailureMessage(error)) {
+    return (
+      <MobileChrome navigation={navigation}>
+        <View style={styles.loadingState}>
+          <Text style={styles.errText}>Session expired. Please sign out and sign in again.</Text>
+          <Text style={styles.muted}>Pull to refresh after signing in.</Text>
         </View>
       </MobileChrome>
     );
