@@ -4,7 +4,7 @@ export const MOBILE_PAGE_CACHE_KEYS = {
   dashboard: '@ani/mobile/page-cache/dashboard-v22',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v7',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
-    `@ani/mobile/page-cache/screens-v8-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
+    `@ani/mobile/page-cache/screens-v9-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v5-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v7-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v6-${listType}`,
@@ -90,6 +90,7 @@ export function isDashboardCacheIncomplete(cached) {
 export const LEGACY_SCREENS_HUB_CACHE_PREFIXES = [
   '@ani/mobile/page-cache/screens-v6-',
   '@ani/mobile/page-cache/screens-v7-',
+  '@ani/mobile/page-cache/screens-v8-',
 ];
 
 /** Which dashboard sections should be refetched (without clearing the whole cache). */

@@ -4,6 +4,7 @@ import { Box, TextField, ButtonGroup, Button, CircularProgress, Checkbox } from 
 import Pagination from '@mui/material/Pagination';
 import { fetchIPOs } from '../api/stocks';
 import { addToWatchlist } from '../api/watchlist';
+import { IPO_SESSION_CACHE_PREFIX, IPO_STATUS_FILTERS } from '../utils/ipoScreenFilters';
 
 const formatNum = (v) => {
   if (v == null || v === '') return '—';
@@ -76,7 +77,7 @@ function IPOsPage() {
     let isMounted = true;
     setLoadError(null);
     setPage(1);
-    const cacheKey = `iposData_${statusFilter || 'all'}_200`;
+    const cacheKey = `${IPO_SESSION_CACHE_PREFIX}_${statusFilter || 'all'}_200`;
     let cacheSet = false;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
@@ -236,12 +237,7 @@ function IPOsPage() {
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <ButtonGroup size="small" variant="outlined">
-            {[
-              { label: 'All', value: null },
-              { label: 'Active', value: 'Active' },
-              { label: 'Listed', value: 'Listed' },
-              { label: 'Closed', value: 'Closed' },
-            ].map((btn) => (
+            {IPO_STATUS_FILTERS.map((btn) => (
               <Button
                 key={btn.label}
                 variant={statusFilter === btn.value ? 'contained' : 'outlined'}

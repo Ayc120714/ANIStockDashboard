@@ -43,6 +43,7 @@ import {
   buildAiPicksScreensPayload,
   weeklyPicksHasRows,
 } from '@core/utils/weeklyPicksScreens';
+import {IPO_STATUS_FILTERS} from '@core/utils/ipoScreenFilters';
 
 const LIVE_SCREEN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
 
@@ -69,12 +70,7 @@ function periodColLabel(period) {
   if (period === 'month') return '1M';
   return '1D';
 }
-const IPO_FILTERS = [
-  {id: '', label: 'All'},
-  {id: 'Active', label: 'Active'},
-  {id: 'Listed', label: 'Listed'},
-  {id: 'Closed', label: 'Closed'},
-];
+const IPO_FILTERS = IPO_STATUS_FILTERS;
 
 const SCREEN_HEAVY_OPTS = {timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1};
 const SCREEN_OPTS = {timeoutMs: API_TIMEOUT_MS.screen, retries: 1};
