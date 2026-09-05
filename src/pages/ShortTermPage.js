@@ -15,6 +15,7 @@ import {
   prepareWatchlistMutationRefresh,
   resolveWatchlistRowsAfterFetch,
 } from '../utils/watchlistPageMutation';
+import { filterWatchlistAddOptions } from '../utils/watchlistSymbolPicker';
 import OrderPanel from '../components/OrderPanel';
 import { useLocation, useNavigate } from 'react-router';
 import { runLiveMarketPageMountPoll, runWatchlistPageFetch } from '../utils/screenPageLoader';
@@ -845,16 +846,8 @@ function ShortTermPage() {
           options={availableSymbols}
           getOptionLabel={opt => typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || 'N/A'}`}
           isOptionEqualToValue={(opt, val) => (opt.symbol || opt) === (val.symbol || val)}
-          filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.trim().toLowerCase();
-            if (!q) return opts;
-            return opts.filter(
-              (o) =>
-                o.symbol.toLowerCase().includes(q) ||
-                (o.sector || '').toLowerCase().includes(q) ||
-                (o.subsector || '').toLowerCase().includes(q)
-            );
-          }}
+          filterOptions={(opts, { inputValue }) => filterWatchlistAddOptions(opts, inputValue)}
+          noOptionsText="Type a symbol to search"
           value={selectedStocks}
           onChange={(_, newVal) => setSelectedStocks(newVal)}
           renderInput={(params) => (

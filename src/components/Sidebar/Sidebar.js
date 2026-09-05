@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { SidebarContainer, Section, SectionTitle, ToggleButton } from './Sidebar.styles';
 import { SidebarNavLink } from './SidebarNavLink';
-import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdLock, MdViewModule, MdAttachMoney, MdAssessment } from 'react-icons/md';
+import { MdDashboard, MdEventNote, MdGridView, MdNotifications, MdOutlineShowChart, MdPerson, MdTrendingUp, MdMenu, MdClose, MdSpeed, MdAutoGraph, MdBarChart, MdDiamond, MdCurrencyExchange, MdVerifiedUser, MdAccountBalanceWallet, MdLock, MdViewModule, MdAttachMoney, MdAssessment, MdInsights } from 'react-icons/md';
 import { useAuth } from '../../auth/AuthContext';
 
 function normalizePath(pathname) {
@@ -133,6 +133,13 @@ function Sidebar({ variant = 'rail' }) {
             <SidebarItem to="/algo-performance" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} title={navCollapsed ? 'Algo performance' : undefined}>
               <MdAssessment />
               <span className="label">Algo performance</span>
+            </SidebarItem>
+          ) : null}
+
+          {isAdmin ? (
+            <SidebarItem to="/expiry-analysis" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} title={navCollapsed ? 'Expiry analysis' : undefined}>
+              <MdInsights />
+              <span className="label">Expiry analysis</span>
             </SidebarItem>
           ) : null}
         </Section>

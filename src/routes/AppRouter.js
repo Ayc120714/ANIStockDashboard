@@ -27,6 +27,7 @@ import MutualFundsPage from '../pages/MutualFundsPage';
 import TelegramAdminPage from '../pages/TelegramAdminPage';
 import AdminUsersPage from '../pages/AdminUsersPage';
 import AlgoPerformancePage from '../pages/AlgoPerformancePage';
+import ExpiryAnalysisAdminPage from '../pages/ExpiryAnalysisAdminPage';
 import LoginPage from '../pages/LoginPage';
 import SignupPage from '../pages/SignupPage';
 import OtpVerifyPage from '../pages/OtpVerifyPage';
@@ -79,6 +80,7 @@ function AppRouter() {
           <Route path="/portfolio-manager" element={<PremiumModuleRoute><PortfolioManagerPage /></PremiumModuleRoute>} />
           <Route path="/alerts" element={<StockAlertsRoute />} />
           <Route path="/algo-performance" element={<AdminRoute level="admin"><AlgoPerformancePage /></AdminRoute>} />
+          <Route path="/expiry-analysis" element={<AdminRoute level="admin"><ExpiryAnalysisAdminPage /></AdminRoute>} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/upgrade-premium" element={<UpgradePremiumPage />} />
           <Route path="/callback" element={<DhanCallbackPage />} />

@@ -33,4 +33,5 @@ export const SITE_SECTIONS = [
 export const SITE_SECTIONS_ADMIN = [
   {title: 'Telegram admin', path: '/telegram-admin'},
   {title: 'Admin users', path: '/admin-users'},
+  {title: 'Expiry analysis', path: '/expiry-analysis'},
 ];
