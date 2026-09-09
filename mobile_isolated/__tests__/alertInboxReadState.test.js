@@ -16,6 +16,7 @@ import {
   normalizeLiveAdvisorRows,
   parseAdvisorAlertMs,
   parseInboxReadKeys,
+  relatedInboxReadKeys,
   resolveInboxNavigationTarget,
 } from '@core/utils/alertInboxUtils';
 import {
@@ -72,6 +73,24 @@ describe('notification inbox read state', () => {
     expect(isInboxItemRead(unread, readKeys)).toBe(false);
     expect(isInboxItemRead(readViaKey, readKeys)).toBe(true);
     expect(isInboxItemRead(readViaServer, readKeys)).toBe(true);
+  });
+
+  it('hides the weekly/special copy after the live row is marked read', () => {
+    const recent = hoursAgoIso(1);
+    const sections = buildInboxSections({
+      live: [
+        {id: 91, alert_type: 'weekly_cross_up_high', message: 'ICIL high', timestamp: recent, is_read: false, ml_score: 0.7, source: 'ml_setup', symbol: 'ICIL'},
+      ],
+      special: [
+        {id: 91, alert_type: 'weekly_cross_up_high', message: 'ICIL high', timestamp: recent, symbol: 'ICIL'},
+      ],
+    });
+    const liveRow = sections[INBOX_SOURCES.LIVE][0];
+    const readKeys = new Set(relatedInboxReadKeys(liveRow));
+    const display = filterUnreadInboxSections(sections, readKeys);
+    expect(display[INBOX_SOURCES.LIVE]).toHaveLength(0);
+    expect(display[INBOX_SOURCES.WEEKLY]).toHaveLength(0);
+    expect(display.all).toHaveLength(0);
   });
 
   it('merges stored and in-memory read keys without dropping newer marks', () => {
@@ -168,12 +187,13 @@ describe('ML high-conviction live alerts (score >= 0.70, last 3 days, no VWAP)',
   it('drops VWAP cross, stale, and sub-70 ML rows from the live inbox', () => {
     const kept = normalizeLiveAdvisorRows([
       {id: 1, symbol: 'HAL', alert_type: 'weekly_cross_up_high', timestamp: hoursAgoIso(6), ml_score: 0.81, source: 'ml_setup'},
+      {id: 6, symbol: 'VARROC', alert_type: 'weekly_cross_up_mid', timestamp: hoursAgoIso(3), ml_score: 0.74, source: 'ml_setup'},
       {id: 2, symbol: 'TCS', alert_type: 'vwap_cross_above', timestamp: hoursAgoIso(1), ml_score: 0.99, source: 'ml_setup'},
       {id: 3, symbol: 'INFY', alert_type: 'unusual_volume', timestamp: hoursAgoIso(6), ml_score: 0.69, source: 'ml_setup'},
       {id: 4, symbol: 'SBIN', alert_type: 'renko_smart_long', timestamp: hoursAgoIso(24 * 4), ml_score: 0.91, source: 'ml_setup'},
       {id: 5, symbol: 'ITC', alert_type: 'ENTRY_READY', timestamp: hoursAgoIso(2), source: 'intraday'},
     ]);
-    expect(kept.map(row => row.id)).toEqual(['1']);
+    expect(kept.map(row => row.id)).toEqual(['6', '1']);
     expect(isVwapCrossAlert({alert_type: 'vwap_cross_below'})).toBe(true);
   });
 
@@ -182,11 +202,15 @@ describe('ML high-conviction live alerts (score >= 0.70, last 3 days, no VWAP)',
     expect(isMlHighConvictionAlert({alert_type: 'weekly_cross_up_high', signal_detail: {ml_score: 0.7}})).toBe(true);
     expect(isMlHighConvictionAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 2.2})).toBe(true);
     expect(isMlHighConvictionAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 1.5})).toBe(false);
+    expect(isMlHighConvictionAlert({alert_type: 'weekly_cross_up_low', ml_score: 0.8, source: 'ml_setup'})).toBe(true);
+    expect(isMlHighConvictionAlert({alert_type: 'weekly_cross_up_mid', ml_score: 0.8, source: 'ml_setup'})).toBe(true);
     expect(isMlHighConvictionAlert({alert_type: 'macd_bull', ml_score: 74, source: 'ml_setup'})).toBe(false);
     expect(isMlHighConvictionAlert({alert_type: 'renko_smart_long', ml_score: 0.699})).toBe(false);
   });
 
   it('vibrates only for ML score >= 0.70, never Renko/ENTRY_READY/VWAP without that score', () => {
+    expect(isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_low', ml_score: 0.7, source: 'ml_setup'})).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_mid', ml_score: 0.7, source: 'ml_setup'})).toBe(true);
     expect(isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_high', ml_score: 0.7, source: 'ml_setup'})).toBe(true);
     expect(isPushEligibleLiveAlert({alert_type: 'renko_smart_long', symbol: 'SBIN'})).toBe(false);
     expect(isPushEligibleLiveAlert({alert_type: 'ENTRY_READY', symbol: 'INFY'})).toBe(false);

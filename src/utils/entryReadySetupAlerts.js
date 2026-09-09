@@ -69,12 +69,16 @@ export function notifyEntryReadyBrowser(rows = []) {
 /**
  * Compare current entry-ready rows against stored digest.
  * Returns newly appeared rows and persists the latest digest.
+ * Cold start (empty digest) seeds without notifying. A stored digest still
+ * notifies on the first poll so alerts that arrived while the page was closed
+ * are not saved as already seen.
  */
 export function detectNewEntryReadySetups(rows = [], { bootstrap = false } = {}) {
+  void bootstrap;
   const entryReady = filterEntryReadySetupRows(rows);
   const digest = entryReadySetupsDigest(entryReady);
   const prev = loadEntryReadyDigest();
-  const fresh = !bootstrap && prev ? diffNewEntryReadySetups(prev, entryReady) : [];
+  const fresh = prev ? diffNewEntryReadySetups(prev, entryReady) : [];
   saveEntryReadyDigest(digest);
   return { entryReady, fresh, digest };
 }

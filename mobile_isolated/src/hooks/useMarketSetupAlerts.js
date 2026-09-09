@@ -9,13 +9,13 @@ import {STORAGE_KEYS} from '@core/storage/keys';
 import {clearPageCache} from '@core/storage/pageCache';
 import {MOBILE_PAGE_CACHE_KEYS} from '@core/utils/dashboardCachePolicy';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {isDemoAlert, isTodayInIST} from '@core/utils/alertInboxUtils';
+import {isDemoAlert} from '@core/utils/alertInboxUtils';
 import {
   loadAdvisorTableChangeEvents,
   processAdvisorTableSnapshots,
 } from '@core/utils/advisorTableChangeAlerts';
 import {fetchAdvisorTableSnapshots} from '@core/utils/advisorTableSnapshots';
-import {diffNewLiveAlerts, liveAlertsDigest} from '@core/utils/liveAlertsDigest';
+import {freshLiveAlertsToNotify, liveAlertsDigest} from '@core/utils/liveAlertsDigest';
 import {
   ensureMarketSession,
   getCachedMarketSession,
@@ -28,7 +28,6 @@ import {
   notifyNewSignals,
   queueInAppEntryBanner,
 } from '@core/utils/signalNotifications';
-import {isPushEligibleLiveAlert} from '@core/utils/pushNotificationEligibility';
 
 const LIVE_ACTIVE_POLL_MS = 30_000;
 const LIVE_BACKGROUND_POLL_MS = 60_000;
@@ -42,7 +41,6 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
   const [entryHint, setEntryHint] = useState('');
   const [entryNavTarget, setEntryNavTarget] = useState(null);
   const [signalsBadge, setSignalsBadge] = useState(undefined);
-  const firstLiveAlertPoll = useRef(true);
   const inflightRef = useRef(false);
   const timerRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
@@ -80,21 +78,13 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
     const list = (Array.isArray(rows) ? rows : extractApiRows(rows)).filter(row => !isDemoAlert(row));
     const digest = liveAlertsDigest(list);
     const prev = await AsyncStorage.getItem(STORAGE_KEYS.liveAdvisorAlertsDigest);
-
-    if (!firstLiveAlertPoll.current && prev && digest !== prev) {
-      const fresh = diffNewLiveAlerts(prev, list).filter(row => {
-        if (row?.is_read) return false;
-        if (!isPushEligibleLiveAlert(row)) return false;
-        return isTodayInIST(row?.created_at || row?.alert_time || row?.updated_at || row?.timestamp);
-      });
-      if (fresh.length) {
-        await applyLiveAlertBanner(fresh);
-        await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
-      }
+    const fresh = freshLiveAlertsToNotify(prev, list);
+    if (fresh.length) {
+      await applyLiveAlertBanner(fresh);
+      await clearPageCache(MOBILE_PAGE_CACHE_KEYS.advisorSignals);
     }
 
     await AsyncStorage.setItem(STORAGE_KEYS.liveAdvisorAlertsDigest, digest);
-    firstLiveAlertPoll.current = false;
   }, [applyLiveAlertBanner]);
 
   const pollTableChanges = useCallback(async () => {

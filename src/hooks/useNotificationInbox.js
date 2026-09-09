@@ -12,6 +12,7 @@ import {
   isInboxItemRead,
   mergeInboxReadKeys,
   parseInboxReadKeys,
+  relatedInboxReadKeys,
   serializeInboxReadKeys,
 } from '../utils/alertInboxUtils';
 import { ensureMarketSession, getCachedMarketSession, shouldPollLiveMarket } from '../utils/marketSession';
@@ -118,7 +119,7 @@ export function useNotificationInbox({ enabled = true, userId = '', isSuperAdmin
       if (!item || isInboxItemRead(item, readKeysRef.current)) return;
       const key = inboxItemKey(item);
       const next = new Set(readKeysRef.current);
-      next.add(key);
+      relatedInboxReadKeys(item).forEach((related) => next.add(related));
       readKeysRef.current = next;
       setReadKeys(next);
       persistReadKeys(userId, next);
@@ -146,7 +147,7 @@ export function useNotificationInbox({ enabled = true, userId = '', isSuperAdmin
     );
     const next = new Set(readKeysRef.current);
     for (const item of sections.all) {
-      next.add(inboxItemKey(item));
+      relatedInboxReadKeys(item).forEach((related) => next.add(related));
     }
     readKeysRef.current = next;
     setReadKeys(next);

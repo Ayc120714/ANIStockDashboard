@@ -9,7 +9,7 @@ export const LIVE_PAGE_CACHE_KEYS = {
   sectorOutlook: 'sectorOutlookData_v2',
   subsectorOutlook: 'subsectorOutlookData_v3',
   aiPicks: 'aiWeeklyPicks_v1',
-  liveSetups: 'liveSetupsEntryReady_v1',
+  liveSetups: 'liveSetupsEntryReady_v3',
   shortTermWatchlist: 'shortTermWatchlist_v4',
   longTermWatchlist: 'longTermWatchlist_v4',
   chartFundamental: 'advisor_chart_fundamental_agent_v7',

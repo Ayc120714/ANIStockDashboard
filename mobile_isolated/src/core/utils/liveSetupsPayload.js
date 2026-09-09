@@ -2,7 +2,7 @@ import {alertsService} from '@core/api/services/alertsService';
 import {signalsService} from '@core/api/services/signalsService';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractApiRows} from '@core/utils/apiPayload';
-import {isDemoAlert, isTodayInIST, parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
+import {isDemoAlert, isMlHighConvictionAlert, isTodayInIST, isWeeklyLevelCrossUpAlert, parseAdvisorAlertMs} from '@core/utils/alertInboxUtils';
 import {ADVISOR_WEB_LIMITS} from '@core/utils/advisorWebParity';
 import {shouldRemoveSetupRow} from '@core/utils/setupLifecycle';
 
@@ -11,6 +11,25 @@ function normalizeSymbol(value) {
 }
 
 export const LIVE_ACTION_STATUSES = new Set(['entry_ready', 'in_trade', 'exit_watch']);
+
+export function isLiveSetupBoardAlert(alert) {
+  if (isWeeklyLevelCrossUpAlert(alert)) {
+    return isMlHighConvictionAlert(alert);
+  }
+  return isLiveEntryExitAlert(alert);
+}
+
+/** Read alerts stay off the live board; weekly L/M/H only for today's close-above. */
+export function isOpenLiveSetupBoardAlert(alert) {
+  if (!alert || alert.is_read === true) return false;
+  if (isDemoAlert(alert)) return false;
+  if (!isLiveSetupBoardAlert(alert)) return false;
+  const ts = alert.timestamp || alert.created_at || alert.alert_time;
+  if (isWeeklyLevelCrossUpAlert(alert)) {
+    return isTodayInIST(ts);
+  }
+  return isThisWeekSetupRow({ setup_at: ts });
+}
 
 export function isLiveEntryExitAlert(alert) {
   const t = String(alert?.alert_type || '').toUpperCase();
@@ -85,9 +104,7 @@ export function isThisWeekSetupRow(row) {
 
 export function buildLiveSetupRows(signals = [], liveAlerts = []) {
   const todayLive = (Array.isArray(liveAlerts) ? liveAlerts : [])
-    .filter(row => isThisWeekSetupRow({setup_at: row?.timestamp || row?.created_at || row?.alert_time}))
-    .filter(row => !isDemoAlert(row))
-    .filter(row => isLiveEntryExitAlert(row))
+    .filter(row => isOpenLiveSetupBoardAlert(row))
     .map(liveAlertToSetupRow)
     .filter(row => row.symbol);
 

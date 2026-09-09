@@ -26,6 +26,7 @@ import {
   detectNewEntryReadySetups,
   notifyEntryReadyBrowser,
 } from '../utils/entryReadySetupAlerts';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { buildProductProfilesFromAlertDetail } from '../utils/alertTradeSetup';
 import { getSetupLifecycleState, setupRowToTradeDetail } from '../utils/setupLifecycle';
 
@@ -43,7 +44,7 @@ function statusChipColor(label) {
   return { bg: '#f3f4f6', color: '#374151' };
 }
 
-const LIVE_SETUPS_CACHE_KEY = 'liveSetupsEntryReady_v1';
+const LIVE_SETUPS_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.liveSetups;
 
 function LiveSetupsPage() {
   const [searchParams] = useSearchParams();

@@ -46,6 +46,12 @@ describe('push notification eligibility', () => {
       isPushEligibleLiveAlert({alert_type: 'unusual_volume', ml_score: 0.8, vol_ratio: 2.1, source: 'ml_setup'}),
     ).toBe(true);
     expect(
+      isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_low', ml_score: 0.8, source: 'ml_setup'}),
+    ).toBe(true);
+    expect(
+      isPushEligibleLiveAlert({alert_type: 'weekly_cross_up_mid', ml_score: 0.8, source: 'ml_setup'}),
+    ).toBe(true);
+    expect(
       isPushEligibleLiveAlert({alert_type: 'prev_day_high_breakout', ml_score: 0.8, source: 'ml_setup'}),
     ).toBe(true);
   });

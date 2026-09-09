@@ -68,4 +68,13 @@ describe('entry ready setup alerts', () => {
     expect(second.fresh).toHaveLength(1);
     expect(second.fresh[0].symbol).toBe('HDFCBANK');
   });
+
+  it('notifies on first page load when stored digest exists and new rows appeared', () => {
+    saveEntryReadyDigest(entryReadySetupsDigest([entryReadyRow]));
+    const first = detectNewEntryReadySetups(
+      [entryReadyRow, { ...entryReadyRow, symbol: 'ICIL' }],
+      { bootstrap: true },
+    );
+    expect(first.fresh.map((row) => row.symbol)).toEqual(['ICIL']);
+  });
 });

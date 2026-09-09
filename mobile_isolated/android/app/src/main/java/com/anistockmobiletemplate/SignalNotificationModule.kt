@@ -5,6 +5,9 @@ import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.facebook.react.bridge.Promise
@@ -23,6 +26,7 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
     }
     val manager = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+    manager.deleteNotificationChannel(PREVIOUS_CHANNEL_ID)
     if (manager.getNotificationChannel(CHANNEL_ID) != null) {
       return
     }
@@ -39,6 +43,41 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
     val audio = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val mode = audio.ringerMode
     return mode == AudioManager.RINGER_MODE_SILENT || mode == AudioManager.RINGER_MODE_VIBRATE
+  }
+
+  private fun pulseVibrator() {
+    try {
+      val vibrator =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager =
+                reactContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator
+          } else {
+            @Suppress("DEPRECATION")
+            reactContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+          }
+      if (!vibrator.hasVibrator()) {
+        return
+      }
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        vibrator.vibrate(VibrationEffect.createWaveform(VIBRATION_PATTERN, -1))
+      } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(VIBRATION_PATTERN, -1)
+      }
+    } catch (_: Exception) {
+      /* device may block vibration */
+    }
+  }
+
+  @ReactMethod
+  fun vibrate(promise: Promise) {
+    try {
+      pulseVibrator()
+      promise.resolve(true)
+    } catch (error: Exception) {
+      promise.reject("VIBRATE_FAILED", error.message ?: "Could not vibrate.", error)
+    }
   }
 
   @ReactMethod
@@ -75,8 +114,9 @@ class SignalNotificationModule(private val reactContext: ReactApplicationContext
 
   companion object {
     private const val LEGACY_CHANNEL_ID = "advisor_signals"
-    private const val CHANNEL_ID = "advisor_ml_alerts_v1"
+    private const val PREVIOUS_CHANNEL_ID = "advisor_ml_alerts_v1"
+    private const val CHANNEL_ID = "advisor_ml_alerts_v2"
     private const val CHANNEL_NAME = "AYC ML setup alerts"
-    private val VIBRATION_PATTERN = longArrayOf(0, 280, 120, 280)
+    private val VIBRATION_PATTERN = longArrayOf(0, 420, 140, 420, 140, 560)
   }
 }

@@ -112,6 +112,54 @@ describe('liveSetupsPayload', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it('keeps high-conviction weekly low/mid/high close-above on the live setup board', () => {
+    const today = istTimestamp(new Date());
+    const rows = buildLiveSetupRows(
+      [],
+      [{
+        id: 7,
+        symbol: 'HAL',
+        alert_type: 'weekly_cross_up_mid',
+        timestamp: today,
+        ml_score: 0.81,
+        source: 'ml_setup',
+        signal_detail: { entry: 900, stop_loss: 880, target_1: 920, target_2: 940 },
+      }],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe('HAL');
+    expect(rows[0].status).toBe('entry_ready');
+  });
+
+  it('drops marked-read and prior-day weekly crosses from the live board', () => {
+    const yesterday = istTimestamp(new Date(Date.now() - 24 * 3600 * 1000));
+    const rows = buildLiveSetupRows(
+      [],
+      [
+        {
+          id: 8,
+          symbol: 'SPAL',
+          alert_type: 'weekly_cross_up_high',
+          timestamp: today,
+          ml_score: 0.7,
+          source: 'ml_setup',
+          is_read: true,
+          signal_detail: { entry: 1050, stop_loss: 1040, target_1: 1070, target_2: 1090 },
+        },
+        {
+          id: 9,
+          symbol: 'SHILPAMED',
+          alert_type: 'weekly_cross_up_high',
+          timestamp: yesterday,
+          ml_score: 0.74,
+          source: 'ml_setup',
+          signal_detail: { entry: 500, stop_loss: 480, target_1: 520, target_2: 540 },
+        },
+      ],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it('partitions today and week buckets', () => {
     const rows = buildLiveSetupRows(
       [{

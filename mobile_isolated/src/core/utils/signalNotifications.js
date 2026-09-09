@@ -4,7 +4,7 @@ import {buildSignalNotificationPayload} from '@core/utils/signalNotificationCopy
 
 const {SignalNotification} = NativeModules;
 
-const FOREGROUND_VIBRATE_MS = 280;
+const FOREGROUND_VIBRATE_MS = [0, 420, 140, 420, 140, 560];
 export const PENDING_ENTRY_HINT_KEY = '@ani/mobile/pending-entry-hint';
 
 export async function ensureNotificationPermission() {
@@ -26,6 +26,22 @@ export async function ensureNotificationPermission() {
   }
 }
 
+export async function vibrateForNewAlert() {
+  if (Platform.OS === 'android' && SignalNotification?.vibrate) {
+    try {
+      await SignalNotification.vibrate();
+      return true;
+    } catch {
+      /* fall through to JS vibrator */
+    }
+  }
+  if (Platform.OS === 'android') {
+    Vibration.vibrate(FOREGROUND_VIBRATE_MS);
+    return true;
+  }
+  return false;
+}
+
 export async function showSystemNotification(title, message) {
   if (Platform.OS !== 'android' || !SignalNotification?.show) {
     return false;
@@ -45,8 +61,8 @@ export async function notifyNewSignals(freshSignals, {vibrateInApp = true} = {})
     return {shown: false, payload: null};
   }
 
-  if (vibrateInApp && Platform.OS === 'android') {
-    Vibration.vibrate(FOREGROUND_VIBRATE_MS);
+  if (vibrateInApp) {
+    await vibrateForNewAlert();
   }
 
   if (Platform.OS !== 'android' || !SignalNotification?.show) {

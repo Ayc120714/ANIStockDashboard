@@ -14,6 +14,7 @@ import {
   isTableChangeInboxItem,
   mergeInboxReadKeys,
   parseInboxReadKeys,
+  relatedInboxReadKeys,
   serializeInboxReadKeys,
 } from '@core/utils/alertInboxUtils';
 import {
@@ -167,7 +168,7 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
       if (!item || isInboxItemRead(item, readKeysRef.current)) return;
       const key = inboxItemKey(item);
       const next = new Set(readKeysRef.current);
-      next.add(key);
+      for (const related of relatedInboxReadKeys(item)) next.add(related);
       readKeysRef.current = next;
       setReadKeys(next);
       await persistReadKeys(userId, next);
@@ -200,7 +201,7 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
     );
     const next = new Set(readKeysRef.current);
     for (const item of sections.all) {
-      next.add(inboxItemKey(item));
+      for (const related of relatedInboxReadKeys(item)) next.add(related);
     }
     readKeysRef.current = next;
     setReadKeys(next);

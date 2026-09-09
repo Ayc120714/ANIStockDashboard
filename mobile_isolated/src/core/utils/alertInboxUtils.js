@@ -108,8 +108,13 @@ export const LIVE_ML_RENKO_TYPES = Object.freeze([
   'renko_smart_short',
   'renko_fib_zone_long',
 ]);
-export const LIVE_ML_CLOSE_HIGH_TYPES = Object.freeze([
+export const LIVE_ML_WEEKLY_CROSS_UP_TYPES = Object.freeze([
+  'weekly_cross_up_low',
+  'weekly_cross_up_mid',
   'weekly_cross_up_high',
+]);
+export const LIVE_ML_CLOSE_HIGH_TYPES = Object.freeze([
+  ...LIVE_ML_WEEKLY_CROSS_UP_TYPES,
   'prev_day_high_breakout',
 ]);
 export const LIVE_ML_RVOL_TYPES = Object.freeze(['unusual_volume']);
@@ -164,6 +169,11 @@ export function liveVolumeRatio(row) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+export function isWeeklyLevelCrossUpAlert(row) {
+  const type = String(row?.alert_type || '').trim().toLowerCase();
+  return LIVE_ML_WEEKLY_CROSS_UP_TYPES.includes(type);
+}
+
 export function isEnabledLiveMlSetup(row) {
   const type = String(row?.alert_type || '').trim();
   if (LIVE_ML_RENKO_TYPES.includes(type) || LIVE_ML_CLOSE_HIGH_TYPES.includes(type)) {
@@ -176,7 +186,7 @@ export function isEnabledLiveMlSetup(row) {
   return false;
 }
 
-/** Live push/vibration: Renko, close-cross high, or RVOL>2, and ML score >= 0.70. */
+/** Live push/vibration: Renko, close-above weekly low/mid/high, or RVOL>2, and ML score >= 0.70. */
 export function isMlHighConvictionAlert(row) {
   if (!row || isDemoAlert(row) || isVwapCrossAlert(row)) return false;
   if (!isEnabledLiveMlSetup(row)) return false;
@@ -380,6 +390,19 @@ export function inboxItemKey(item) {
   return `${item?.source || 'row'}:${item?.id || item?.title || ''}`;
 }
 
+/** Same DB alert can appear as live and as weekly/special; marking one hides both. */
+export function relatedInboxReadKeys(item) {
+  const primary = inboxItemKey(item);
+  const id = String(item?.id || '').trim();
+  if (!id || !/^\d+$/.test(id)) return [primary];
+  return [...new Set([
+    primary,
+    `${INBOX_SOURCES.LIVE}:${id}`,
+    `${INBOX_SOURCES.WEEKLY}:${id}`,
+    `${INBOX_SOURCES.DIVERGENCE}:${id}`,
+  ])];
+}
+
 export function parseInboxReadKeys(stored = '') {
   return new Set(String(stored || '').split('|').filter(Boolean));
 }
@@ -493,7 +516,7 @@ export function resolveInboxNavigationTarget(item) {
 
 export function isInboxItemRead(item, readKeys) {
   const keys = readKeys instanceof Set ? readKeys : parseInboxReadKeys(readKeys);
-  if (keys.has(inboxItemKey(item))) return true;
+  if (relatedInboxReadKeys(item).some(key => keys.has(key))) return true;
   if (Boolean(item?.isRead)) return true;
   if (Boolean(item?.raw?.is_read)) return true;
   return false;
