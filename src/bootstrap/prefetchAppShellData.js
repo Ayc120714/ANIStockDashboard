@@ -9,7 +9,12 @@ import { fetchSubsectorOutlook } from '../api/subsectorOutlook';
 import { fetchMarketOutlookBundle, marketOutlookHasUsable } from '../utils/marketOutlookLoader';
 import { fetchFiiDiiActivity } from '../api/fiiDii';
 import { FII_DII_FETCH_DAYS } from '../utils/fiiDiiPayload';
-import { fetchWeeklyPicks, fetchTrending, fetchPriceShockers, fetchVolumeShockers } from '../api/stocks';
+import {
+  fetchWeeklyPicks,
+  fetchTrendingRaw,
+  fetchPriceShockersRaw,
+  fetchVolumeShockersRaw,
+} from '../api/stocks';
 import { fetchWatchlist, fetchWatchlistSignals } from '../api/watchlist';
 import { ensureMarketSession } from '../utils/marketSession';
 import { fetchLiveSetupsPayload } from '../utils/liveSetupsPayload';
@@ -72,20 +77,22 @@ export async function prefetchAppShellData({ userKey = '' } = {}) {
         fetchWeeklyPicks,
         (data) => Boolean(data?.bullish?.length || data?.bearish?.length),
       ),
+      // Cache RAW API rows — pages re-map via mapRows on hydrate. Prefetching
+      // already-mapped rows caused Volume/Price/Trending columns to show "—".
       () => warmCacheIfNeeded(
         LIVE_PAGE_CACHE_KEYS.trending(50),
-        () => fetchTrending(50),
+        () => fetchTrendingRaw(50),
         (rows) => Array.isArray(rows) && rows.length > 0,
       ),
       () => warmCacheIfNeeded(
         LIVE_PAGE_CACHE_KEYS.priceShockers('gainers', 'day', 50),
-        () => fetchPriceShockers('gainers', 50, 'day'),
+        () => fetchPriceShockersRaw('gainers', 50, 'day'),
         (rows) => Array.isArray(rows) && rows.length > 0,
       ),
       () => warmCacheIfNeeded(
         // Must match VolumeShockersPage's user-scoped key or the warm is wasted.
         LIVE_PAGE_CACHE_KEYS.volumeShockers(userKey || 'default', 'day', 50),
-        () => fetchVolumeShockers(50, 'day'),
+        () => fetchVolumeShockersRaw(50, 'day'),
         (rows) => Array.isArray(rows) && rows.length > 0,
       ),
       () => warmCacheIfNeeded(

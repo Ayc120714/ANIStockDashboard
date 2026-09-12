@@ -76,5 +76,5 @@ const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: AYC.pageBg},
   statusPad: {backgroundColor: AYC.appBar},
   header: {backgroundColor: AYC.appBar},
-  body: {flex: 1},
+  body: {flex: 1, minHeight: 0},
 });

@@ -9,6 +9,15 @@ export function initialWatchlistPanelState(embedded) {
   return {addExpanded: true, tradeExpanded: true};
 }
 
+/**
+ * Embedded ST/LT chrome (title, add/trade) must sit *outside* FlatList.
+ * Putting it in ListHeaderComponent made the stock table height collapse to 0
+ * inside the Stocks hub, so LT/ST looked empty even when rows had loaded.
+ */
+export function shouldRenderWatchlistChromeOutsideList(embedded) {
+  return Boolean(embedded);
+}
+
 export function watchlistHorizonLabel(horizon) {
   return horizon === 'short_term' ? 'Short Term' : 'Long Term';
 }

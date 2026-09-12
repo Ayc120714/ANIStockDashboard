@@ -11,6 +11,7 @@ import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { addToWatchlist } from '../api/watchlist';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
 function TrendingPage() {
   const [page, setPage] = useState(1);
@@ -78,7 +79,7 @@ function TrendingPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchMode = String(debouncedSearch || '').trim().length > 0;
     const fetchLimit = searchMode ? 1000 : 50;
-    const cacheKey = `trendingStocksData_v3_${fetchLimit}${dateStr ? '_' + dateStr : ''}`;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.trending(fetchLimit)}${dateStr ? '_' + dateStr : ''}`;
     let cleanup;
     runScreenTableFetchWithLivePoll({
       cacheKey,

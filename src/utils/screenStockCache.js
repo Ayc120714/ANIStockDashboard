@@ -1,9 +1,12 @@
-/** Legacy sessionStorage keys that cached pre-formatted CHG% strings (wrong after backend fix). */
+/** Legacy sessionStorage keys that cached pre-formatted / double-mapped screen rows. */
 export const LEGACY_FORMATTED_SCREEN_CACHE_PREFIXES = [
   'trendingStocksData_v2_',
+  'trendingStocksData_v3_',
   'relativePerformanceData_v2_',
   'priceShockersData_v3_',
+  'priceShockersData_v4_',
   'volumeShockersData_v4_',
+  'volumeShockersData_v5_',
   'dashboard_overview_cache_v4',
   'dashboard_overview_cache_v5',
 ];

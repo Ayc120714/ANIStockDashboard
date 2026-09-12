@@ -805,7 +805,8 @@ function LongTermPage() {
           getOptionLabel={opt => typeof opt === 'string' ? opt : `${opt.symbol} — ${opt.sector || 'N/A'}`}
           isOptionEqualToValue={(opt, val) => (opt.symbol || opt) === (val.symbol || val)}
           filterOptions={(opts, { inputValue }) => filterWatchlistAddOptions(opts, inputValue)}
-          noOptionsText="Type a symbol to search"
+          noOptionsText="IPO stocks, or type a symbol to search"
+          openOnFocus
           value={selectedStocks}
           onChange={(_, newVal) => setSelectedStocks(newVal)}
           renderInput={(params) => (

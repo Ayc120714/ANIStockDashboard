@@ -2,12 +2,12 @@ import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
 
 export const MOBILE_PAGE_CACHE_KEYS = {
   dashboard: '@ani/mobile/page-cache/dashboard-v22',
-  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v7',
+  advisorSignals: '@ani/mobile/page-cache/advisor-signals-v8',
   screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '') =>
     `@ani/mobile/page-cache/screens-v9-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v5-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v7-${tab}`,
-  watchlist: listType => `@ani/mobile/page-cache/watchlist-v6-${listType}`,
+  watchlist: listType => `@ani/mobile/page-cache/watchlist-v7-${listType}`,
   advisorHubSignals: '@ani/mobile/page-cache/advisor-hub-signals-v4',
   advisorHubTrend: '@ani/mobile/page-cache/advisor-hub-trend-v12',
   advisorHubChart: '@ani/mobile/page-cache/advisor-hub-chart-v5',

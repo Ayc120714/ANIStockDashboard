@@ -3,24 +3,20 @@ package com.anistockmobiletemplate
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
-import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -29,6 +25,7 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
   private var downloadReceiver: BroadcastReceiver? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   override fun getName(): String = "ApkUpdate"
 
@@ -54,23 +51,22 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
-    val apkFile =
-        File(
-            reactContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "ani-stock-release.apk",
-        )
-    if (!apkFile.exists() || apkFile.length() < 1024) {
+    val apkFile = ApkInstallHelper.existingInstallableApk(reactContext)
+    if (apkFile == null) {
       promise.resolve(false)
       return
     }
 
-    try {
-      validateApkMagic(apkFile)
-      launchPackageInstallerIntent(activity, apkFile)
-      promise.resolve(true)
-    } catch (e: Exception) {
-      promise.resolve(false)
-    }
+    ApkDownloadCoordinator.installStarted = false
+    ApkInstallHelper.launchInstallerAsync(
+        activity,
+        apkFile,
+        { promise.resolve(true) },
+        {
+          ApkDownloadCoordinator.installStarted = false
+          promise.resolve(false)
+        },
+    )
   }
 
   @ReactMethod
@@ -100,8 +96,8 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
     val activity = reactContext.currentActivity
     if (activity == null) {
       if (attempt < 15) {
-        Handler(Looper.getMainLooper())
-            .postDelayed({ downloadAndInstallWithActivityRetry(apkUrl, promise, attempt + 1) }, 200)
+        mainHandler.postDelayed(
+            { downloadAndInstallWithActivityRetry(apkUrl, promise, attempt + 1) }, 200)
         return
       }
       promise.reject("NO_ACTIVITY", "Cannot start update — app activity is not available.")
@@ -124,6 +120,20 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
+    val cached = ApkInstallHelper.existingInstallableApk(reactContext)
+    if (cached != null) {
+      ApkDownloadCoordinator.beginDownload(promise, -1L)
+      if (ApkDownloadCoordinator.markInstallStarted()) {
+        ApkInstallHelper.launchInstallerAsync(
+            activity,
+            cached,
+            { ApkDownloadCoordinator.resolveIfPending() },
+            { downloadInlineFallback(activity, apkUrl, ApkDownloadCoordinator.takePromise() ?: promise) },
+        )
+        return
+      }
+    }
+
     Toast.makeText(activity, "Downloading update…", Toast.LENGTH_LONG).show()
 
     try {
@@ -135,8 +145,9 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
 
   private fun enqueueDownloadManager(activity: Activity, apkUrl: String, promise: Promise) {
     ensureDownloadReceiverRegistered()
+    ApkInstallHelper.deleteStaleDownloads(reactContext)
     val dm = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val fileName = "ani-stock-release.apk"
+    val dest = ApkInstallHelper.downloadDestination(reactContext)
     val request =
         DownloadManager.Request(Uri.parse(apkUrl)).apply {
           setTitle("ANI Stock update")
@@ -145,14 +156,81 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
           setAllowedOverMetered(true)
           setAllowedOverRoaming(true)
           setMimeType("application/vnd.android.package-archive")
-          setDestinationInExternalFilesDir(
-              reactContext, Environment.DIRECTORY_DOWNLOADS, fileName)
+          setDestinationUri(Uri.fromFile(dest))
         }
 
-    synchronized(ApkDownloadCoordinator) {
-      ApkDownloadCoordinator.promise = promise
-      ApkDownloadCoordinator.downloadId = dm.enqueue(request)
+    val downloadId = dm.enqueue(request)
+    ApkDownloadCoordinator.beginDownload(promise, downloadId)
+    watchDownload(activity, apkUrl)
+  }
+
+  private fun watchDownload(activity: Activity, apkUrl: String) {
+    val id = ApkDownloadCoordinator.downloadId
+    val poller =
+        object : Runnable {
+          private var ticks = 0
+
+          override fun run() {
+            if (ApkDownloadCoordinator.downloadId != id || id < 0) {
+              return
+            }
+            ticks += 1
+            val dm = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            dm.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
+              if (!cursor.moveToFirst()) {
+                if (ticks >= 900) {
+                  fallbackInline(activity, apkUrl)
+                } else {
+                  mainHandler.postDelayed(this, 1000)
+                }
+                return
+              }
+              val status =
+                  cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+              when (status) {
+                DownloadManager.STATUS_SUCCESSFUL -> installDownloadedAndResolve(activity, apkUrl)
+                DownloadManager.STATUS_FAILED -> fallbackInline(activity, apkUrl)
+                else -> {
+                  if (ticks >= 900) {
+                    fallbackInline(activity, apkUrl)
+                  } else {
+                    mainHandler.postDelayed(this, 1000)
+                  }
+                }
+              }
+            }
+          }
+        }
+    mainHandler.postDelayed(poller, 1500)
+  }
+
+  private fun installDownloadedAndResolve(activity: Activity, apkUrl: String) {
+    if (!ApkDownloadCoordinator.markInstallStarted()) {
+      return
     }
+    val apkFile =
+        ApkInstallHelper.existingInstallableApk(reactContext)
+            ?: ApkInstallHelper.downloadDestination(reactContext)
+    if (!ApkInstallHelper.isInstallableApk(apkFile)) {
+      ApkDownloadCoordinator.installStarted = false
+      fallbackInline(activity, apkUrl)
+      return
+    }
+    ApkInstallHelper.launchInstallerAsync(
+        activity,
+        apkFile,
+        { ApkDownloadCoordinator.resolveIfPending() },
+        { error ->
+          ApkDownloadCoordinator.installStarted = false
+          ApkDownloadCoordinator.rejectIfPending(
+              "INSTALL_FAILED", error.message ?: "Could not open the package installer.")
+        },
+    )
+  }
+
+  private fun fallbackInline(activity: Activity, apkUrl: String) {
+    val pending = ApkDownloadCoordinator.takePromise() ?: return
+    downloadInlineFallback(activity, apkUrl, pending)
   }
 
   private fun ensureDownloadReceiverRegistered() {
@@ -160,25 +238,27 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
     downloadReceiver = ApkDownloadReceiver()
     val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      reactContext.registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      reactContext.registerReceiver(downloadReceiver, filter, Context.RECEIVER_EXPORTED)
     } else {
       reactContext.registerReceiver(downloadReceiver, filter)
     }
   }
 
-  /** Fallback when DownloadManager is unavailable on the device. */
+  /** Fallback when DownloadManager is unavailable or the queued download fails. */
   private fun downloadInlineFallback(activity: Activity, apkUrl: String, promise: Promise) {
     Thread {
           try {
             val file = downloadApkInline(apkUrl)
             activity.runOnUiThread {
-              try {
-                launchPackageInstallerIntent(activity, file)
-                promise.resolve(true)
-              } catch (e: Exception) {
-                promise.reject(
-                    "INSTALL_FAILED", e.message ?: "Could not open the package installer.", e)
-              }
+              ApkInstallHelper.launchInstallerAsync(
+                  activity,
+                  file,
+                  { promise.resolve(true) },
+                  { e ->
+                    promise.reject(
+                        "INSTALL_FAILED", e.message ?: "Could not open the package installer.", e)
+                  },
+              )
             }
           } catch (e: Exception) {
             activity.runOnUiThread {
@@ -189,31 +269,6 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
         .start()
   }
 
-  private fun launchPackageInstallerIntent(activity: Activity, apkFile: File) {
-    val authority = "${reactContext.packageName}.fileprovider"
-    val uri = FileProvider.getUriForFile(reactContext, authority, apkFile)
-    val installIntent =
-        Intent(Intent.ACTION_VIEW).apply {
-          setDataAndType(uri, "application/vnd.android.package-archive")
-          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-          clipData = ClipData.newRawUri("apk", uri)
-        }
-
-    val packageManager = activity.packageManager
-    if (installIntent.resolveActivity(packageManager) == null) {
-      throw IllegalStateException("No app on this device can install APK files.")
-    }
-
-    val chooser =
-        Intent.createChooser(installIntent, "Install ANI Stock update").apply {
-          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-          if (clipData == null) {
-            clipData = ClipData.newRawUri("apk", uri)
-          }
-        }
-    activity.startActivity(chooser)
-  }
-
   private fun downloadApkInline(apkUrl: String): File {
     val connection = openConnectionFollowingRedirects(apkUrl)
     try {
@@ -221,43 +276,31 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
       if (code !in 200..299) {
         throw IllegalStateException("Download failed with HTTP $code")
       }
-      val outFile = File(reactContext.cacheDir, "ani-stock-update.apk")
+      val outFile = ApkInstallHelper.cacheDestination(reactContext)
       connection.inputStream.use { input ->
         FileOutputStream(outFile).use { output -> input.copyTo(output) }
       }
-      if (!outFile.exists() || outFile.length() < 1024) {
+      if (!ApkInstallHelper.isInstallableApk(outFile)) {
         throw IllegalStateException("Downloaded APK file is empty or missing.")
       }
-      validateApkMagic(outFile)
       return outFile
     } finally {
       connection.disconnect()
     }
   }
 
-  private fun validateApkMagic(apkFile: File) {
-    FileInputStream(apkFile).use { input ->
-      val header = ByteArray(4)
-      if (input.read(header) != 4) {
-        throw IllegalStateException("Downloaded file is not a valid APK.")
-      }
-      if (header[0] != 0x50.toByte() || header[1] != 0x4B.toByte()) {
-        throw IllegalStateException("Downloaded file is not a valid APK.")
-      }
-    }
-  }
-
   private fun openConnectionFollowingRedirects(startUrl: String): HttpURLConnection {
     var url = URL(startUrl)
     repeat(5) {
-      val connection = (url.openConnection() as HttpURLConnection).apply {
-        instanceFollowRedirects = false
-        connectTimeout = 60_000
-        readTimeout = 600_000
-        requestMethod = "GET"
-        setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
-        setRequestProperty("User-Agent", "ANIStockMobile/1.0")
-      }
+      val connection =
+          (url.openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            connectTimeout = 60_000
+            readTimeout = 600_000
+            requestMethod = "GET"
+            setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
+            setRequestProperty("User-Agent", "ANIStockMobile/1.0")
+          }
       connection.connect()
       when (connection.responseCode) {
         HttpURLConnection.HTTP_MOVED_PERM,

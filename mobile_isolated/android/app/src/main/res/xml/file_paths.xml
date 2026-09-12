@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- Inline HTTP fallback writes ani-stock-update.apk here. -->
     <cache-path name="apk_cache" path="." />
+    <!-- DownloadManager destination: files/Download/ani-stock-release.apk -->
+    <external-files-path name="apk_downloads" path="Download/" />
+    <files-path name="apk_files" path="." />
 </paths>

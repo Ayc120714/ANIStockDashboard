@@ -24,7 +24,27 @@ const rsFieldByPeriod = {
   '3y': 'year3y',
 };
 
+/** True when row was already passed through mapStockToTable (no raw API fields). */
+const isMappedStockRow = (s) =>
+  s != null
+  && typeof s === 'object'
+  && (Object.prototype.hasOwnProperty.call(s, 'avgVolume')
+    || Object.prototype.hasOwnProperty.call(s, 'cmp')
+    || Object.prototype.hasOwnProperty.call(s, 'subSector'))
+  && s.avg_volume == null
+  && s.price == null
+  && s.market_cap == null
+  && s.subsector == null;
+
 const mapStockToTable = (s, idx, opts = {}) => {
+  // Idempotent: remapping a cached mapped row must not wipe CMP / Avg Vol / etc.
+  if (isMappedStockRow(s)) {
+    return {
+      ...s,
+      id: s.id || String(idx + 1).padStart(2, '0'),
+    };
+  }
+
   const period = opts.period || '1d';
   const perfField = rsFieldByPeriod[period] || 'day1d';
   // Do not fall back to 1D when selected horizon data is unavailable.
@@ -59,7 +79,7 @@ const mapStockToTable = (s, idx, opts = {}) => {
     chg: formatPercent(chgVal),
     rs: rsDisplay,
     rsi: rsiDisplay,
-    volume: s.volume != null ? s.volume.toLocaleString('en-IN') : '—',
+    volume: s.volume != null ? Number(s.volume).toLocaleString('en-IN') : '—',
     avgVolume: s.avg_volume != null ? Math.round(s.avg_volume).toLocaleString('en-IN') : '—',
     volJump,
     date: s.last_updated,
@@ -76,21 +96,39 @@ const priceShockersChgFieldMap = { day: 'day1d', week: 'week1w', month: 'month1m
 export const mapVolumeShockersList = (list, period = 'day') => {
   const volChgField = volChgFieldMap[period] || 'percent_change_volume_1d';
   const priceChgField = priceChgFieldMap[period] || 'day1d';
-  return (list || []).map((s, i) => ({
-    ...mapStockToTable(s, i, {}),
-    volChgPct: s[volChgField] != null ? `${s[volChgField] >= 0 ? '+' : ''}${Number(s[volChgField]).toFixed(1)}%` : '—',
-    volChgRaw: s[volChgField],
-    chg: formatPercent(s[priceChgField]),
-    chgRaw: s[priceChgField],
-  }));
+  return (list || []).map((s, i) => {
+    const base = mapStockToTable(s, i, {});
+    if (isMappedStockRow(s) && (s.volChgPct != null || s.chg != null)) {
+      return {
+        ...base,
+        volChgPct: s.volChgPct ?? base.volChgPct ?? '—',
+        volChgRaw: s.volChgRaw,
+        chg: s.chg ?? base.chg,
+        chgRaw: s.chgRaw,
+      };
+    }
+    return {
+      ...base,
+      volChgPct: s[volChgField] != null ? `${s[volChgField] >= 0 ? '+' : ''}${Number(s[volChgField]).toFixed(1)}%` : '—',
+      volChgRaw: s[volChgField],
+      chg: formatPercent(s[priceChgField]),
+      chgRaw: s[priceChgField],
+    };
+  });
 };
 
 export const mapPriceShockersList = (list, period = 'day') => {
   const chgField = priceShockersChgFieldMap[period] || 'day1d';
-  return (list || []).map((s, i) => ({
-    ...mapStockToTable(s, i, {}),
-    chg: formatPercent(s[chgField]),
-  }));
+  return (list || []).map((s, i) => {
+    const base = mapStockToTable(s, i, {});
+    if (isMappedStockRow(s) && s.chg != null) {
+      return { ...base, chg: s.chg };
+    }
+    return {
+      ...base,
+      chg: formatPercent(s[chgField]),
+    };
+  });
 };
 
 export const fetchRelativePerformanceRaw = async (period = '1d', limit = 50, dateStr = null) => {

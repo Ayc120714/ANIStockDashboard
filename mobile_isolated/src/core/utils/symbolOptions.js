@@ -4,14 +4,15 @@ import {extractApiRows} from '@core/utils/apiPayload';
 export function normalizeSymbolOption(item) {
   if (typeof item === 'string') {
     const symbol = item.trim().toUpperCase();
-    return symbol ? {symbol, label: symbol, sector: ''} : null;
+    return symbol ? {symbol, label: symbol, sector: '', is_ipo: false} : null;
   }
   const symbol = String(item?.symbol || item?.ticker || '').trim().toUpperCase();
   if (!symbol) return null;
   const sector = String(item?.sector || '').trim();
   const subsector = String(item?.subsector || '').trim();
+  const isIpo = Boolean(item?.is_ipo) || Boolean(item?.isIpo) || sector.toUpperCase() === 'IPO';
   const suffix = sector ? ` — ${sector}` : subsector ? ` — ${subsector}` : '';
-  return {symbol, label: `${symbol}${suffix}`, sector, subsector};
+  return {symbol, label: `${symbol}${suffix}`, sector, subsector, is_ipo: isIpo};
 }
 
 export function mergeSymbolOptions(...sources) {
@@ -26,10 +27,18 @@ export function mergeSymbolOptions(...sources) {
   return [...map.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
+export function isIpoSymbolOption(opt) {
+  return Boolean(opt?.is_ipo) || String(opt?.sector || '').trim().toUpperCase() === 'IPO';
+}
+
 export function filterSymbolOptions(options, query, limit = 24) {
   const q = String(query || '').trim().toUpperCase();
-  if (!q) return options.slice(0, limit);
-  return options
+  const list = Array.isArray(options) ? options : [];
+  if (!q) {
+    const ipos = list.filter(isIpoSymbolOption);
+    return ipos.length ? ipos : list.slice(0, limit);
+  }
+  return list
     .filter(
       opt =>
         opt.symbol.includes(q) ||

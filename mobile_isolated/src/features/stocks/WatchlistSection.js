@@ -28,7 +28,11 @@ import {navigateToStocksAlerts, navigateToStocksBrokers, navigateToStocksOrders}
 import {readPageCache, writePageCache, clearPageCache} from '@core/storage/pageCache';
 import {API_TIMEOUT_MS} from '@core/config/apiTimeouts';
 import {extractRowArray} from '@core/utils/screenPageLoader';
-import {initialWatchlistPanelState, watchlistHorizonLabel} from './watchlistEmbeddedLayout';
+import {
+  initialWatchlistPanelState,
+  shouldRenderWatchlistChromeOutsideList,
+  watchlistHorizonLabel,
+} from './watchlistEmbeddedLayout';
 
 const WATCHLIST_FETCH_MS = API_TIMEOUT_MS.screen;
 
@@ -521,7 +525,8 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
     </View>
   );
 
-  const listHeader = embedded ? (
+  const chromeOutsideList = shouldRenderWatchlistChromeOutsideList(embedded);
+  const embeddedChrome = chromeOutsideList ? (
     <>
       <View style={styles.embeddedHead}>
         <Text style={styles.embeddedTitle}>{horizonLabel} watchlist</Text>
@@ -537,11 +542,10 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       {addPanel}
       {tradePanel}
       {loadError ? <Text style={styles.loadErr}>{loadError}</Text> : null}
-      {tableHeadRow}
     </>
-  ) : (
-    tableHeadRow
-  );
+  ) : null;
+
+  const listHeader = tableHeadRow;
 
   return (
     <View style={[styles.wrap, embedded ? styles.wrapEmbedded : null]}>
@@ -555,6 +559,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
       {!embedded ? addPanel : null}
       {!embedded ? tradePanel : null}
       {!embedded && loadError ? <Text style={styles.loadErr}>{loadError}</Text> : null}
+      {embeddedChrome}
 
       {loading ? (
         <ActivityIndicator style={{marginTop: 16}} color={AYC.accent} />
@@ -640,7 +645,7 @@ export function WatchlistSection({navigation, listType = 'long_term', embedded =
 
 const styles = StyleSheet.create({
   wrap: {flex: 1},
-  wrapEmbedded: {flex: 1, minHeight: 0},
+  wrapEmbedded: {flex: 1, minHeight: 0, overflow: 'visible'},
   headRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 4},
   screenTitle: {...mobileStyles.pageTitle, flex: 1},
   refreshHint: {fontSize: AYC.type.caption, fontWeight: '700', color: AYC.accent},

@@ -4,7 +4,6 @@ import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 
 class ApkDownloadReceiver : BroadcastReceiver() {
@@ -18,47 +17,48 @@ class ApkDownloadReceiver : BroadcastReceiver() {
     val query = DownloadManager.Query().setFilterById(finishedId)
     dm.query(query).use { cursor ->
       if (!cursor.moveToFirst()) {
-        ApkDownloadCoordinator.rejectIfPending("DOWNLOAD_FAILED", "Download record not found.")
         return
       }
 
       val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
       when (status) {
         DownloadManager.STATUS_SUCCESSFUL -> {
-          try {
-            val uri = dm.getUriForDownloadedFile(finishedId)
-            if (uri == null) {
-              throw IllegalStateException("Downloaded APK URI is missing.")
-            }
-            launchInstallIntent(context, uri)
-            Toast.makeText(context, "Tap Install to finish updating.", Toast.LENGTH_LONG).show()
-            ApkDownloadCoordinator.resolveIfPending()
-          } catch (e: Exception) {
-            ApkDownloadCoordinator.rejectIfPending(
-                "INSTALL_FAILED", e.message ?: "Could not open the package installer.")
+          val apkFile =
+              ApkInstallHelper.existingInstallableApk(context)
+                  ?: ApkInstallHelper.downloadDestination(context)
+          if (!ApkInstallHelper.isInstallableApk(apkFile)) {
+            return
           }
+          if (!ApkDownloadCoordinator.markInstallStarted()) {
+            return
+          }
+          ApkInstallHelper.launchInstallerAsync(
+              context,
+              apkFile,
+              {
+                Toast.makeText(context, "Tap Install to finish updating.", Toast.LENGTH_LONG)
+                    .show()
+                ApkDownloadCoordinator.resolveIfPending()
+              },
+              { error ->
+                ApkDownloadCoordinator.installStarted = false
+                ApkDownloadCoordinator.rejectIfPending(
+                    "INSTALL_FAILED",
+                    error.message ?: "Could not open the package installer.",
+                )
+              },
+          )
         }
         DownloadManager.STATUS_FAILED -> {
-          val reason =
-              cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-          ApkDownloadCoordinator.rejectIfPending(
-              "DOWNLOAD_FAILED", "Download failed (reason $reason). Check connection and retry.")
+          // Leave the promise pending so ApkUpdateModule.watchDownload can
+          // fall back to an in-process HTTP download instead of failing the
+          // in-app update immediately.
         }
         else -> {
-          ApkDownloadCoordinator.rejectIfPending(
-              "DOWNLOAD_FAILED", "Download did not complete (status $status).")
+          // ACTION_DOWNLOAD_COMPLETE should only fire for a terminal state.
+          // Ignore non-success here; the poller handles timeout/fallback.
         }
       }
     }
-  }
-
-  private fun launchInstallIntent(context: Context, uri: Uri) {
-    val installIntent =
-        Intent(Intent.ACTION_VIEW).apply {
-          setDataAndType(uri, "application/vnd.android.package-archive")
-          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-    context.startActivity(installIntent)
   }
 }

@@ -571,10 +571,10 @@ export function StocksOverviewSection({navigation, initialTab, ordersParams, bro
 
 const styles = StyleSheet.create({
   wrap: {gap: 8, marginBottom: 16},
-  wrapFlex: {flex: 1, gap: 8},
+  wrapFlex: {flex: 1, minHeight: 0, gap: 8},
   ovTitle: {fontSize: AYC.type.pageTitle, fontWeight: '800', color: AYC.text},
   chipRow: {flexDirection: 'row', gap: 8, paddingVertical: 4, alignItems: 'center'},
-  chipScroll: {flexGrow: 0},
+  chipScroll: {flexGrow: 0, flexShrink: 0},
   bigChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,

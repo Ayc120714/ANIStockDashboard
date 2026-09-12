@@ -15,6 +15,7 @@ import { getScreenDatePickerBounds } from '../utils/screenDatePickerBounds';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { addToWatchlist } from '../api/watchlist';
 import { runScreenTableFetchWithLivePoll } from '../utils/screenPageLoader';
+import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 
 function PriceShockersPage() {
   const [page, setPage] = useState(1);
@@ -84,12 +85,13 @@ function PriceShockersPage() {
     const dateStr = formatDateParam(selectedDate);
     const searchQuery = String(debouncedSearch || '').trim().toLowerCase();
     const searchMode = searchQuery.length > 0;
-    const cacheKey = `priceShockersData_v4_${searchMode ? 'all' : priceType}_${period}${dateStr ? '_' + dateStr : ''}`;
+    const fetchLimit = 200;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.priceShockers(searchMode ? 'all' : priceType, period, fetchLimit)}${dateStr ? '_' + dateStr : ''}`;
     const loadRows = async () => {
       if (searchMode) {
         const [gainers, losers] = await Promise.all([
-          fetchPriceShockersRaw('gainers', 200, period, dateStr),
-          fetchPriceShockersRaw('losers', 200, period, dateStr),
+          fetchPriceShockersRaw('gainers', fetchLimit, period, dateStr),
+          fetchPriceShockersRaw('losers', fetchLimit, period, dateStr),
         ]);
         const bySymbol = new Map();
         [...gainers, ...losers].forEach((row) => {
@@ -98,7 +100,7 @@ function PriceShockersPage() {
         });
         return Array.from(bySymbol.values());
       }
-      return fetchPriceShockersRaw(priceType, 200, period, dateStr);
+      return fetchPriceShockersRaw(priceType, fetchLimit, period, dateStr);
     };
     let cleanup;
     runScreenTableFetchWithLivePoll({

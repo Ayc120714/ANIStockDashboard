@@ -34,7 +34,7 @@ export function StocksHubScreen({navigation, route}) {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, ...mobilePad},
+  container: {flex: 1, minHeight: 0, ...mobilePad},
   screenTitle: mobileStyles.pageTitle,
   sectionFlex: {flex: 1, minHeight: 0},
 });
