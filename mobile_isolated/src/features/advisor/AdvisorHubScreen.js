@@ -57,6 +57,7 @@ import {RsRvolEma5mSignalsSection} from './RsRvolEma5mSignalsSection';
 import {RenkoSmartSignalsSection} from './RenkoSmartSignalsSection';
 import {HotSubsectorsSignalsSection} from './HotSubsectorsSignalsSection';
 import {MlSetupsSignalsSection} from './MlSetupsSignalsSection';
+import {StageEntryTimingSection} from './StageEntryTimingSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -72,6 +73,7 @@ const TABS = [
   {id: 'health', label: 'Portfolio health'},
   {id: 'hot', label: 'Hot Subsectors'},
   {id: 'ml', label: 'ML Setups'},
+  {id: 'stage', label: 'Stage Analysis'},
 ];
 
 function formatChgPct(v) {
@@ -732,6 +734,27 @@ export function AdvisorHubScreen({navigation}) {
           }>
           {head}
           <MlSetupsSignalsSection />
+        </ScrollView>
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'stage') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={styles.pad}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                /* Section owns refresh */
+              }}
+            />
+          }>
+          {head}
+          <StageEntryTimingSection />
         </ScrollView>
       </MobileChrome>
     );

@@ -9,6 +9,8 @@ describe('livePageCacheKeys', () => {
     expect(LIVE_PAGE_CACHE_KEYS.chartFundamental).toBe('advisor_chart_fundamental_agent_v7');
     expect(LIVE_PAGE_CACHE_KEYS.trendReversal).toBe('advisor_trend_reversal_grid_v3');
     expect(LIVE_PAGE_CACHE_KEYS.trending(50)).toBe('trendingStocksData_v4_50');
+    expect(LIVE_PAGE_CACHE_KEYS.dcHalfChecker('1d')).toBe('dcHalfChecker_v2_1d');
+    expect(LIVE_PAGE_CACHE_KEYS.dcHalfChecker('5m')).toBe('dcHalfChecker_v2_5m');
   });
 
   it('keeps watchlist prefetch keys in sync with ST/LT pages (regression)', () => {

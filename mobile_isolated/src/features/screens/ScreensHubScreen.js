@@ -1,10 +1,12 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -24,7 +26,7 @@ import {useTableSort} from '@hooks/useTableSort';
 import {MOBILE_PAGE_CACHE_KEYS, LEGACY_SCREENS_HUB_CACHE_PREFIXES} from '@core/utils/dashboardCachePolicy';
 import {MOBILE_MOVERS_LIMIT, MOBILE_SCREEN_LIST_LIMIT} from '@core/utils/advisorWebParity';
 import {hydrateFromPageCache} from '@core/utils/pageCacheHydration';
-import {clearPageCachesByPrefix} from '@core/storage/pageCache';
+import {clearPageCachesByPrefix, readPageCache, writePageCache} from '@core/storage/pageCache';
 import {
   runScreenPayloadFetch,
   SCREEN_LIVE_POLL_MS,
@@ -44,8 +46,10 @@ import {
   weeklyPicksHasRows,
 } from '@core/utils/weeklyPicksScreens';
 import {IPO_STATUS_FILTERS} from '@core/utils/ipoScreenFilters';
+import {DC_HALF_TF_TABS, formatDcHalfPhaseLabel} from '@core/utils/dcHalfChecker';
+import {buildTradingViewSymbolsCsv} from '@core/utils/tradingViewCsv';
 
-const LIVE_SCREEN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
+const LIVE_SCREEN_TABS = new Set(['trending', 'movers', 'volume', 'alpha', 'dchalf']);
 
 const MAIN_TABS = [
   {id: 'ai', label: 'AI picks'},
@@ -53,6 +57,7 @@ const MAIN_TABS = [
   {id: 'movers', label: 'Top movers'},
   {id: 'volume', label: 'Volume'},
   {id: 'alpha', label: 'Alpha'},
+  {id: 'dchalf', label: 'DC Half'},
   {id: 'ipo', label: 'IPOs'},
 ];
 
@@ -74,7 +79,7 @@ const IPO_FILTERS = IPO_STATUS_FILTERS;
 
 const SCREEN_HEAVY_OPTS = {timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1};
 const SCREEN_OPTS = {timeoutMs: API_TIMEOUT_MS.screen, retries: 1};
-const PAGINATED_MAIN_TABS = new Set(['trending', 'movers', 'volume', 'alpha']);
+const PAGINATED_MAIN_TABS = new Set(['trending', 'movers', 'volume', 'alpha', 'dchalf']);
 
 function stockSym(r) {
   return r?.symbol || r?.ticker || '—';
@@ -96,6 +101,7 @@ export function ScreensHubScreen({navigation}) {
   const [perM, setPerM] = useState('day');
   const [perV, setPerV] = useState('day');
   const [alphaHor, setAlphaHor] = useState('short');
+  const [dcTf, setDcTf] = useState('1d');
   const [ipoFilter, setIpoFilter] = useState('');
   const [search, setSearch] = useState('');
   const [listPage, setListPage] = useState(1);
@@ -113,6 +119,7 @@ export function ScreensHubScreen({navigation}) {
     if (main === 'movers') return perM === 'week' ? 'week1w' : perM === 'month' ? 'month1m' : 'day1d';
     if (main === 'volume') return perV === 'week' ? 'week1w' : perV === 'month' ? 'month1m' : 'day1d';
     if (main === 'trending') return 'chg';
+    if (main === 'dchalf') return 'bars_since_cross';
     if (main === 'ipo') return 'gain';
     return null;
   }, [main, perM, perV]);
@@ -159,7 +166,7 @@ export function ScreensHubScreen({navigation}) {
   useEffect(() => {
     setSortConfig({key: screenDefaultSortKey, ascending: false});
     setListPage(1);
-  }, [gl, main, perM, perV, screenDefaultSortKey, setSortConfig]);
+  }, [gl, main, perM, perV, dcTf, screenDefaultSortKey, setSortConfig]);
 
   useEffect(() => {
     (async () => {
@@ -173,7 +180,7 @@ export function ScreensHubScreen({navigation}) {
   }, []);
 
   const load = useCallback(async ({forceRefresh = false, silent = false} = {}) => {
-    const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
+    const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate, dcTf);
     await runScreenPayloadFetch({
       cacheKey,
       fetcher: async () => {
@@ -267,6 +274,57 @@ export function ScreensHubScreen({navigation}) {
             list: Array.isArray(res) ? res : parseStockListResponse(res),
           };
         }
+        if (main === 'dchalf') {
+          const res = await safeFetch(
+            () =>
+              dashboardService.fetchDcHalfChecker({
+                timeframe: dcTf,
+                limit: MOBILE_SCREEN_LIST_LIMIT,
+                symbol_limit: 800,
+                timeoutMs: API_TIMEOUT_MS.screenHeavy,
+              }),
+            {...SCREEN_HEAVY_OPTS, label: 'DC Half', fallback: null},
+          );
+          if (!res) throw new Error('DC Half checker timed out. Pull down to retry.');
+          const rows = Array.isArray(res) ? res : [];
+          const payload = {
+            weeklyMeta: {
+              pickDate: null,
+              subtitle: `DC_HALF cross · ${String(dcTf).toUpperCase()} · Cap > 2000 Cr`,
+            },
+            list: rows,
+          };
+          // Prefetch other TFs so chip switches hit warm page cache.
+          DC_HALF_TF_TABS.forEach(({id}) => {
+            if (id === dcTf) return;
+            const otherKey = MOBILE_PAGE_CACHE_KEYS.screensHub(
+              main, gl, perM, perV, alphaHor, ipoFilter, screenDate, id,
+            );
+            (async () => {
+              try {
+                const existing = await readPageCache(otherKey);
+                const existingList = existing?.data?.list || existing?.list;
+                if (Array.isArray(existingList) && existingList.length > 0) return;
+                const otherRows = await dashboardService.fetchDcHalfChecker({
+                  timeframe: id,
+                  limit: MOBILE_SCREEN_LIST_LIMIT,
+                  symbol_limit: 800,
+                  timeoutMs: API_TIMEOUT_MS.screenHeavy,
+                });
+                await writePageCache(otherKey, {
+                  weeklyMeta: {
+                    pickDate: null,
+                    subtitle: `DC_HALF cross · ${String(id).toUpperCase()} · Cap > 2000 Cr`,
+                  },
+                  list: Array.isArray(otherRows) ? otherRows : [],
+                });
+              } catch (_) {
+                /* sibling prefetch is best-effort */
+              }
+            })();
+          });
+          return payload;
+        }
         const res = await safeFetch(
           () => dashboardService.fetchIpos({status: ipoFilter || undefined, limit: 200, timeoutMs: API_TIMEOUT_MS.screen}),
           {...SCREEN_OPTS, label: 'IPOs', fallback: null},
@@ -285,7 +343,7 @@ export function ScreensHubScreen({navigation}) {
       hasUsable: screensPayloadUsable,
       silent: silent && !forceRefresh,
     });
-  }, [alphaHor, applyScreensPayload, gl, ipoFilter, main, perM, perV, screenDate, screensPayloadUsable]);
+  }, [alphaHor, applyScreensPayload, dcTf, gl, ipoFilter, main, perM, perV, screenDate, screensPayloadUsable]);
 
   useEffect(() => {
     void Promise.all(LEGACY_SCREENS_HUB_CACHE_PREFIXES.map(prefix => clearPageCachesByPrefix(prefix)));
@@ -295,7 +353,7 @@ export function ScreensHubScreen({navigation}) {
     let cancelled = false;
     initialLoadDone.current = false;
     (async () => {
-      const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
+      const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate, dcTf);
       const hadCache = await hydrateFromPageCache(cacheKey, {
         apply: applyScreensPayload,
         hasUsable: screensPayloadUsable,
@@ -310,20 +368,20 @@ export function ScreensHubScreen({navigation}) {
     return () => {
       cancelled = true;
     };
-  }, [alphaHor, applyScreensPayload, gl, ipoFilter, load, main, perM, perV, screenDate, screensPayloadUsable]);
+  }, [alphaHor, applyScreensPayload, dcTf, gl, ipoFilter, load, main, perM, perV, screenDate, screensPayloadUsable]);
 
   useFocusEffect(
     useCallback(() => {
       if (!initialLoadDone.current) return undefined;
       (async () => {
-        const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate);
+        const cacheKey = MOBILE_PAGE_CACHE_KEYS.screensHub(main, gl, perM, perV, alphaHor, ipoFilter, screenDate, dcTf);
         const stale = await shouldRefreshPageCache(cacheKey);
         if (stale) {
           await load({silent: list.length > 0});
         }
       })();
       return undefined;
-    }, [alphaHor, gl, ipoFilter, list.length, load, main, perM, perV, screenDate]),
+    }, [alphaHor, dcTf, gl, ipoFilter, list.length, load, main, perM, perV, screenDate]),
   );
 
   useEffect(() => {
@@ -453,6 +511,32 @@ export function ScreensHubScreen({navigation}) {
           </Pressable>
         </ScrollView>
       ) : null}
+      {main === 'dchalf' ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {DC_HALF_TF_TABS.map(x => (
+            <Pressable key={x.id} onPress={() => setDcTf(x.id)} style={[styles.chipSm, dcTf === x.id ? styles.chipOn : null]}>
+              <Text style={[styles.chipText, dcTf === x.id ? styles.chipTextOn : null]}>{x.label}</Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={async () => {
+              const csv = buildTradingViewSymbolsCsv((sortedList || []).map(r => r.symbol));
+              if (!csv) {
+                Alert.alert('Copy CSV', 'No symbols to copy.');
+                return;
+              }
+              try {
+                await Share.share({message: csv, title: `DC Half ${String(dcTf).toUpperCase()} CSV`});
+              } catch (e) {
+                Alert.alert('Copy CSV', String(e?.message || 'Could not share CSV'));
+              }
+            }}
+            style={styles.chipSm}
+          >
+            <Text style={styles.chipText}>Copy CSV ({(sortedList || []).length})</Text>
+          </Pressable>
+        </ScrollView>
+      ) : null}
       {main === 'ipo' ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {IPO_FILTERS.map(x => (
@@ -524,6 +608,14 @@ export function ScreensHubScreen({navigation}) {
               <SortableTableHeader label="CMP" sortKey="price" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.55}} />
               <SortableTableHeader label="1W" sortKey="week1w" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.45}} />
               <SortableTableHeader label="RS" sortKey="rs" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.45}} />
+            </>
+          ) : main === 'dchalf' ? (
+            <>
+              <Text style={[styles.th, {width: 26}]}>#</Text>
+              <SortableTableHeader label="Sym" sortKey="symbol" sortConfig={sortConfig} onSort={onSort} style={{flex: 1}} />
+              <SortableTableHeader label="Phase" sortKey="phase" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.85}} />
+              <SortableTableHeader label="Close" sortKey="close" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.6}} />
+              <SortableTableHeader label="%Mid" sortKey="pct_vs_dc_half" sortConfig={sortConfig} onSort={onSort} style={{flex: 0.5}} />
             </>
           ) : (
             <>
@@ -662,6 +754,28 @@ export function ScreensHubScreen({navigation}) {
           </Text>
           <Text style={[styles.td, {flex: 0.45, color: AYC.positive, fontWeight: '700'}]}>
             {rs != null ? `${Number(rs).toFixed(2)}%` : '—'}
+          </Text>
+        </View>
+      );
+    }
+    if (main === 'dchalf') {
+      const midPct = item.pct_vs_dc_half;
+      return (
+        <View style={[styles.tr, {backgroundColor: index % 2 === 0 ? '#eff6ff' : '#fff'}]}>
+          <Text style={[styles.td, {width: 26}]}>{String(ix).padStart(2, '0')}</Text>
+          {symCell(1)}
+          <Text style={[styles.td, {flex: 0.85}]} numberOfLines={1}>
+            {formatDcHalfPhaseLabel(item.phase)}
+          </Text>
+          <Text style={[styles.td, {flex: 0.6}]}>
+            {item.close != null ? formatINR(item.close) : '—'}
+          </Text>
+          <Text
+            style={[
+              styles.td,
+              {flex: 0.5, fontWeight: '800', color: midPct >= 0 ? AYC.positive : AYC.negative},
+            ]}>
+            {midPct != null ? `${Number(midPct).toFixed(1)}%` : '—'}
           </Text>
         </View>
       );

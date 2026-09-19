@@ -258,6 +258,52 @@ export const fetchRsRvolEma5mSignals = async ({
   return apiGet(`/advisor/signals/rs-rvol-ema5m?${params.toString()}`);
 };
 
+/** DC_HALF multi-TF strategy checker (Chartink close × DC mid + EMA stack). */
+export const fetchDcHalfChecker = async ({
+  timeframe = '1d',
+  limit = 500,
+  symbol_limit = 1500,
+  min_market_cap_cr = 2000,
+  refresh = false,
+  cache_ttl_sec = 120,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || '1d'));
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('min_market_cap_cr', String(min_market_cap_cr));
+  params.set('cache_ttl_sec', String(cache_ttl_sec));
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/dc-half-checker?${params.toString()}`);
+};
+
+/** FFIP Weinstein Stage + Minervini Trend Template + entry-timing buckets. */
+export const fetchStageEntryTiming = async ({
+  limit = 300,
+  symbol_limit = 800,
+  min_market_cap_cr = 2000,
+  stage = 2,
+  min_template_score = 6,
+  require_rs_70 = false,
+  entry_timing = '',
+  refresh = false,
+  cache_ttl_sec = 180,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('min_market_cap_cr', String(min_market_cap_cr));
+  params.set('stage', String(stage));
+  params.set('min_template_score', String(min_template_score));
+  params.set('cache_ttl_sec', String(cache_ttl_sec));
+  if (require_rs_70) params.set('require_rs_70', 'true');
+  if (entry_timing && String(entry_timing).trim()) {
+    params.set('entry_timing', String(entry_timing).trim());
+  }
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/stage-entry-timing?${params.toString()}`);
+};
+
 export const fetchRenkoSmartSignals = async ({
   limit = 10,
   symbol_limit = 1500,

@@ -107,6 +107,11 @@ function Sidebar({ variant = 'rail' }) {
             <span className="label">Screens</span>
           </SidebarItem>
 
+          <SidebarItem to="/dc-half-checker" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} locked={moduleLocked} title={navCollapsed ? 'DC Half Checker' : undefined}>
+            <MdInsights />
+            <span className="label">DC Half Checker</span>
+          </SidebarItem>
+
           <SidebarItem to="/advisor" collapsed={navCollapsed} inDrawer={inDrawer} pathname={pathname} locked={moduleLocked} title={navCollapsed ? 'Advisor' : undefined}>
             <MdAutoGraph />
             <span className="label">Advisor</span>

@@ -22,6 +22,17 @@ export function resolveAdvisorTabIndex(advisorTab) {
   if (key === 'ml' || key === 'ml_setups' || key === 'mlsetups' || key === 'live_ml') {
     return 7;
   }
+  if (
+    key === 'stage'
+    || key === 'entry'
+    || key === 'stage_entry'
+    || key === 'weinstein'
+    || key === 'minervini'
+    || key === 'ffip'
+    || key === 'stage_analysis'
+  ) {
+    return 8;
+  }
   const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 7 ? n : 0;
+  return Number.isFinite(n) && n >= 0 && n <= 8 ? n : 0;
 }

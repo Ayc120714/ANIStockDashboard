@@ -22,6 +22,7 @@ import RsRvolEma5mTable from '../components/RsRvolEma5mTable';
 import RenkoSmartTable from '../components/RenkoSmartTable';
 import HotSubsectorsTable from '../components/HotSubsectorsTable';
 import MlSetupsTable from '../components/MlSetupsTable';
+import StageEntryTimingTab from './StageEntryTimingTab';
 import { addToWatchlist } from '../api/watchlist';
 import { SymbolWithTradingView, symbolCellTdStyle } from '../components/TradingViewLink';
 import { apiGet } from '../api/apiClient';
@@ -216,6 +217,7 @@ function FinancialAdvisorPage() {
         <Tab label="Portfolio Health" />
         <Tab label="Hot Subsectors" />
         <Tab label="ML Setups" />
+        <Tab label="Stage Analysis" />
       </Tabs>
       {tab === 0 && <SignalsAlertsTab />}
       {tab === 1 && <RenkoSmartTable />}
@@ -225,6 +227,7 @@ function FinancialAdvisorPage() {
       {tab === 5 && <PortfolioTab />}
       {tab === 6 && <HotSubsectorsTable />}
       {tab === 7 && <MlSetupsTable />}
+      {tab === 8 && <StageEntryTimingTab />}
     </TableSection>
   );
 }

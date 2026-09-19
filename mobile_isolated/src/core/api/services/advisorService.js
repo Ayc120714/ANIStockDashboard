@@ -233,6 +233,31 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  /** FFIP Stage Analysis & Entry Timing (Weinstein + Minervini). */
+  fetchStageEntryTiming: ({
+    limit = 300,
+    symbol_limit = 800,
+    min_market_cap_cr = 2000,
+    stage = 2,
+    min_template_score = 6,
+    require_rs_70 = false,
+    entry_timing = '',
+    refresh = false,
+    timeoutMs,
+  } = {}) =>
+    apiGet(
+      `/advisor/signals/stage-entry-timing${toQuery({
+        limit,
+        symbol_limit,
+        min_market_cap_cr,
+        stage,
+        min_template_score,
+        require_rs_70: require_rs_70 ? true : undefined,
+        entry_timing: entry_timing || undefined,
+        refresh: refresh ? true : undefined,
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionHistory: async ({
     from_date,
     to_date,

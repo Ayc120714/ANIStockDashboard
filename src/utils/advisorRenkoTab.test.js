@@ -26,4 +26,11 @@ describe('advisor Renko Smart tab routing', () => {
     expect(resolveAdvisorTabIndex('ml_setups')).toBe(7);
     expect(resolveAdvisorTabIndex('live_ml')).toBe(7);
   });
+
+  it('maps stage analysis / FFIP deep-links to tab 8', () => {
+    expect(resolveAdvisorTabIndex('stage')).toBe(8);
+    expect(resolveAdvisorTabIndex('weinstein')).toBe(8);
+    expect(resolveAdvisorTabIndex('minervini')).toBe(8);
+    expect(resolveAdvisorTabIndex('ffip')).toBe(8);
+  });
 });

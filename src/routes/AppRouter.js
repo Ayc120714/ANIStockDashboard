@@ -8,6 +8,7 @@ import LongTermPage from '../pages/LongTermPage';
 import ShortTermPage from '../pages/ShortTermPage';
 import OutlookPage from '../pages/OutlookPage';
 import ScreensPage from '../pages/ScreensPage';
+import DcHalfCheckerPage from '../pages/DcHalfCheckerPage';
 import StockAlertsRoute from './StockAlertsRoute';
 import FinancialAdvisorPage from '../pages/FinancialAdvisorPage';
 import NextWeekSetupPage from '../pages/NextWeekSetupPage';
@@ -74,6 +75,7 @@ function AppRouter() {
           <Route path="/short-term" element={<PremiumModuleRoute><ShortTermPage /></PremiumModuleRoute>} />
           <Route path="/outlook" element={<OutlookPage />} />
           <Route path="/screens" element={<PremiumModuleRoute><ScreensPage /></PremiumModuleRoute>} />
+          <Route path="/dc-half-checker" element={<PremiumModuleRoute><DcHalfCheckerPage /></PremiumModuleRoute>} />
           <Route path="/advisor" element={<PremiumModuleRoute><FinancialAdvisorPage /></PremiumModuleRoute>} />
           <Route path="/next-week-setup" element={<AdminRoute><NextWeekSetupPage /></AdminRoute>} />
           <Route path="/video-screener" element={<Navigate to="/screens" replace />} />

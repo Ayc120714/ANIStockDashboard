@@ -223,4 +223,28 @@ export const dashboardService = {
       await apiGet(`/stocks/relative-performance?${q}`, apiOpts),
     );
   },
+  fetchDcHalfChecker: async ({
+    timeframe = '1d',
+    limit = 200,
+    symbol_limit = 800,
+    min_market_cap_cr = 2000,
+    refresh = false,
+    timeoutMs,
+    ...opts
+  } = {}) => {
+    const q = new URLSearchParams({
+      timeframe: String(timeframe || '1d'),
+      limit: String(limit),
+      symbol_limit: String(symbol_limit),
+      min_market_cap_cr: String(min_market_cap_cr),
+    });
+    if (refresh) q.set('refresh', 'true');
+    const res = await apiGet(
+      `/advisor/signals/dc-half-checker?${q}`,
+      mergeApiOpts(opts, timeoutMs ?? T.screenHeavy),
+    );
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res)) return res;
+    return [];
+  },
 };
