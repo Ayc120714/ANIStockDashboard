@@ -26,7 +26,8 @@ class ApkDownloadReceiver : BroadcastReceiver() {
           val apkFile =
               ApkInstallHelper.existingInstallableApk(context)
                   ?: ApkInstallHelper.downloadDestination(context)
-          if (!ApkInstallHelper.isInstallableApk(apkFile)) {
+          if (!ApkInstallHelper.isNewerInstallableApk(context, apkFile)) {
+            ApkInstallHelper.deleteStaleDownloads(context)
             return
           }
           if (!ApkDownloadCoordinator.markInstallStarted()) {
@@ -42,6 +43,7 @@ class ApkDownloadReceiver : BroadcastReceiver() {
               },
               { error ->
                 ApkDownloadCoordinator.installStarted = false
+                ApkInstallHelper.deleteStaleDownloads(context)
                 ApkDownloadCoordinator.rejectIfPending(
                     "INSTALL_FAILED",
                     error.message ?: "Could not open the package installer.",

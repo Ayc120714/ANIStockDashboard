@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -64,6 +65,8 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
         { promise.resolve(true) },
         {
           ApkDownloadCoordinator.installStarted = false
+          // Stale/corrupt leftover — delete so the next attempt re-downloads.
+          ApkInstallHelper.deleteStaleDownloads(reactContext)
           promise.resolve(false)
         },
     )
@@ -128,26 +131,30 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
             activity,
             cached,
             { ApkDownloadCoordinator.resolveIfPending() },
-            { downloadInlineFallback(activity, apkUrl, ApkDownloadCoordinator.takePromise() ?: promise) },
+            {
+              ApkDownloadCoordinator.installStarted = false
+              ApkInstallHelper.deleteStaleDownloads(reactContext)
+              downloadInlineFallback(
+                  activity, apkUrl, ApkDownloadCoordinator.takePromise() ?: promise)
+            },
         )
         return
       }
     }
 
+    // Drop any corrupt leftover so DownloadManager / inline write a fresh file.
+    ApkInstallHelper.deleteStaleDownloads(reactContext)
     Toast.makeText(activity, "Downloading update…", Toast.LENGTH_LONG).show()
 
-    try {
-      enqueueDownloadManager(activity, apkUrl, promise)
-    } catch (e: Exception) {
-      downloadInlineFallback(activity, apkUrl, promise)
-    }
+    // Inline HTTP first — more reliable than DownloadManager for app-private installs.
+    // DownloadManager remains as a secondary path if inline fails mid-flight.
+    downloadInlineFallback(activity, apkUrl, promise)
   }
 
   private fun enqueueDownloadManager(activity: Activity, apkUrl: String, promise: Promise) {
     ensureDownloadReceiverRegistered()
     ApkInstallHelper.deleteStaleDownloads(reactContext)
     val dm = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val dest = ApkInstallHelper.downloadDestination(reactContext)
     val request =
         DownloadManager.Request(Uri.parse(apkUrl)).apply {
           setTitle("ANI Stock update")
@@ -156,7 +163,9 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
           setAllowedOverMetered(true)
           setAllowedOverRoaming(true)
           setMimeType("application/vnd.android.package-archive")
-          setDestinationUri(Uri.fromFile(dest))
+          // Prefer app-specific external files dir (avoids file:// Uri.fromFile failures on API 29+).
+          setDestinationInExternalFilesDir(
+              reactContext, Environment.DIRECTORY_DOWNLOADS, ApkInstallHelper.DOWNLOAD_FILE_NAME)
         }
 
     val downloadId = dm.enqueue(request)
@@ -211,8 +220,9 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
     val apkFile =
         ApkInstallHelper.existingInstallableApk(reactContext)
             ?: ApkInstallHelper.downloadDestination(reactContext)
-    if (!ApkInstallHelper.isInstallableApk(apkFile)) {
+    if (!ApkInstallHelper.isNewerInstallableApk(reactContext, apkFile)) {
       ApkDownloadCoordinator.installStarted = false
+      ApkInstallHelper.deleteStaleDownloads(reactContext)
       fallbackInline(activity, apkUrl)
       return
     }
@@ -244,7 +254,7 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  /** Fallback when DownloadManager is unavailable or the queued download fails. */
+  /** Primary download path: in-process HTTPS to app cache, then PackageInstaller. */
   private fun downloadInlineFallback(activity: Activity, apkUrl: String, promise: Promise) {
     Thread {
           try {
@@ -255,14 +265,30 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
                   file,
                   { promise.resolve(true) },
                   { e ->
-                    promise.reject(
-                        "INSTALL_FAILED", e.message ?: "Could not open the package installer.", e)
+                    // Last resort: system DownloadManager (notification shade progress).
+                    try {
+                      enqueueDownloadManager(activity, apkUrl, promise)
+                    } catch (dmError: Exception) {
+                      promise.reject(
+                          "INSTALL_FAILED",
+                          e.message
+                              ?: dmError.message
+                              ?: "Could not open the package installer.",
+                          e)
+                    }
                   },
               )
             }
           } catch (e: Exception) {
             activity.runOnUiThread {
-              promise.reject("DOWNLOAD_FAILED", e.message ?: "Could not download the update APK.", e)
+              try {
+                enqueueDownloadManager(activity, apkUrl, promise)
+              } catch (dmError: Exception) {
+                promise.reject(
+                    "DOWNLOAD_FAILED",
+                    e.message ?: dmError.message ?: "Could not download the update APK.",
+                    e)
+              }
             }
           }
         }
@@ -277,11 +303,16 @@ class ApkUpdateModule(private val reactContext: ReactApplicationContext) :
         throw IllegalStateException("Download failed with HTTP $code")
       }
       val outFile = ApkInstallHelper.cacheDestination(reactContext)
+      if (outFile.exists()) {
+        outFile.delete()
+      }
       connection.inputStream.use { input ->
         FileOutputStream(outFile).use { output -> input.copyTo(output) }
       }
-      if (!ApkInstallHelper.isInstallableApk(outFile)) {
-        throw IllegalStateException("Downloaded APK file is empty or missing.")
+      if (!ApkInstallHelper.isNewerInstallableApk(reactContext, outFile)) {
+        outFile.delete()
+        throw IllegalStateException(
+            "Downloaded APK is empty, corrupt, or not newer than the installed app.")
       }
       return outFile
     } finally {

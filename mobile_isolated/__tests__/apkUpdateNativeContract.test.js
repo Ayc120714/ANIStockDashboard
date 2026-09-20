@@ -26,10 +26,26 @@ describe('APK in-app install native contract', () => {
     expect(filePathsXml).toMatch(/<external-files-path\b[^>]*path="Download\/"/);
   });
 
+  it('only reuses an on-disk APK when PackageManager reports a newer versionCode', () => {
+    // Regression: zip-magic leftovers skipped a fresh download and the installer failed.
+    expect(helperKt).toMatch(/fun isNewerInstallableApk\(/);
+    expect(helperKt).toMatch(/getPackageArchiveInfo\(/);
+    expect(helperKt).toMatch(/archiveCode > installedVersionCode/);
+    expect(moduleKt).toMatch(/isNewerInstallableApk\(/);
+    expect(receiverKt).toMatch(/isNewerInstallableApk\(/);
+  });
+
   it('deletes a stale APK before DownloadManager enqueue so retries are not FILE_ALREADY_EXISTS', () => {
     expect(moduleKt).toMatch(/deleteStaleDownloads\(/);
     expect(helperKt).toMatch(/fun deleteStaleDownloads\(/);
-    expect(moduleKt).toMatch(/setDestinationUri\(/);
+    expect(moduleKt).toMatch(/setDestinationInExternalFilesDir\(/);
+  });
+
+  it('downloads inline over HTTPS first, then falls back to DownloadManager', () => {
+    // Regression: DownloadManager + attachment disposition never hit the APK URL on device.
+    expect(moduleKt).toMatch(/downloadInlineFallback\(activity, apkUrl, promise\)/);
+    expect(moduleKt).toMatch(/enqueueDownloadManager\(/);
+    expect(moduleKt).toMatch(/User-Agent.*ANIStockMobile/);
   });
 
   it('installs from the downloaded file via PackageInstaller or FileProvider, not a chooser or DownloadManager URI', () => {

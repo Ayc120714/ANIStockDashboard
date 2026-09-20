@@ -41,6 +41,7 @@ export function StageEntryTimingSection() {
   const [error, setError] = useState('');
   const [timing, setTiming] = useState('');
   const [requireRs70, setRequireRs70] = useState(false);
+  const [rsCrossAbove70, setRsCrossAbove70] = useState(true);
 
   const load = useCallback(async ({silent = false} = {}) => {
     if (!silent) setLoading(true);
@@ -53,6 +54,7 @@ export function StageEntryTimingSection() {
             symbol_limit: 800,
             min_template_score: 6,
             require_rs_70: requireRs70,
+            rs_cross_above_70: rsCrossAbove70,
             entry_timing: timing || undefined,
             timeoutMs: API_TIMEOUT_MS.screenHeavy,
           }),
@@ -64,7 +66,7 @@ export function StageEntryTimingSection() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [requireRs70, timing]);
+  }, [requireRs70, rsCrossAbove70, timing]);
 
   useEffect(() => {
     load();
@@ -72,19 +74,22 @@ export function StageEntryTimingSection() {
 
   const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(rows, {
     pageSize: PAGE_SIZE,
-    resetDeps: [timing, requireRs70, rows.length],
+    resetDeps: [timing, requireRs70, rsCrossAbove70, rows.length],
   });
 
   const subtitle = useMemo(
-    () => `Weinstein Stage 2 · Minervini template · RS rating · ${rows.length} matches`,
-    [rows.length],
+    () =>
+      rsCrossAbove70
+        ? `RS just crossed 70 · other setup passed · ${rows.length} matches`
+        : `Weinstein Stage 2 · Minervini template · RS rating · ${rows.length} matches`,
+    [rows.length, rsCrossAbove70],
   );
 
   return (
     <View>
       <Text style={mobileStyles.subtitle}>{subtitle}</Text>
       <Text style={styles.hint}>
-        Stage 2 is favorable environment — wait for RS ≥70, tight base, and volume on breakout.
+        Default: RS rating just crossed above 70 with Stage 2 + other Minervini criteria already passing.
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {TIMING_FILTERS.map(f => (
@@ -96,9 +101,14 @@ export function StageEntryTimingSection() {
           </Pressable>
         ))}
         <Pressable
+          onPress={() => setRsCrossAbove70(v => !v)}
+          style={[styles.chip, rsCrossAbove70 ? styles.chipOn : null]}>
+          <Text style={[styles.chipText, rsCrossAbove70 ? styles.chipTextOn : null]}>RS↑70 + setup</Text>
+        </Pressable>
+        <Pressable
           onPress={() => setRequireRs70(v => !v)}
-          style={[styles.chip, requireRs70 ? styles.chipOn : null]}>
-          <Text style={[styles.chipText, requireRs70 ? styles.chipTextOn : null]}>RS ≥70</Text>
+          style={[styles.chip, requireRs70 && !rsCrossAbove70 ? styles.chipOn : null]}>
+          <Text style={[styles.chipText, requireRs70 && !rsCrossAbove70 ? styles.chipTextOn : null]}>RS ≥70</Text>
         </Pressable>
         <Pressable
           onPress={async () => {
@@ -141,7 +151,7 @@ export function StageEntryTimingSection() {
                 <Text style={[styles.th, styles.colSym]}>Symbol</Text>
                 <Text style={[styles.th, styles.colTv]} />
                 <Text style={[styles.th, styles.colNum]}>Tmpl</Text>
-                <Text style={[styles.th, styles.colNum]}>RS</Text>
+                <Text style={[styles.th, styles.colRs]}>RS</Text>
                 <Text style={[styles.th, styles.colTiming]}>Timing</Text>
                 <Text style={[styles.th, styles.colPx]}>Close</Text>
                 <Text style={[styles.th, styles.colNum]}>%H</Text>
@@ -158,10 +168,16 @@ export function StageEntryTimingSection() {
                   <Text
                     style={[
                       styles.td,
-                      styles.colNum,
-                      row.rs_rating != null && row.rs_rating >= 70 ? styles.rsOk : styles.rsFail,
+                      styles.colRs,
+                      row.rs_just_crossed_70 || (row.rs_rating != null && row.rs_rating >= 70)
+                        ? styles.rsOk
+                        : styles.rsFail,
                     ]}>
-                    {row.rs_rating != null ? row.rs_rating : '—'}
+                    {row.rs_rating_prev != null && row.rs_rating != null
+                      ? `${row.rs_rating_prev}→${row.rs_rating}`
+                      : row.rs_rating != null
+                        ? String(row.rs_rating)
+                        : '—'}
                   </Text>
                   <Text style={[styles.td, styles.colTiming]} numberOfLines={1}>
                     {timingLabel(row.entry_timing)}
@@ -206,6 +222,7 @@ const styles = StyleSheet.create({
   colSym: {width: 88},
   colTv: {width: 28},
   colNum: {width: 48, textAlign: 'right'},
+  colRs: {width: 64, textAlign: 'right'},
   colTiming: {width: 72},
   colPx: {width: 72, textAlign: 'right'},
   rsOk: {color: '#1b5e20', fontWeight: '700'},

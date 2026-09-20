@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
@@ -32,9 +33,63 @@ object ApkInstallHelper {
 
   fun cacheDestination(context: Context): File = File(context.cacheDir, CACHE_FILE_NAME)
 
+  fun installedVersionCode(context: Context): Long {
+    return try {
+      val info =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageInfo(
+                context.packageName, PackageManager.PackageInfoFlags.of(0))
+          } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0)
+          }
+      packageVersionCode(info)
+    } catch (_: Exception) {
+      0L
+    }
+  }
+
+  fun packageVersionCode(info: PackageInfo?): Long {
+    if (info == null) return -1L
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      info.longVersionCode
+    } else {
+      @Suppress("DEPRECATION")
+      info.versionCode.toLong()
+    }
+  }
+
+  fun archivePackageInfo(context: Context, apkFile: File): PackageInfo? {
+    if (!apkFile.exists()) return null
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.packageManager.getPackageArchiveInfo(
+            apkFile.absolutePath, PackageManager.PackageInfoFlags.of(0))
+      } else {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+      }
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  /**
+   * True when the on-disk APK is a readable package for this app and is strictly newer than
+   * the currently installed build. Stale/corrupt leftovers must not skip a fresh download.
+   */
+  fun isNewerInstallableApk(context: Context, file: File): Boolean {
+    if (!isInstallableApk(file)) return false
+    val info = archivePackageInfo(context, file) ?: return false
+    if (info.packageName != context.packageName) return false
+    val archiveCode = packageVersionCode(info)
+    if (archiveCode <= 0L) return false
+    return archiveCode > installedVersionCode(context)
+  }
+
   fun existingInstallableApk(context: Context): File? {
     return listOf(downloadDestination(context), cacheDestination(context)).firstOrNull { file ->
-      isInstallableApk(file)
+      isNewerInstallableApk(context, file)
     }
   }
 
@@ -80,6 +135,10 @@ object ApkInstallHelper {
   ) {
     Thread {
           try {
+            if (!isNewerInstallableApk(context, apkFile)) {
+              throw IllegalStateException(
+                  "Downloaded APK is missing, corrupt, or not newer than the installed app.")
+            }
             launchInstaller(context, apkFile)
             Handler(Looper.getMainLooper()).post { onLaunched() }
           } catch (error: Exception) {

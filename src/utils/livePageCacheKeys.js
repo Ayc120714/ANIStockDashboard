@@ -20,6 +20,6 @@ export const LIVE_PAGE_CACHE_KEYS = {
     `priceShockersData_v5_${type}_${period}_${limit}`,
   trending: (limit = 50) => `trendingStocksData_v4_${limit}`,
   dcHalfChecker: (timeframe = '1d') => `dcHalfChecker_v2_${timeframe}`,
-  stageEntryTiming: 'advisor_stage_entry_timing_v1',
+  stageEntryTiming: 'advisor_stage_entry_timing_v2',
 };
 export const AI_PICKS_CACHE_KEY = LIVE_PAGE_CACHE_KEYS.aiPicks;

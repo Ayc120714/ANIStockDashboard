@@ -1,8 +1,17 @@
+/**
+ * In-app APK update helpers.
+ *
+ * Important: do not short-circuit on a leftover on-disk APK from JS.
+ * Native code decides whether a cached file is a newer, installable package.
+ * Older builds that treated any zip-magic file as success never re-downloaded
+ * and left users stuck unable to update.
+ */
 import {Alert, Linking, NativeModules, Platform, ToastAndroid} from 'react-native';
 import {APP_DIRECT_APK_URL} from '@core/config/appVersion';
 
 const {ApkUpdate} = NativeModules;
-const UPDATE_DOWNLOAD_TIMEOUT_MS = 900_000;
+/** Keep short so a hung DownloadManager cannot block "Install now" for 15 minutes. */
+const UPDATE_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export function getApkUpdateErrorCode(error) {
   return String(error?.code || error?.userInfo?.code || '').trim();
@@ -16,7 +25,7 @@ export function isNativeApkUpdateAvailable() {
   return Platform.OS === 'android' && Boolean(ApkUpdate?.downloadAndInstall);
 }
 
-/** Launch the package installer when a prior in-app download left an APK on disk. */
+/** Launch the package installer when a prior in-app download left a newer APK on disk. */
 export async function tryInstallCachedApkUpdate() {
   if (Platform.OS !== 'android' || !ApkUpdate?.installDownloadedApkIfPresent) {
     return false;
@@ -69,7 +78,7 @@ function withTimeout(promise, timeoutMs, message) {
 }
 
 export function showUpdateStartingFeedback() {
-  const message = 'Downloading update… Check the notification shade for progress.';
+  const message = 'Downloading update…';
   if (Platform.OS === 'android') {
     ToastAndroid.show(message, ToastAndroid.LONG);
     return;
@@ -89,34 +98,40 @@ export async function openApkDownloadFallback() {
   return openBrowserDownload(APP_DIRECT_APK_URL);
 }
 
+/**
+ * Download + install. Always recovers via browser if native fails for any reason
+ * (including missing "Install unknown apps" permission).
+ */
 export async function downloadAndInstallAppUpdate(apkUrl) {
   const downloadUrl = resolveApkDownloadUrl(apkUrl);
+
+  // Always kick off a browser download first so a broken in-app installer
+  // (corrupt cache short-circuit on older builds) cannot leave the user with
+  // zero network traffic. Native install still runs when available.
+  try {
+    await openBrowserDownload(downloadUrl);
+  } catch {
+    /* native path may still succeed */
+  }
 
   if (isNativeApkUpdateAvailable()) {
     try {
       return await withTimeout(
         ApkUpdate.downloadAndInstall(downloadUrl),
         UPDATE_DOWNLOAD_TIMEOUT_MS,
-        'Update download timed out. Check your connection and try again.',
+        'Update download timed out. Open the APK from your browser Downloads to finish.',
       );
     } catch (error) {
-      if (isInstallPermissionError(error)) {
-        throw error;
-      }
-      try {
-        await openBrowserDownload(downloadUrl);
-        Alert.alert(
-          'Download in browser',
-          'The in-app download failed. Your browser is downloading the APK — open Downloads and tap the file to install.',
-        );
-        return true;
-      } catch {
-        throw error;
-      }
+      Alert.alert(
+        isInstallPermissionError(error) ? 'Allow installs, or use browser' : 'Finish from Downloads',
+        isInstallPermissionError(error)
+          ? 'Allow "Install unknown apps" for Chrome (or ANI Stock), then open the APK from Downloads.'
+          : 'Your browser should have the APK. Open Downloads and tap ani-stock-release.apk to install.',
+      );
+      return true;
     }
   }
 
-  await openBrowserDownload(downloadUrl);
   Alert.alert(
     'Download started',
     'Open your browser downloads and install the APK when the download finishes.',
@@ -141,12 +156,12 @@ export function showUpdateDownloadError(error, {awaitingPermission = false} = {}
     : 'Update failed';
   const permissionHint = isInstallPermissionError(error)
     ? awaitingPermission
-      ? 'Return to ANI Stock after enabling installs — the update will start automatically.'
-      : 'Allow "Install unknown apps" for ANI Stock in Settings, then try Update again.'
+      ? 'Return to ANI Stock after enabling installs — or open the APK from your browser Downloads.'
+      : 'Allow "Install unknown apps" for ANI Stock or Chrome, then try again.'
     : '';
   Alert.alert(
     title,
-    [message, permissionHint, `You can also download manually from:\n${APP_DIRECT_APK_URL}`]
+    [message, permissionHint, `Manual download:\n${APP_DIRECT_APK_URL}`]
       .filter(Boolean)
       .join('\n\n'),
     [

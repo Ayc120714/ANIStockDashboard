@@ -285,6 +285,7 @@ export const fetchStageEntryTiming = async ({
   stage = 2,
   min_template_score = 6,
   require_rs_70 = false,
+  rs_cross_above_70 = false,
   entry_timing = '',
   refresh = false,
   cache_ttl_sec = 180,
@@ -297,6 +298,7 @@ export const fetchStageEntryTiming = async ({
   params.set('min_template_score', String(min_template_score));
   params.set('cache_ttl_sec', String(cache_ttl_sec));
   if (require_rs_70) params.set('require_rs_70', 'true');
+  if (rs_cross_above_70) params.set('rs_cross_above_70', 'true');
   if (entry_timing && String(entry_timing).trim()) {
     params.set('entry_timing', String(entry_timing).trim());
   }

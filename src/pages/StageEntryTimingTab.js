@@ -25,6 +25,7 @@ import {
   entryTimingChipColor,
   formatEntryTiming,
   formatMinerviniScore,
+  formatRsCross,
   formatStageLabel,
 } from '../utils/stageEntryTiming';
 
@@ -35,7 +36,7 @@ const COLS = [
   { key: 'symbol', label: 'Symbol' },
   { key: 'weinstein_stage', label: 'Stage' },
   { key: 'minervini_score', label: 'Template' },
-  { key: 'rs_rating', label: 'RS' },
+  { key: 'rs_rating', label: 'RS (prev→now)' },
   { key: 'entry_timing', label: 'Entry timing' },
   { key: 'close', label: 'Close', numeric: true },
   { key: 'sma50', label: '50-DMA', numeric: true },
@@ -70,12 +71,13 @@ function StageEntryTimingTab() {
   const [search, setSearch] = useState('');
   const [timingFilter, setTimingFilter] = useState('');
   const [requireRs70, setRequireRs70] = useState(false);
+  const [rsCrossAbove70, setRsCrossAbove70] = useState(true);
   const [minTemplate, setMinTemplate] = useState(6);
   const [sortConfig, setSortConfig] = useState({ key: 'minervini_score', ascending: false });
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async ({ refresh = false } = {}) => {
-    const cacheKey = LIVE_PAGE_CACHE_KEYS.stageEntryTiming;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.stageEntryTiming}_${rsCrossAbove70 ? 'cross70' : 'all'}`;
     if (!refresh) {
       const cached = readPageCache(cacheKey);
       if (Array.isArray(cached?.data) && cached.data.length) {
@@ -94,6 +96,7 @@ function StageEntryTimingTab() {
         symbol_limit: 800,
         min_template_score: minTemplate,
         require_rs_70: requireRs70,
+        rs_cross_above_70: rsCrossAbove70,
         entry_timing: timingFilter || undefined,
         refresh,
         cache_ttl_sec: 180,
@@ -108,7 +111,7 @@ function StageEntryTimingTab() {
     } finally {
       setLoading(false);
     }
-  }, [minTemplate, requireRs70, timingFilter]);
+  }, [minTemplate, requireRs70, rsCrossAbove70, timingFilter]);
 
   useEffect(() => {
     load({ refresh: false });
@@ -173,13 +176,13 @@ function StageEntryTimingTab() {
           Stage Analysis & Entry Timing
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          FFIP lens: Weinstein Stage 2 + Minervini Trend Template (x/8) + RS rating vs Nifty +
-          entry-timing bucket (breakout / constructive pullback / extended).
+          Default list: RS rating just crossed above 70, with Stage 2 + the other Minervini
+          template criteria already passing.
           {asOf ? ` · as of ${String(asOf).replace('T', ' ').slice(0, 19)} IST` : ''}
         </Typography>
         <Alert severity="info" sx={{ py: 0.5, mb: 1.5, fontSize: 12 }}>
-          Stage 2 means the environment is favorable — not every Stage-2 print is an ideal entry.
-          Prefer RS ≥70, a tight base/VCP, and volume expansion on breakout.
+          RS↑70 = prior RS &lt; 70 and latest RS ≥ 70. Other setup = Stage 2 + price above 150/200,
+          150&gt;200, rising 200-DMA, 50 above 150/200, price above 50, ≥30% above 52w low, within 25% of 52w high.
         </Alert>
       </Box>
 
@@ -212,8 +215,19 @@ function StageEntryTimingTab() {
           control={(
             <Switch
               size="small"
+              checked={rsCrossAbove70}
+              onChange={(e) => setRsCrossAbove70(e.target.checked)}
+            />
+          )}
+          label="RS just crossed 70 + other setup"
+        />
+        <FormControlLabel
+          control={(
+            <Switch
+              size="small"
               checked={requireRs70}
               onChange={(e) => setRequireRs70(e.target.checked)}
+              disabled={rsCrossAbove70}
             />
           )}
           label="RS ≥70 only"
@@ -255,7 +269,8 @@ function StageEntryTimingTab() {
       ) : (
         <>
           <TableTitle>
-            Stage 2 · {filtered.length} stock{filtered.length === 1 ? '' : 's'}
+            {rsCrossAbove70 ? 'RS↑70 + other setup' : 'Stage 2'} · {filtered.length} stock
+            {filtered.length === 1 ? '' : 's'}
             {loading ? ' · refreshing…' : ''}
           </TableTitle>
           <TableWrapper>
@@ -307,11 +322,13 @@ function StageEntryTimingTab() {
                       </td>
                       <td style={{
                         ...compact,
-                        color: row.rs_rating != null && row.rs_rating >= 70 ? '#1b5e20' : '#c62828',
+                        color: row.rs_just_crossed_70 ? '#1b5e20' : (row.rs_rating != null && row.rs_rating >= 70 ? '#2e7d32' : '#c62828'),
                         fontWeight: 600,
                       }}
                       >
-                        {row.rs_rating != null ? row.rs_rating : '—'}
+                        <Tooltip title={row.rs_just_crossed_70 ? 'RS just crossed above 70' : 'RS rating'}>
+                          <span>{formatRsCross(row)}</span>
+                        </Tooltip>
                       </td>
                       <td style={compact}>
                         <Chip
@@ -330,7 +347,8 @@ function StageEntryTimingTab() {
                       <td style={compact}>
                         <Box display="flex" gap={0.4} flexWrap="wrap">
                           <Chip size="small" label="S2" color={cl.stage2_intact ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
-                          <Chip size="small" label="RS70" color={cl.rs_ge_70 ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                          <Chip size="small" label="RS↑70" color={cl.rs_just_crossed_70 || row.rs_just_crossed_70 ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                          <Chip size="small" label="Setup" color={cl.other_setup_pass || row.other_setup_pass ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                           <Chip size="small" label="Base" color={cl.tight_base_or_pullback ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                           <Chip size="small" label="Vol" color={cl.volume_expansion_ready ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                           <Chip size="small" label="7/8" color={cl.template_ge_7 ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />

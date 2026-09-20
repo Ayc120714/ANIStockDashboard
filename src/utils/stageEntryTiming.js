@@ -39,6 +39,24 @@ export function formatMinerviniScore(score) {
   return `${n}/8`;
 }
 
+export function formatRsCross(row) {
+  const prev = row?.rs_rating_prev;
+  const curr = row?.rs_rating;
+  if (curr == null && prev == null) return '—';
+  if (prev == null) return String(curr);
+  return `${prev}→${curr}`;
+}
+
+/** True when RS just crossed ≥70 and Stage 2 + other Minervini criteria pass. */
+export function isRsCrossSetupRow(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.rs_just_crossed_70 && row.other_setup_pass) return true;
+  const prev = Number(row.rs_rating_prev);
+  const curr = Number(row.rs_rating);
+  if (!Number.isFinite(prev) || !Number.isFinite(curr)) return false;
+  return prev < 70 && curr >= 70 && row.other_setup_pass === true;
+}
+
 export function entryTimingChipColor(timing) {
   const key = String(timing || '').trim().toLowerCase();
   if (key === 'breakout_watch') return { bgcolor: '#e8f5e9', color: '#1b5e20' };

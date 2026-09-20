@@ -11,6 +11,7 @@ describe('livePageCacheKeys', () => {
     expect(LIVE_PAGE_CACHE_KEYS.trending(50)).toBe('trendingStocksData_v4_50');
     expect(LIVE_PAGE_CACHE_KEYS.dcHalfChecker('1d')).toBe('dcHalfChecker_v2_1d');
     expect(LIVE_PAGE_CACHE_KEYS.dcHalfChecker('5m')).toBe('dcHalfChecker_v2_5m');
+    expect(LIVE_PAGE_CACHE_KEYS.stageEntryTiming).toBe('advisor_stage_entry_timing_v2');
   });
 
   it('keeps watchlist prefetch keys in sync with ST/LT pages (regression)', () => {

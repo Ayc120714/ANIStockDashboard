@@ -23,7 +23,6 @@ import {
   showInstallPromptAlert,
   showUpdateDownloadError,
   showUpdateStartingFeedback,
-  tryInstallCachedApkUpdate,
 } from '@core/utils/apkUpdateInstaller';
 
 const UPDATE_POLL_MS = 15 * 60 * 1000;
@@ -110,11 +109,10 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
       return false;
     }
 
-    const launchedCached = await tryInstallCachedApkUpdate();
-    if (launchedCached) {
-      showInstallPromptAlert();
-      return true;
-    }
+    // Do not short-circuit on a leftover cached APK here. Older builds treated any
+    // zip-magic file as success, skipped the network download, and left users stuck
+    // on Install now with zero APK traffic. Native downloadAndInstall reuses a cache
+    // only when PackageManager reports a newer versionCode.
 
     showUpdateStartingFeedback();
 
@@ -131,6 +129,8 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
     } catch (error) {
       if (isInstallPermissionError(error)) {
         await setPendingUpdate(pending);
+        // Still open the APK in the browser so permission issues are not a dead end.
+        openApkDownloadFallback().catch(() => {});
         showUpdateDownloadError(error, {awaitingPermission: true});
         return false;
       }
@@ -151,14 +151,6 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
   const resumePendingUpdate = useCallback(async () => {
     const pending = await reconcilePendingAppUpdate(APP_VERSION_CODE);
     pendingUpdateRef.current = pending;
-
-    if (pending) {
-      const launchedCached = await tryInstallCachedApkUpdate();
-      if (launchedCached) {
-        showInstallPromptAlert();
-        return;
-      }
-    }
 
     const canInstall = await canInstallApkPackages();
     if (!shouldAutoResumePendingUpdate({
@@ -209,6 +201,13 @@ export function useAppUpdatePrompt({enabled = true} = {}) {
           style: 'cancel',
           onPress: () => {
             setPendingUpdate(pending).catch(() => {});
+          },
+        },
+        {
+          text: 'Browser',
+          onPress: () => {
+            setPendingUpdate(pending).catch(() => {});
+            openApkDownloadFallback().catch(() => {});
           },
         },
         {
