@@ -1,10 +1,14 @@
 import {
   entryTimingChipColor,
+  formatConfirmTimeframes,
   formatEntryTiming,
   formatMinerviniScore,
   formatRsCross,
   formatStageLabel,
+  isMtfConfirmPass,
   isRsCrossSetupRow,
+  isWeeklyConfirmPass,
+  weeklyConfirmPassedCount,
 } from './stageEntryTiming';
 
 describe('stageEntryTiming helpers', () => {
@@ -35,6 +39,38 @@ describe('stageEntryTiming helpers', () => {
         other_setup_pass: true,
         rs_rating_prev: 75,
         rs_rating: 80,
+      }),
+    ).toBe(false);
+  });
+
+  it('detects Chartink weekly confirm complete filter (regression)', () => {
+    const pass = {
+      weekly_confirm_pass: true,
+      weekly_confirm: {
+        weekly_psar_cross_1w_ago: true,
+        weekly_close_up: true,
+        weekly_prior_dip: true,
+        weekly_rvol_rising: true,
+      },
+    };
+    expect(isWeeklyConfirmPass(pass)).toBe(true);
+    expect(weeklyConfirmPassedCount(pass)).toBe(4);
+  });
+
+  it('unifies Daily/Weekly/Monthly confirm into one list (regression)', () => {
+    // Bug: Stage Analysis only had weekly confirm — empty lists; need D/W/M OR.
+    const row = {
+      mtf_confirm_pass: true,
+      confirm_timeframes: ['1d', '1w'],
+      weekly_confirm_pass: true,
+    };
+    expect(isMtfConfirmPass(row)).toBe(true);
+    expect(formatConfirmTimeframes(row)).toBe('Daily+Weekly');
+    expect(
+      isMtfConfirmPass({
+        mtf_confirm_pass: false,
+        confirm_timeframes: [],
+        weekly_confirm_pass: false,
       }),
     ).toBe(false);
   });

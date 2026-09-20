@@ -8,6 +8,9 @@ export const DC_HALF_TIMEFRAMES = [
   { id: '1w', label: '1W' },
 ];
 
+/** TFs that fire volume-expand live alerts. */
+export const DC_HALF_ALERT_TIMEFRAMES = ['5m', '30m', '1h', '1d'];
+
 export const DC_HALF_PHASE_LABELS = {
   cross_up: 'Cross up',
   at_dc_high: 'At DC high',
@@ -35,4 +38,28 @@ export function formatDcHalfPhase(phase) {
 export function formatDcHalfPrice(v) {
   if (v == null || Number.isNaN(Number(v))) return '—';
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** True when Chartink PSAR confirm block passed on this TF. */
+export function isDcHalfPsarConfirm(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.psar_confirm === true) return true;
+  const f = row.confirm_flags || {};
+  return Boolean(f.psar_cross && f.close_up && f.prior_dip && f.rvol_rising);
+}
+
+/** True when relative volume is expanding on this TF (alert trigger). */
+export function isDcHalfVolumeExpanding(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.volume_expanding === true) return true;
+  return Boolean(row.confirm_flags?.rvol_rising);
+}
+
+export function formatDcHalfRvol(row) {
+  const a = row?.volume_ratio_prev;
+  const b = row?.volume_ratio;
+  if (a == null && b == null) return '—';
+  if (a == null) return Number(b).toFixed(2);
+  if (b == null) return Number(a).toFixed(2);
+  return `${Number(a).toFixed(2)}→${Number(b).toFixed(2)}`;
 }

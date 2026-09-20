@@ -33,6 +33,15 @@ export function resolveAdvisorTabIndex(advisorTab) {
   ) {
     return 8;
   }
+  if (
+    key === 'compression'
+    || key === 'breakout'
+    || key === 'vcp'
+    || key === 'compression_breakout'
+    || key === 'retest'
+  ) {
+    return 9;
+  }
   const n = Number(key);
-  return Number.isFinite(n) && n >= 0 && n <= 8 ? n : 0;
+  return Number.isFinite(n) && n >= 0 && n <= 9 ? n : 0;
 }

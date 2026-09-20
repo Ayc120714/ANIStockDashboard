@@ -26,7 +26,7 @@ describe('dashboard cache policy fixes', () => {
     expect(MOBILE_PAGE_CACHE_KEYS.marketsOutlook('market')).toContain('markets-outlook-v5');
     expect(MOBILE_PAGE_CACHE_KEYS.stocksOutlook('market')).toContain('stocks-outlook-v7');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('movers', 'gainers', 'day', 'day', 'short')).toContain(
-      'screens-v10',
+      'screens-v11',
     );
   });
 
@@ -34,9 +34,13 @@ describe('dashboard cache policy fixes', () => {
     expect(LEGACY_SCREENS_HUB_CACHE_PREFIXES).toContain('@ani/mobile/page-cache/screens-v6-');
     expect(LEGACY_SCREENS_HUB_CACHE_PREFIXES).toContain('@ani/mobile/page-cache/screens-v7-');
     expect(LEGACY_SCREENS_HUB_CACHE_PREFIXES).toContain('@ani/mobile/page-cache/screens-v8-');
+    expect(LEGACY_SCREENS_HUB_CACHE_PREFIXES).toContain('@ani/mobile/page-cache/screens-v10-');
     expect(MOBILE_PAGE_CACHE_KEYS.screensHub('trending', 'gainers', 'day', 'day', 'short')).toContain(
-      'screens-v10',
+      'screens-v11',
     );
+    expect(
+      MOBILE_PAGE_CACHE_KEYS.screensHub('dchalf', 'gainers', 'day', 'day', 'short', '', '', '5m', true, true),
+    ).toContain('psar1-vol1');
   });
 
   it('tracks legacy dashboard cache keys for upgrade cleanup', () => {

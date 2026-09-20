@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Button, ButtonGroup, CircularProgress, TextField, Typography } from '@mui/material';
+import { Box, Button, ButtonGroup, Chip, CircularProgress, FormControlLabel, Switch, TextField, Typography } from '@mui/material';
 import Pagination from '@mui/material/Pagination';
 import { TableSection, TableTitle, TableWrapper, Table } from './SectorOutlook.styles';
 import { PageContainer, PageTitle } from './ScreensPage.style';
@@ -12,6 +12,9 @@ import {
   DC_HALF_TIMEFRAMES,
   formatDcHalfPhase,
   formatDcHalfPrice,
+  formatDcHalfRvol,
+  isDcHalfPsarConfirm,
+  isDcHalfVolumeExpanding,
   normalizeDcHalfTimeframe,
 } from '../utils/dcHalfChecker';
 
@@ -27,6 +30,8 @@ function DcHalfCheckerPage() {
   const [sortConfig, setSortConfig] = useState({ key: 'bars_since_cross', ascending: true });
   const [asOf, setAsOf] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [requirePsar, setRequirePsar] = useState(false);
+  const [volExpandOnly, setVolExpandOnly] = useState(false);
 
   useEffect(() => {
     if (bootstrapping) return undefined;
@@ -40,7 +45,7 @@ function DcHalfCheckerPage() {
     let cancelled = false;
     setPage(1);
     const tf = normalizeDcHalfTimeframe(timeframe);
-    const cacheKey = LIVE_PAGE_CACHE_KEYS.dcHalfChecker(tf);
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.dcHalfChecker(tf)}_psar${requirePsar ? 1 : 0}_vol${volExpandOnly ? 1 : 0}`;
 
     const cached = readPageCache(cacheKey);
     if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
@@ -57,6 +62,8 @@ function DcHalfCheckerPage() {
           timeframe: tf,
           limit: 300,
           symbol_limit: 800,
+          require_psar_confirm: requirePsar,
+          volume_expand_only: volExpandOnly,
           refresh: false,
           cache_ttl_sec: 180,
         });
@@ -99,7 +106,7 @@ function DcHalfCheckerPage() {
     })();
 
     return () => { cancelled = true; };
-  }, [bootstrapping, isAuthenticated, timeframe]);
+  }, [bootstrapping, isAuthenticated, timeframe, requirePsar, volExpandOnly]);
 
   const filteredData = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -157,7 +164,8 @@ function DcHalfCheckerPage() {
     <PageContainer>
       <PageTitle>DC Half Checker</PageTitle>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Close crossed above DC_HALF (20) · Market Cap &gt; 2000 Cr · EMA stack · Phase tags for Setup 1 / Setup 2 review
+        Close crossed above DC_HALF (20) · Market Cap &gt; 2000 Cr · EMA stack · Chartink PSAR confirm on TF
+        · Live alerts when volume expands (5M/30M/1H/1D)
         {asOf ? ` · as of ${String(asOf).replace('T', ' ').slice(0, 19)} IST` : ''}
       </Typography>
 
@@ -181,6 +189,14 @@ function DcHalfCheckerPage() {
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
               sx={{ minWidth: 240 }}
+            />
+            <FormControlLabel
+              control={<Switch size="small" checked={requirePsar} onChange={(e) => setRequirePsar(e.target.checked)} />}
+              label="PSAR confirm"
+            />
+            <FormControlLabel
+              control={<Switch size="small" checked={volExpandOnly} onChange={(e) => setVolExpandOnly(e.target.checked)} />}
+              label="Vol expand"
             />
             <Button
               size="small"
@@ -237,13 +253,16 @@ function DcHalfCheckerPage() {
                     <th onClick={() => requestSort('phase')} style={{ cursor: 'pointer' }}>Phase</th>
                     <th onClick={() => requestSort('pct_vs_dc_half')} style={{ cursor: 'pointer' }}>% vs Mid</th>
                     <th onClick={() => requestSort('bars_since_cross')} style={{ cursor: 'pointer' }}>Bars since X</th>
+                    <th onClick={() => requestSort('psar_confirm')} style={{ cursor: 'pointer' }}>PSAR</th>
+                    <th onClick={() => requestSort('volume_expanding')} style={{ cursor: 'pointer' }}>Vol↑</th>
+                    <th>RVol</th>
                     <th>Crossed at</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={16} style={{ textAlign: 'center', padding: 24 }}>
+                      <td colSpan={19} style={{ textAlign: 'center', padding: 24 }}>
                         No DC_HALF crosses for {timeframe.toUpperCase()} right now.
                       </td>
                     </tr>
@@ -276,6 +295,23 @@ function DcHalfCheckerPage() {
                       <td>{formatDcHalfPhase(row.phase)}</td>
                       <td>{row.pct_vs_dc_half != null ? `${row.pct_vs_dc_half}%` : '—'}</td>
                       <td>{row.bars_since_cross != null ? row.bars_since_cross : '—'}</td>
+                      <td>
+                        <Chip
+                          size="small"
+                          label={isDcHalfPsarConfirm(row) ? 'Pass' : '—'}
+                          color={isDcHalfPsarConfirm(row) ? 'success' : 'default'}
+                          sx={{ height: 20, fontSize: 10 }}
+                        />
+                      </td>
+                      <td>
+                        <Chip
+                          size="small"
+                          label={isDcHalfVolumeExpanding(row) ? 'Vol↑' : '—'}
+                          color={isDcHalfVolumeExpanding(row) ? 'warning' : 'default'}
+                          sx={{ height: 20, fontSize: 10 }}
+                        />
+                      </td>
+                      <td>{formatDcHalfRvol(row)}</td>
                       <td>{row.crossed_bar_time ? String(row.crossed_bar_time).replace('T', ' ').slice(0, 16) : '—'}</td>
                     </tr>
                   ))}

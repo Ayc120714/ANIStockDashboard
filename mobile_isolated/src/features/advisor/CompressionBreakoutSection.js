@@ -12,37 +12,43 @@ import {AYC, mobileStyles} from '@core/theme/mobileStyles';
 
 const PAGE_SIZE = 15;
 
-const TIMING_FILTERS = [
-  {id: '', label: 'All'},
-  {id: 'breakout_watch', label: 'Breakout'},
-  {id: 'constructive_pullback', label: 'Pullback'},
-  {id: 'stage2_watch', label: 'Watch'},
-  {id: 'extended', label: 'Extended'},
+const TF_FILTERS = [
+  {id: 'all', label: 'All'},
+  {id: '1d', label: 'Daily'},
+  {id: '1w', label: 'Weekly'},
 ];
 
-function fmtPct(v) {
-  if (v == null || Number.isNaN(Number(v))) return '—';
-  return `${Number(v).toFixed(1)}%`;
-}
+const PHASE_FILTERS = [
+  {id: '', label: 'All'},
+  {id: 'breakout', label: 'Breakout'},
+  {id: 'retest_hold', label: 'Retest'},
+  {id: 'renewed', label: 'Renewed'},
+  {id: 'compression', label: 'Compress'},
+];
 
-function timingLabel(t) {
-  const key = String(t || '');
-  if (key === 'breakout_watch') return 'Breakout';
-  if (key === 'constructive_pullback') return 'Pullback';
-  if (key === 'stage2_watch') return 'Watch';
-  if (key === 'extended') return 'Extended';
-  if (key === 'deteriorating') return 'Weak';
+function phaseLabel(p) {
+  const key = String(p || '');
+  if (key === 'breakout') return 'Breakout';
+  if (key === 'retest_hold') return 'Retest';
+  if (key === 'renewed') return 'Renewed';
+  if (key === 'compression') return 'Compress';
   return key || '—';
 }
 
-export function StageEntryTimingSection() {
+function phaseColor(p) {
+  const key = String(p || '');
+  if (key === 'renewed') return '#1b5e20';
+  if (key === 'retest_hold') return '#1565c0';
+  if (key === 'breakout') return '#e65100';
+  return '#546e7a';
+}
+
+export function CompressionBreakoutSection() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [timing, setTiming] = useState('');
-  const [requireRs70, setRequireRs70] = useState(false);
-  const [rsCrossAbove70, setRsCrossAbove70] = useState(false);
-  const [mtfConfirm, setMtfConfirm] = useState(true);
+  const [timeframe, setTimeframe] = useState('all');
+  const [phase, setPhase] = useState('');
 
   const load = useCallback(async ({silent = false} = {}) => {
     if (!silent) setLoading(true);
@@ -50,25 +56,23 @@ export function StageEntryTimingSection() {
     try {
       const res = await safeFetch(
         () =>
-          advisorService.fetchStageEntryTiming({
+          advisorService.fetchCompressionBreakout({
+            timeframe,
             limit: 300,
             symbol_limit: 800,
-            min_template_score: 6,
-            require_rs_70: requireRs70,
-            rs_cross_above_70: rsCrossAbove70,
-            require_mtf_confirm: mtfConfirm,
-            entry_timing: timing || undefined,
+            phase: phase || undefined,
+            include_compression: phase === 'compression',
             timeoutMs: API_TIMEOUT_MS.screenHeavy,
           }),
-        {label: 'Stage Analysis', timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1},
+        {label: 'Compression Breakout', timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1},
       );
       setRows(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
     } catch (e) {
-      setError(String(e?.message || 'Could not load Stage Analysis'));
+      setError(String(e?.message || 'Could not load Compression Breakout'));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [requireRs70, rsCrossAbove70, mtfConfirm, timing]);
+  }, [timeframe, phase]);
 
   useEffect(() => {
     load();
@@ -76,48 +80,39 @@ export function StageEntryTimingSection() {
 
   const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(rows, {
     pageSize: PAGE_SIZE,
-    resetDeps: [timing, requireRs70, rsCrossAbove70, mtfConfirm, rows.length],
+    resetDeps: [timeframe, phase, rows.length],
   });
 
-  const subtitle = useMemo(() => {
-    const parts = [];
-    if (mtfConfirm) parts.push('PSAR D/W/M');
-    if (rsCrossAbove70) parts.push('RS↑70');
-    parts.push(`${rows.length} matches`);
-    return parts.join(' · ');
-  }, [rows.length, mtfConfirm, rsCrossAbove70]);
+  const subtitle = useMemo(
+    () =>
+      `${timeframe === 'all' ? 'All TFs' : timeframe === '1w' ? 'Weekly' : 'Daily'} · compression → breakout → light retest → renewed · ${rows.length} matches`,
+    [rows.length, timeframe],
+  );
 
   return (
     <View>
       <Text style={mobileStyles.subtitle}>{subtitle}</Text>
       <Text style={styles.hint}>
-        One list for all formats: Stage 2 + Minervini + Chartink PSAR confirm on Daily, Weekly, or
-        Monthly (same formula). Market Cap &gt; 2000 Cr.
+        Checklist: compression first, volume expanded + strong close, level held on lighter retest, then renewed
+        participation. Better evidence, not certainty.
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {TIMING_FILTERS.map(f => (
+        {TF_FILTERS.map(f => (
           <Pressable
-            key={f.id || 'all'}
-            onPress={() => setTiming(f.id)}
-            style={[styles.chip, timing === f.id ? styles.chipOn : null]}>
-            <Text style={[styles.chipText, timing === f.id ? styles.chipTextOn : null]}>{f.label}</Text>
+            key={f.id}
+            onPress={() => setTimeframe(f.id)}
+            style={[styles.chip, timeframe === f.id ? styles.chipOn : null]}>
+            <Text style={[styles.chipText, timeframe === f.id ? styles.chipTextOn : null]}>{f.label}</Text>
           </Pressable>
         ))}
-        <Pressable
-          onPress={() => setMtfConfirm(v => !v)}
-          style={[styles.chip, mtfConfirm ? styles.chipOn : null]}>
-          <Text style={[styles.chipText, mtfConfirm ? styles.chipTextOn : null]}>PSAR D/W/M</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setRsCrossAbove70(v => !v)}
-          style={[styles.chip, rsCrossAbove70 ? styles.chipOn : null]}>
-          <Text style={[styles.chipText, rsCrossAbove70 ? styles.chipTextOn : null]}>RS↑70</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setRequireRs70(v => !v)}
-          style={[styles.chip, requireRs70 && !rsCrossAbove70 ? styles.chipOn : null]}>
-          <Text style={[styles.chipText, requireRs70 && !rsCrossAbove70 ? styles.chipTextOn : null]}>RS ≥70</Text>
-        </Pressable>
+        {PHASE_FILTERS.map(f => (
+          <Pressable
+            key={f.id || 'all'}
+            onPress={() => setPhase(f.id)}
+            style={[styles.chip, phase === f.id ? styles.chipOn : null]}>
+            <Text style={[styles.chipText, phase === f.id ? styles.chipTextOn : null]}>{f.label}</Text>
+          </Pressable>
+        ))}
         <Pressable
           onPress={async () => {
             const csv = buildTradingViewSymbolsCsv(rows.map(r => r.symbol));
@@ -126,7 +121,7 @@ export function StageEntryTimingSection() {
               return;
             }
             try {
-              await Share.share({message: csv, title: 'Stage Analysis CSV'});
+              await Share.share({message: csv, title: 'Compression Breakout CSV'});
             } catch (e) {
               Alert.alert('Copy CSV', String(e?.message || 'Could not share CSV'));
             }
@@ -142,13 +137,13 @@ export function StageEntryTimingSection() {
       {loading && !rows.length ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={AYC.blue} />
-          <Text style={styles.loadingText}>Scanning Stage 2 + PSAR D/W/M…</Text>
+          <Text style={styles.loadingText}>Scanning compression / breakout universe…</Text>
         </View>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {!loading && !rows.length && !error ? (
-        <Text style={styles.empty}>No Stage 2 setups for these filters.</Text>
+        <Text style={styles.empty}>No matching setups for these filters.</Text>
       ) : null}
 
       {pagedItems.length > 0 ? (
@@ -158,12 +153,11 @@ export function StageEntryTimingSection() {
               <View style={styles.thRow}>
                 <Text style={[styles.th, styles.colSym]}>Symbol</Text>
                 <Text style={[styles.th, styles.colTv]} />
-                <Text style={[styles.th, styles.colNum]}>Tmpl</Text>
-                <Text style={[styles.th, styles.colWk]}>TF</Text>
-                <Text style={[styles.th, styles.colRs]}>RS</Text>
-                <Text style={[styles.th, styles.colTiming]}>Timing</Text>
+                <Text style={[styles.th, styles.colPhase]}>Phase</Text>
+                <Text style={[styles.th, styles.colNum]}>Ev</Text>
                 <Text style={[styles.th, styles.colPx]}>Close</Text>
-                <Text style={[styles.th, styles.colNum]}>%H</Text>
+                <Text style={[styles.th, styles.colPx]}>Level</Text>
+                <Text style={[styles.th, styles.colPx]}>Stop</Text>
               </View>
               {pagedItems.map((row, index) => (
                 <View key={`${row.symbol}-${index}`} style={[styles.tr, index % 2 === 0 ? styles.trAlt : null]}>
@@ -173,39 +167,17 @@ export function StageEntryTimingSection() {
                   <View style={[styles.td, styles.colTv]}>
                     <TradingViewLink symbol={row.symbol} />
                   </View>
+                  <Text style={[styles.td, styles.colPhase, {color: phaseColor(row.phase)}]} numberOfLines={1}>
+                    {phaseLabel(row.phase)}
+                  </Text>
                   <Text style={[styles.td, styles.colNum]}>
-                    {row.minervini_score != null ? `${row.minervini_score}/8` : '—'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.td,
-                      styles.colWk,
-                      row.mtf_confirm_pass ? styles.rsOk : styles.rsFail,
-                    ]}
-                    numberOfLines={1}>
-                    {row.mtf_confirm_pass
-                      ? (row.confirm_timeframes || []).map(tf => (tf === '1d' ? 'D' : tf === '1w' ? 'W' : 'M')).join('+') || 'Pass'
-                      : '—'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.td,
-                      styles.colRs,
-                      row.rs_just_crossed_70 || (row.rs_rating != null && row.rs_rating >= 70)
-                        ? styles.rsOk
-                        : styles.rsFail,
-                    ]}>
-                    {row.rs_rating_prev != null && row.rs_rating != null
-                      ? `${row.rs_rating_prev}→${row.rs_rating}`
-                      : row.rs_rating != null
-                        ? String(row.rs_rating)
-                        : '—'}
-                  </Text>
-                  <Text style={[styles.td, styles.colTiming]} numberOfLines={1}>
-                    {timingLabel(row.entry_timing)}
+                    {row.evidence_score != null ? `${row.evidence_score}/6` : '—'}
                   </Text>
                   <Text style={[styles.td, styles.colPx]}>{row.close != null ? formatINR(row.close) : '—'}</Text>
-                  <Text style={[styles.td, styles.colNum]}>{fmtPct(row.pct_from_high)}</Text>
+                  <Text style={[styles.td, styles.colPx]}>
+                    {row.breakout_level != null ? formatINR(row.breakout_level) : '—'}
+                  </Text>
+                  <Text style={[styles.td, styles.colPx]}>{row.stop_hint != null ? formatINR(row.stop_hint) : '—'}</Text>
                 </View>
               ))}
             </View>
@@ -243,11 +215,7 @@ const styles = StyleSheet.create({
   symBold: {fontWeight: '700'},
   colSym: {width: 88},
   colTv: {width: 28},
-  colNum: {width: 48, textAlign: 'right'},
-  colWk: {width: 44, textAlign: 'center'},
-  colRs: {width: 64, textAlign: 'right'},
-  colTiming: {width: 72},
+  colPhase: {width: 72},
+  colNum: {width: 40, textAlign: 'right'},
   colPx: {width: 72, textAlign: 'right'},
-  rsOk: {color: '#1b5e20', fontWeight: '700'},
-  rsFail: {color: '#c62828', fontWeight: '700'},
 });

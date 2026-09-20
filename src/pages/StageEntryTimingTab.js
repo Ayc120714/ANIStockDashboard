@@ -22,11 +22,14 @@ import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
 import {
   STAGE_ENTRY_TIMING_OPTIONS,
+  WEEKLY_CONFIRM_LABELS,
   entryTimingChipColor,
   formatEntryTiming,
   formatMinerviniScore,
   formatRsCross,
   formatStageLabel,
+  formatConfirmTimeframes,
+  weeklyConfirmPassedCount,
 } from '../utils/stageEntryTiming';
 
 const compact = { fontSize: 12, padding: '4px 6px', whiteSpace: 'nowrap' };
@@ -37,12 +40,14 @@ const COLS = [
   { key: 'weinstein_stage', label: 'Stage' },
   { key: 'minervini_score', label: 'Template' },
   { key: 'rs_rating', label: 'RS (prev→now)' },
+  { key: 'confirm_timeframes', label: 'TF confirm' },
   { key: 'entry_timing', label: 'Entry timing' },
   { key: 'close', label: 'Close', numeric: true },
   { key: 'sma50', label: '50-DMA', numeric: true },
   { key: 'sma150', label: '150-DMA', numeric: true },
   { key: 'sma200', label: '200-DMA', numeric: true },
   { key: 'pct_from_high', label: '% vs H', numeric: true },
+  { key: 'weekly_rvol', label: 'Wk RVol', numeric: true },
   { key: 'volume_ratio', label: 'Vol×', numeric: true },
   { key: 'sector', label: 'Sector' },
 ];
@@ -71,13 +76,14 @@ function StageEntryTimingTab() {
   const [search, setSearch] = useState('');
   const [timingFilter, setTimingFilter] = useState('');
   const [requireRs70, setRequireRs70] = useState(false);
-  const [rsCrossAbove70, setRsCrossAbove70] = useState(true);
+  const [rsCrossAbove70, setRsCrossAbove70] = useState(false);
+  const [mtfConfirm, setMtfConfirm] = useState(true);
   const [minTemplate, setMinTemplate] = useState(6);
   const [sortConfig, setSortConfig] = useState({ key: 'minervini_score', ascending: false });
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async ({ refresh = false } = {}) => {
-    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.stageEntryTiming}_${rsCrossAbove70 ? 'cross70' : 'all'}`;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.stageEntryTiming}_mtf${mtfConfirm ? 1 : 0}_rs${rsCrossAbove70 ? 1 : 0}`;
     if (!refresh) {
       const cached = readPageCache(cacheKey);
       if (Array.isArray(cached?.data) && cached.data.length) {
@@ -97,6 +103,7 @@ function StageEntryTimingTab() {
         min_template_score: minTemplate,
         require_rs_70: requireRs70,
         rs_cross_above_70: rsCrossAbove70,
+        require_mtf_confirm: mtfConfirm,
         entry_timing: timingFilter || undefined,
         refresh,
         cache_ttl_sec: 180,
@@ -111,7 +118,7 @@ function StageEntryTimingTab() {
     } finally {
       setLoading(false);
     }
-  }, [minTemplate, requireRs70, rsCrossAbove70, timingFilter]);
+  }, [minTemplate, requireRs70, rsCrossAbove70, mtfConfirm, timingFilter]);
 
   useEffect(() => {
     load({ refresh: false });
@@ -176,13 +183,14 @@ function StageEntryTimingTab() {
           Stage Analysis & Entry Timing
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Default list: RS rating just crossed above 70, with Stage 2 + the other Minervini
-          template criteria already passing.
+          One list for all formats: Stage 2 / Minervini + Chartink PSAR confirm on Daily, Weekly,
+          or Monthly (same 4 conditions). Market Cap &gt; 2000 Cr.
           {asOf ? ` · as of ${String(asOf).replace('T', ' ').slice(0, 19)} IST` : ''}
         </Typography>
         <Alert severity="info" sx={{ py: 0.5, mb: 1.5, fontSize: 12 }}>
-          RS↑70 = prior RS &lt; 70 and latest RS ≥ 70. Other setup = Stage 2 + price above 150/200,
-          150&gt;200, rising 200-DMA, 50 above 150/200, price above 50, ≥30% above 52w low, within 25% of 52w high.
+          TF confirm (any of D/W/M) = Close crossed above PSAR(0.02) · Close &gt; prior Close
+          · 2-bars-ago Close &lt; 3-bars-ago Close · Vol/EMA20 rising · MCap &gt; 2000.
+          Optional: RS↑70 + other Minervini setup.
         </Alert>
       </Box>
 
@@ -211,6 +219,16 @@ function StageEntryTimingTab() {
             <MenuItem key={n} value={n}>{n}/8+</MenuItem>
           ))}
         </TextField>
+        <FormControlLabel
+          control={(
+            <Switch
+              size="small"
+              checked={mtfConfirm}
+              onChange={(e) => setMtfConfirm(e.target.checked)}
+            />
+          )}
+          label="PSAR confirm (D/W/M)"
+        />
         <FormControlLabel
           control={(
             <Switch
@@ -269,8 +287,10 @@ function StageEntryTimingTab() {
       ) : (
         <>
           <TableTitle>
-            {rsCrossAbove70 ? 'RS↑70 + other setup' : 'Stage 2'} · {filtered.length} stock
-            {filtered.length === 1 ? '' : 's'}
+            {mtfConfirm ? 'PSAR confirm D/W/M' : 'Stage 2'}
+            {rsCrossAbove70 ? ' · RS↑70' : ''}
+            {' · '}
+            {filtered.length} stock{filtered.length === 1 ? '' : 's'}
             {loading ? ' · refreshing…' : ''}
           </TableTitle>
           <TableWrapper>
@@ -300,6 +320,10 @@ function StageEntryTimingTab() {
                 ) : pageRows.map((row, idx) => {
                   const chip = entryTimingChipColor(row.entry_timing);
                   const cl = row.checklist || {};
+                  const wk = row.weekly_confirm || {};
+                  const wkTip = Object.entries(WEEKLY_CONFIRM_LABELS)
+                    .map(([k, label]) => `${label}: ${wk[k] ? 'Pass' : 'Fail'}`)
+                    .join(' · ');
                   return (
                     <tr key={row.symbol}>
                       <td style={compact}>{(page - 1) * PAGE_SIZE + idx + 1}</td>
@@ -331,6 +355,16 @@ function StageEntryTimingTab() {
                         </Tooltip>
                       </td>
                       <td style={compact}>
+                        <Tooltip title={wkTip || 'TF confirm (Daily / Weekly / Monthly)'}>
+                          <Chip
+                            size="small"
+                            label={row.mtf_confirm_pass ? formatConfirmTimeframes(row) : `${weeklyConfirmPassedCount(row)}/4`}
+                            color={row.mtf_confirm_pass ? 'success' : 'default'}
+                            sx={{ height: 22, fontSize: 11, fontWeight: 600 }}
+                          />
+                        </Tooltip>
+                      </td>
+                      <td style={compact}>
                         <Chip
                           size="small"
                           label={formatEntryTiming(row.entry_timing)}
@@ -342,16 +376,21 @@ function StageEntryTimingTab() {
                       <td style={compact}>{fmtPx(row.sma150)}</td>
                       <td style={compact}>{fmtPx(row.sma200)}</td>
                       <td style={compact}>{fmtPct(row.pct_from_high)}</td>
+                      <td style={compact}>
+                        {row.weekly_rvol != null && row.weekly_rvol_prev != null
+                          ? `${fmtNum(row.weekly_rvol_prev, 2)}→${fmtNum(row.weekly_rvol, 2)}`
+                          : fmtNum(row.weekly_rvol, 2)}
+                      </td>
                       <td style={compact}>{fmtNum(row.volume_ratio, 2)}</td>
                       <td style={compact}>{row.sector || '—'}</td>
                       <td style={compact}>
                         <Box display="flex" gap={0.4} flexWrap="wrap">
                           <Chip size="small" label="S2" color={cl.stage2_intact ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                          <Chip size="small" label="D" color={cl.confirm_1d || (row.confirm_timeframes || []).includes('1d') ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                          <Chip size="small" label="W" color={cl.confirm_1w || (row.confirm_timeframes || []).includes('1w') ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                          <Chip size="small" label="M" color={cl.confirm_1m || (row.confirm_timeframes || []).includes('1m') ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                           <Chip size="small" label="RS↑70" color={cl.rs_just_crossed_70 || row.rs_just_crossed_70 ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                           <Chip size="small" label="Setup" color={cl.other_setup_pass || row.other_setup_pass ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
-                          <Chip size="small" label="Base" color={cl.tight_base_or_pullback ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
-                          <Chip size="small" label="Vol" color={cl.volume_expansion_ready ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
-                          <Chip size="small" label="7/8" color={cl.template_ge_7 ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
                         </Box>
                       </td>
                     </tr>

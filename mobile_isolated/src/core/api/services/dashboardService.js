@@ -228,6 +228,8 @@ export const dashboardService = {
     limit = 200,
     symbol_limit = 800,
     min_market_cap_cr = 2000,
+    require_psar_confirm = false,
+    volume_expand_only = false,
     refresh = false,
     timeoutMs,
     ...opts
@@ -238,6 +240,8 @@ export const dashboardService = {
       symbol_limit: String(symbol_limit),
       min_market_cap_cr: String(min_market_cap_cr),
     });
+    if (require_psar_confirm) q.set('require_psar_confirm', 'true');
+    if (volume_expand_only) q.set('volume_expand_only', 'true');
     if (refresh) q.set('refresh', 'true');
     const res = await apiGet(
       `/advisor/signals/dc-half-checker?${q}`,

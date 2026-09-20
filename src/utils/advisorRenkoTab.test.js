@@ -33,4 +33,9 @@ describe('advisor Renko Smart tab routing', () => {
     expect(resolveAdvisorTabIndex('minervini')).toBe(8);
     expect(resolveAdvisorTabIndex('ffip')).toBe(8);
   });
+
+  it('maps compression breakout deep-links to tab 9', () => {
+    expect(resolveAdvisorTabIndex('compression')).toBe(9);
+    expect(resolveAdvisorTabIndex('vcp')).toBe(9);
+  });
 });

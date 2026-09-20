@@ -3,8 +3,19 @@ import {hasDuplicateWeeklyEntrySymbols} from '@core/utils/webParity';
 export const MOBILE_PAGE_CACHE_KEYS = {
   dashboard: '@ani/mobile/page-cache/dashboard-v22',
   advisorSignals: '@ani/mobile/page-cache/advisor-signals-v8',
-  screensHub: (main, gl, perM, perV, alphaHor, ipoFilter, screenDate = '', dcTf = '1d') =>
-    `@ani/mobile/page-cache/screens-v10-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}-${dcTf || '1d'}`,
+  screensHub: (
+    main,
+    gl,
+    perM,
+    perV,
+    alphaHor,
+    ipoFilter,
+    screenDate = '',
+    dcTf = '1d',
+    dcPsar = false,
+    dcVol = false,
+  ) =>
+    `@ani/mobile/page-cache/screens-v11-${main}-${gl}-${perM}-${perV}-${alphaHor}-${ipoFilter || 'all'}-${screenDate || 'live'}-${dcTf || '1d'}-psar${dcPsar ? 1 : 0}-vol${dcVol ? 1 : 0}`,
   marketsOutlook: tab => `@ani/mobile/page-cache/markets-outlook-v5-${tab}`,
   stocksOutlook: tab => `@ani/mobile/page-cache/stocks-outlook-v7-${tab}`,
   watchlist: listType => `@ani/mobile/page-cache/watchlist-v7-${listType}`,
@@ -92,6 +103,7 @@ export const LEGACY_SCREENS_HUB_CACHE_PREFIXES = [
   '@ani/mobile/page-cache/screens-v7-',
   '@ani/mobile/page-cache/screens-v8-',
   '@ani/mobile/page-cache/screens-v9-',
+  '@ani/mobile/page-cache/screens-v10-',
 ];
 
 /** Which dashboard sections should be refetched (without clearing the whole cache). */

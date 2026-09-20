@@ -258,12 +258,15 @@ export const fetchRsRvolEma5mSignals = async ({
   return apiGet(`/advisor/signals/rs-rvol-ema5m?${params.toString()}`);
 };
 
-/** DC_HALF multi-TF strategy checker (Chartink close × DC mid + EMA stack). */
+/** DC_HALF multi-TF strategy checker (Chartink close × DC mid + EMA stack + PSAR confirm). */
 export const fetchDcHalfChecker = async ({
   timeframe = '1d',
   limit = 500,
   symbol_limit = 1500,
   min_market_cap_cr = 2000,
+  require_psar_confirm = false,
+  volume_expand_only = false,
+  write_vol_alerts = true,
   refresh = false,
   cache_ttl_sec = 120,
 } = {}) => {
@@ -273,6 +276,9 @@ export const fetchDcHalfChecker = async ({
   params.set('symbol_limit', String(symbol_limit));
   params.set('min_market_cap_cr', String(min_market_cap_cr));
   params.set('cache_ttl_sec', String(cache_ttl_sec));
+  if (require_psar_confirm) params.set('require_psar_confirm', 'true');
+  if (volume_expand_only) params.set('volume_expand_only', 'true');
+  if (!write_vol_alerts) params.set('write_vol_alerts', 'false');
   if (refresh) params.set('refresh', 'true');
   return apiGet(`/advisor/signals/dc-half-checker?${params.toString()}`);
 };
@@ -286,6 +292,8 @@ export const fetchStageEntryTiming = async ({
   min_template_score = 6,
   require_rs_70 = false,
   rs_cross_above_70 = false,
+  require_weekly_confirm = false,
+  require_mtf_confirm = true,
   entry_timing = '',
   refresh = false,
   cache_ttl_sec = 180,
@@ -299,11 +307,41 @@ export const fetchStageEntryTiming = async ({
   params.set('cache_ttl_sec', String(cache_ttl_sec));
   if (require_rs_70) params.set('require_rs_70', 'true');
   if (rs_cross_above_70) params.set('rs_cross_above_70', 'true');
+  const mtf = require_mtf_confirm || require_weekly_confirm;
+  if (mtf) {
+    params.set('require_mtf_confirm', 'true');
+    params.set('require_weekly_confirm', 'true');
+  }
   if (entry_timing && String(entry_timing).trim()) {
     params.set('entry_timing', String(entry_timing).trim());
   }
   if (refresh) params.set('refresh', 'true');
   return apiGet(`/advisor/signals/stage-entry-timing?${params.toString()}`);
+};
+
+/** Compression → breakout → light retest → renewed participation (daily / weekly). */
+export const fetchCompressionBreakout = async ({
+  timeframe = 'all',
+  limit = 300,
+  symbol_limit = 800,
+  min_market_cap_cr = 2000,
+  phase = '',
+  min_evidence = 3,
+  include_compression = false,
+  refresh = false,
+  cache_ttl_sec = 180,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || '1d'));
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('min_market_cap_cr', String(min_market_cap_cr));
+  params.set('min_evidence', String(min_evidence));
+  params.set('cache_ttl_sec', String(cache_ttl_sec));
+  if (phase && String(phase).trim()) params.set('phase', String(phase).trim());
+  if (include_compression) params.set('include_compression', 'true');
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/compression-breakout?${params.toString()}`);
 };
 
 export const fetchRenkoSmartSignals = async ({

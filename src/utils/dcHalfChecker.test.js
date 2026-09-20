@@ -1,4 +1,10 @@
-import { formatDcHalfPhase, normalizeDcHalfTimeframe } from './dcHalfChecker';
+import {
+  formatDcHalfPhase,
+  formatDcHalfRvol,
+  isDcHalfPsarConfirm,
+  isDcHalfVolumeExpanding,
+  normalizeDcHalfTimeframe,
+} from './dcHalfChecker';
 
 describe('dcHalfChecker helpers', () => {
   it('normalizes Chartink-style timeframe aliases to API ids (regression)', () => {
@@ -16,5 +22,20 @@ describe('dcHalfChecker helpers', () => {
     expect(formatDcHalfPhase('retrace_dc_low')).toBe('Retrace low');
     expect(formatDcHalfPhase('rising_again')).toBe('Rising again');
     expect(formatDcHalfPhase(null)).toBe('—');
+  });
+
+  it('detects PSAR confirm and volume expand from hit flags (regression)', () => {
+    const hit = {
+      psar_confirm: true,
+      volume_expanding: true,
+      volume_ratio_prev: 1.1,
+      volume_ratio: 1.8,
+      confirm_flags: {psar_cross: true, close_up: true, prior_dip: true, rvol_rising: true},
+    };
+    expect(isDcHalfPsarConfirm(hit)).toBe(true);
+    expect(isDcHalfVolumeExpanding(hit)).toBe(true);
+    expect(formatDcHalfRvol(hit)).toBe('1.10→1.80');
+    expect(isDcHalfPsarConfirm({confirm_flags: {psar_cross: true}})).toBe(false);
+    expect(isDcHalfVolumeExpanding({})).toBe(false);
   });
 });

@@ -49,6 +49,11 @@ describe('DcHalfCheckerPage', () => {
           pct_vs_dc_half: 11.1,
           bars_since_cross: 0,
           crossed_bar_time: '2026-09-19T00:00:00',
+          psar_confirm: true,
+          volume_expanding: true,
+          volume_ratio_prev: 1.0,
+          volume_ratio: 1.5,
+          confirm_flags: {psar_cross: true, close_up: true, prior_dip: true, rvol_rising: true},
         },
       ],
       as_of: '2026-09-19T10:00:00+05:30',
@@ -66,6 +71,8 @@ describe('DcHalfCheckerPage', () => {
     await waitFor(() => expect(fetchDcHalfChecker).toHaveBeenCalled());
     expect(await screen.findByText('TEST')).toBeInTheDocument();
     expect(screen.getByText('Cross up')).toBeInTheDocument();
+    expect(screen.getByText('Pass')).toBeInTheDocument();
+    expect(screen.getAllByText('Vol↑').length).toBeGreaterThanOrEqual(1);
   });
 
   it('offers Copy CSV for filtered symbols in TradingView NSE:SYM format', async () => {

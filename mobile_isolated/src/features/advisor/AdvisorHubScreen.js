@@ -58,6 +58,7 @@ import {RenkoSmartSignalsSection} from './RenkoSmartSignalsSection';
 import {HotSubsectorsSignalsSection} from './HotSubsectorsSignalsSection';
 import {MlSetupsSignalsSection} from './MlSetupsSignalsSection';
 import {StageEntryTimingSection} from './StageEntryTimingSection';
+import {CompressionBreakoutSection} from './CompressionBreakoutSection';
 
 import {MOBILE_TIER_TABLE_PAGE_SIZE} from '@core/utils/advisorWebParity';
 
@@ -74,6 +75,7 @@ const TABS = [
   {id: 'hot', label: 'Hot Subsectors'},
   {id: 'ml', label: 'ML Setups'},
   {id: 'stage', label: 'Stage Analysis'},
+  {id: 'compression', label: 'Compression Breakout'},
 ];
 
 function formatChgPct(v) {
@@ -755,6 +757,27 @@ export function AdvisorHubScreen({navigation}) {
           }>
           {head}
           <StageEntryTimingSection />
+        </ScrollView>
+      </MobileChrome>
+    );
+  }
+
+  if (tab === 'compression') {
+    return (
+      <MobileChrome navigation={navigation}>
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={styles.pad}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                /* Section owns refresh */
+              }}
+            />
+          }>
+          {head}
+          <CompressionBreakoutSection />
         </ScrollView>
       </MobileChrome>
     );

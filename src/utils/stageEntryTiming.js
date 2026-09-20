@@ -18,6 +18,20 @@ export const ENTRY_TIMING_LABELS = {
   out_of_stage: 'Out of Stage 2',
 };
 
+/** Chartink weekly cash-segment confirm labels (legacy weekly keys). */
+export const WEEKLY_CONFIRM_LABELS = {
+  weekly_psar_cross_1w_ago: '1w ago Close × above PSAR(0.02)',
+  weekly_close_up: 'Weekly Close > 1w ago Close',
+  weekly_prior_dip: '2w ago Close < 3w ago Close',
+  weekly_rvol_rising: 'Weekly Vol/EMA20 rising',
+};
+
+export const CONFIRM_TF_LABELS = {
+  '1d': 'Daily',
+  '1w': 'Weekly',
+  '1m': 'Monthly',
+};
+
 export function formatEntryTiming(timing) {
   const key = String(timing || '').trim().toLowerCase();
   return ENTRY_TIMING_LABELS[key] || (key ? key.replace(/_/g, ' ') : '—');
@@ -55,6 +69,39 @@ export function isRsCrossSetupRow(row) {
   const curr = Number(row.rs_rating);
   if (!Number.isFinite(prev) || !Number.isFinite(curr)) return false;
   return prev < 70 && curr >= 70 && row.other_setup_pass === true;
+}
+
+/** True when Chartink weekly PSAR/momentum/rvol block all pass. */
+export function isWeeklyConfirmPass(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.weekly_confirm_pass === true) return true;
+  const flags = row.weekly_confirm || row.checklist || {};
+  return (
+    Boolean(flags.weekly_psar_cross_1w_ago)
+    && Boolean(flags.weekly_close_up)
+    && Boolean(flags.weekly_prior_dip)
+    && Boolean(flags.weekly_rvol_rising)
+  );
+}
+
+/** True when Daily OR Weekly OR Monthly Chartink confirm passes (unified list). */
+export function isMtfConfirmPass(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.mtf_confirm_pass === true) return true;
+  const tfs = Array.isArray(row.confirm_timeframes) ? row.confirm_timeframes : [];
+  if (tfs.length > 0) return true;
+  return isWeeklyConfirmPass(row);
+}
+
+export function formatConfirmTimeframes(row) {
+  const tfs = Array.isArray(row?.confirm_timeframes) ? row.confirm_timeframes : [];
+  if (!tfs.length) return '—';
+  return tfs.map((tf) => CONFIRM_TF_LABELS[tf] || tf).join('+');
+}
+
+export function weeklyConfirmPassedCount(row) {
+  const flags = row?.weekly_confirm || {};
+  return Object.keys(WEEKLY_CONFIRM_LABELS).filter((k) => Boolean(flags[k])).length;
 }
 
 export function entryTimingChipColor(timing) {
