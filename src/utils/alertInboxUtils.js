@@ -118,6 +118,16 @@ export const LIVE_ML_CLOSE_HIGH_TYPES = Object.freeze([
   'prev_day_high_breakout',
 ]);
 export const LIVE_ML_RVOL_TYPES = Object.freeze(['unusual_volume']);
+/** Prev-day R1 1m cross with daily EMA stack — live push without ML score gate. */
+export const LIVE_PDR1_TYPES = Object.freeze(['pdr1_cross_1m']);
+export const LIVE_CUP60_TYPES = Object.freeze(['cup60_1d', 'cup60_1w']);
+export const LIVE_ML_STRUCTURE_TYPES = Object.freeze([
+  'stage_analysis_breakout_watch',
+  'stage_analysis_pullback',
+  'compression_breakout',
+  'compression_retest_hold',
+  'compression_renewed',
+]);
 
 /** True for mobile notification test rows — never push or show in live UI. */
 export function isDemoAlert(row) {
@@ -174,9 +184,20 @@ export function isWeeklyLevelCrossUpAlert(row) {
   return LIVE_ML_WEEKLY_CROSS_UP_TYPES.includes(type);
 }
 
+export function isPdr1CrossAlert(row) {
+  const type = String(row?.alert_type || '').trim().toLowerCase();
+  return LIVE_PDR1_TYPES.includes(type);
+}
+
+export function isCup60Alert(row) {
+  const type = String(row?.alert_type || '').trim().toLowerCase();
+  return LIVE_CUP60_TYPES.includes(type);
+}
+
 export function isEnabledLiveMlSetup(row) {
+  if (isPdr1CrossAlert(row) || isCup60Alert(row)) return true;
   const type = String(row?.alert_type || '').trim();
-  if (LIVE_ML_RENKO_TYPES.includes(type) || LIVE_ML_CLOSE_HIGH_TYPES.includes(type)) {
+  if (LIVE_ML_RENKO_TYPES.includes(type) || LIVE_ML_CLOSE_HIGH_TYPES.includes(type) || LIVE_ML_STRUCTURE_TYPES.includes(type)) {
     return true;
   }
   if (LIVE_ML_RVOL_TYPES.includes(type)) {
@@ -186,9 +207,11 @@ export function isEnabledLiveMlSetup(row) {
   return false;
 }
 
-/** Live push/vibration: Renko, close-above weekly low/mid/high, or RVOL>2, and ML score >= 0.70. */
+/** Live push/vibration: Renko, weekly L/M/H, RVOL>2 + ML>=0.70, or prev-day R1 EMA stack. */
 export function isMlHighConvictionAlert(row) {
   if (!row || isDemoAlert(row) || isVwapCrossAlert(row)) return false;
+  // EMA-stack R1 breakout is a first-class live setup (no ML score required).
+  if (isPdr1CrossAlert(row) || isCup60Alert(row)) return true;
   if (!isEnabledLiveMlSetup(row)) return false;
   const score = mlScoreFromAlert(row);
   return score != null && score >= ML_ALERT_MIN_SCORE;

@@ -289,6 +289,26 @@ export const advisorService = {
       })}`,
       {timeoutMs: timeoutMs ?? T},
     ),
+  fetchCupSixty: ({
+    timeframe = 'all',
+    limit = 200,
+    symbol_limit = 800,
+    min_market_cap_cr = 2000,
+    require_weekly_compression = false,
+    refresh = false,
+    timeoutMs,
+  } = {}) =>
+    apiGet(
+      `/advisor/signals/cup-sixty${toQuery({
+        timeframe,
+        limit,
+        symbol_limit,
+        min_market_cap_cr,
+        require_weekly_compression: require_weekly_compression ? true : undefined,
+        refresh: refresh ? true : undefined,
+      })}`,
+      {timeoutMs: timeoutMs ?? T},
+    ),
   fetchEarlyDetectionHistory: async ({
     from_date,
     to_date,

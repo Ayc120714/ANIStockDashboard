@@ -215,6 +215,13 @@ describe('ML high-conviction live alerts (score >= 0.70, last 3 days, no VWAP)',
     expect(isPushEligibleLiveAlert({alert_type: 'renko_smart_long', symbol: 'SBIN'})).toBe(false);
     expect(isPushEligibleLiveAlert({alert_type: 'ENTRY_READY', symbol: 'INFY'})).toBe(false);
     expect(isPushEligibleLiveAlert({alert_type: 'vwap_cross_above', ml_score: 0.99})).toBe(false);
+    expect(isMlHighConvictionAlert({alert_type: 'pdr1_cross_1m', source: 'ml_setup'})).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'pdr1_cross_1m', source: 'ml_setup', timestamp: new Date().toISOString()})).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'pdr1_cross_1m', source: 'demo'})).toBe(false);
+    expect(isPushEligibleLiveAlert({alert_type: 'cup60_1d', source: 'live'})).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'compression_retest_hold', ml_score: 0.8, source: 'live'})).toBe(true);
+    expect(isPushEligibleLiveAlert({alert_type: 'stage_analysis_breakout_watch', source: 'live'})).toBe(false);
+
     expect(isPushEligibleTableKey('renko_smart')).toBe(false);
     expect(isPushEligibleTableKey('trend_b1_weekly')).toBe(false);
   });

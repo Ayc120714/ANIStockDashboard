@@ -39,3 +39,17 @@ describe('live inbox ML alert policy', () => {
     expect(isInboxItemRead({ source: 'live', id: 92 }, keys)).toBe(false);
   });
 });
+
+  it('keeps prev-day R1 EMA-stack alerts on the live inbox without ML score', () => {
+    expect(isMlHighConvictionAlert({ alert_type: 'pdr1_cross_1m', source: 'ml_setup' })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'pdr1_cross_1m', source: 'demo' })).toBe(false);
+    expect(isMlHighConvictionAlert({ alert_type: 'cup60_1d', source: 'live' })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'compression_breakout', source: 'live', ml_score: 0.74 })).toBe(true);
+    expect(isMlHighConvictionAlert({ alert_type: 'stage_analysis_pullback', source: 'live' })).toBe(false);
+    const kept = normalizeLiveAdvisorRows([
+      { id: 9, symbol: 'TCS', alert_type: 'pdr1_cross_1m', timestamp: hoursAgoIso(1), source: 'ml_setup' },
+      { id: 10, symbol: 'INFY', alert_type: 'macd_bull', timestamp: hoursAgoIso(1), ml_score: 0.9, source: 'ml_setup' },
+    ]);
+    expect(kept.map(r => r.symbol)).toEqual(['TCS']);
+  });
+

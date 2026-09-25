@@ -16,7 +16,7 @@ import Pagination from '@mui/material/Pagination';
 import { FaSort, FaSortDown, FaSortUp } from 'react-icons/fa';
 import { MdRefresh } from 'react-icons/md';
 import { TableSection, TableWrapper, Table } from './SectorOutlook.styles';
-import { fetchCompressionBreakout } from '../api/advisor';
+import { fetchCompressionBreakout, fetchCupSixty } from '../api/advisor';
 import { SymbolWithTradingView, symbolCellTdStyle, buildTradingViewSymbolsCsv } from '../components/TradingViewLink';
 import { LIVE_PAGE_CACHE_KEYS } from '../utils/livePageCacheKeys';
 import { readPageCache, writePageCache } from '../utils/pageDataCache';
@@ -110,15 +110,23 @@ function CompressionBreakoutTab() {
     }
     setError(null);
     try {
-      const res = await fetchCompressionBreakout({
-        timeframe,
-        limit: 300,
-        symbol_limit: 800,
-        phase: phaseFilter || undefined,
-        include_compression: includeCompression || phaseFilter === 'compression',
-        refresh,
-        cache_ttl_sec: 180,
-      });
+      const res = phaseFilter === 'cup60'
+        ? await fetchCupSixty({
+          timeframe,
+          limit: 200,
+          symbol_limit: 800,
+          refresh,
+          cache_ttl_sec: 180,
+        })
+        : await fetchCompressionBreakout({
+          timeframe,
+          limit: 300,
+          symbol_limit: 800,
+          phase: phaseFilter || undefined,
+          include_compression: includeCompression || phaseFilter === 'compression',
+          refresh,
+          cache_ttl_sec: 180,
+        });
       const data = Array.isArray(res?.data) ? res.data : [];
       writePageCache(cacheKey, data);
       setRows(data);
@@ -194,8 +202,7 @@ function CompressionBreakoutTab() {
           Compression → Breakout → Retest
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Daily and Weekly validation of compression, volume expansion breakout, light retest that holds,
-          then renewed participation. Better evidence, not certainty.
+          Daily and Weekly compression path, plus an early 60% cup (U recovered 60% of its depth, still under the neckline).
           {asOf ? ` · as of ${String(asOf).replace('T', ' ').slice(0, 19)} IST` : ''}
         </Typography>
         <Alert severity="info" sx={{ py: 0.5, mb: 1.5, fontSize: 12 }}>
@@ -311,7 +318,7 @@ function CompressionBreakoutTab() {
                     sx={{ height: 22, fontSize: 11 }}
                   />
                 </td>
-                <td style={compact}>{formatEvidenceScore(row.evidence_score)}</td>
+                <td style={compact}>{formatEvidenceScore(row.evidence_score, row.evidence_max || 6)}</td>
                 <td style={compact}>{fmtPx(row.close)}</td>
                 <td style={compact}>{fmtPx(row.breakout_level)}</td>
                 <td style={compact}>{fmtPx(row.stop_hint)}</td>

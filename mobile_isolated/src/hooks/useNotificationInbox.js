@@ -126,7 +126,10 @@ export function useNotificationInbox({enabled = true, userId = '', isSuperAdmin 
       const lightFetch = background && hasCachedRows;
       // Foreground matches web useNotificationInbox (live 120 / special 300 / history on).
       const [liveRes, specialRes, priceRes, adminRes, tableRes] = await Promise.allSettled([
-        alertsService.fetchLiveAdvisorAlerts({source: 'ml_setup', limit: lightFetch ? 80 : 120}),
+        Promise.all([
+          alertsService.fetchLiveAdvisorAlerts({source: 'ml_setup', limit: lightFetch ? 80 : 120}),
+          alertsService.fetchLiveAdvisorAlerts({source: 'live', limit: lightFetch ? 40 : 80}),
+        ]).then(([ml, liveRows]) => [...(ml || []), ...(liveRows || [])]),
         alertsService.fetchSpecialAlerts({
           limit: lightFetch ? 80 : 300,
           currentDayOnly: lightFetch,

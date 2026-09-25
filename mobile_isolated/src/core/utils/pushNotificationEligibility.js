@@ -12,7 +12,7 @@ export function isRenkoPushAlert(alert) {
 
 /**
  * True when a live advisor DB row may trigger a system push + vibration.
- * Only ML Setups with score >= 0.70. VWAP / demo / other scanners never fire.
+ * ML Setups with score >= 0.70, or prev-day R1 EMA-stack breakouts. VWAP / demo never fire.
  */
 export function isPushEligibleLiveAlert(alert) {
   if (!alert || isDemoAlert(alert) || isVwapCrossAlert(alert)) return false;

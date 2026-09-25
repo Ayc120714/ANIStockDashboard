@@ -70,8 +70,11 @@ export function useMarketSetupAlerts({enabled = true} = {}) {
   }, []);
 
   const pollLiveAdvisorAlerts = useCallback(async () => {
-    const rows = await alertsService
-      .fetchLiveAdvisorAlerts({source: 'ml_setup', limit: 80, timeoutMs: API_TIMEOUT_MS.advisor})
+    const rows = await Promise.all([
+      alertsService.fetchLiveAdvisorAlerts({source: 'ml_setup', limit: 80, timeoutMs: API_TIMEOUT_MS.advisor}),
+      alertsService.fetchLiveAdvisorAlerts({source: 'live', limit: 40, timeoutMs: API_TIMEOUT_MS.advisor}),
+    ])
+      .then(([ml, liveRows]) => [...(ml || []), ...(liveRows || [])])
       .catch(() => null);
     if (!rows) return;
 

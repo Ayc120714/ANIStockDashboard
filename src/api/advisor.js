@@ -344,6 +344,26 @@ export const fetchCompressionBreakout = async ({
   return apiGet(`/advisor/signals/compression-breakout?${params.toString()}`);
 };
 
+export const fetchCupSixty = async ({
+  timeframe = 'all',
+  limit = 200,
+  symbol_limit = 800,
+  min_market_cap_cr = 2000,
+  require_weekly_compression = false,
+  refresh = false,
+  cache_ttl_sec = 180,
+} = {}) => {
+  const params = new URLSearchParams();
+  params.set('timeframe', String(timeframe || 'all'));
+  params.set('limit', String(limit));
+  params.set('symbol_limit', String(symbol_limit));
+  params.set('min_market_cap_cr', String(min_market_cap_cr));
+  params.set('cache_ttl_sec', String(cache_ttl_sec));
+  if (require_weekly_compression) params.set('require_weekly_compression', 'true');
+  if (refresh) params.set('refresh', 'true');
+  return apiGet(`/advisor/signals/cup-sixty?${params.toString()}`);
+};
+
 export const fetchRenkoSmartSignals = async ({
   limit = 10,
   symbol_limit = 1500,

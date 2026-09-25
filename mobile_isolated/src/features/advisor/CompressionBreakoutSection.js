@@ -24,6 +24,7 @@ const PHASE_FILTERS = [
   {id: 'retest_hold', label: 'Retest'},
   {id: 'renewed', label: 'Renewed'},
   {id: 'compression', label: 'Compress'},
+  {id: 'cup60', label: '60% cup'},
 ];
 
 function phaseLabel(p) {
@@ -32,6 +33,7 @@ function phaseLabel(p) {
   if (key === 'retest_hold') return 'Retest';
   if (key === 'renewed') return 'Renewed';
   if (key === 'compression') return 'Compress';
+  if (key === 'cup60') return '60% cup';
   return key || '—';
 }
 
@@ -40,6 +42,7 @@ function phaseColor(p) {
   if (key === 'renewed') return '#1b5e20';
   if (key === 'retest_hold') return '#1565c0';
   if (key === 'breakout') return '#e65100';
+  if (key === 'cup60') return '#1b5e20';
   return '#546e7a';
 }
 
@@ -56,15 +59,22 @@ export function CompressionBreakoutSection() {
     try {
       const res = await safeFetch(
         () =>
-          advisorService.fetchCompressionBreakout({
-            timeframe,
-            limit: 300,
-            symbol_limit: 800,
-            phase: phase || undefined,
-            include_compression: phase === 'compression',
-            timeoutMs: API_TIMEOUT_MS.screenHeavy,
-          }),
-        {label: 'Compression Breakout', timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1},
+          phase === 'cup60'
+            ? advisorService.fetchCupSixty({
+                timeframe,
+                limit: 200,
+                symbol_limit: 800,
+                timeoutMs: API_TIMEOUT_MS.screenHeavy,
+              })
+            : advisorService.fetchCompressionBreakout({
+                timeframe,
+                limit: 300,
+                symbol_limit: 800,
+                phase: phase || undefined,
+                include_compression: phase === 'compression',
+                timeoutMs: API_TIMEOUT_MS.screenHeavy,
+              }),
+        {label: phase === 'cup60' ? '60% cup' : 'Compression Breakout', timeoutMs: API_TIMEOUT_MS.screenHeavy, retries: 1},
       );
       setRows(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
     } catch (e) {
@@ -171,7 +181,7 @@ export function CompressionBreakoutSection() {
                     {phaseLabel(row.phase)}
                   </Text>
                   <Text style={[styles.td, styles.colNum]}>
-                    {row.evidence_score != null ? `${row.evidence_score}/6` : '—'}
+                    {row.evidence_score != null ? `${row.evidence_score}/${row.evidence_max || 6}` : '—'}
                   </Text>
                   <Text style={[styles.td, styles.colPx]}>{row.close != null ? formatINR(row.close) : '—'}</Text>
                   <Text style={[styles.td, styles.colPx]}>

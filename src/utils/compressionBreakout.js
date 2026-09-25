@@ -9,6 +9,7 @@ export const COMPRESSION_BREAKOUT_PHASES = [
   { id: 'retest_hold', label: 'Retest held' },
   { id: 'renewed', label: 'Renewed participation' },
   { id: 'compression', label: 'Compression watch' },
+  { id: 'cup60', label: '60% cup (early)' },
 ];
 
 export const COMPRESSION_BREAKOUT_TIMEFRAMES = [
@@ -32,6 +33,7 @@ export function formatPhaseLabel(phase) {
   if (key === 'retest_hold') return 'Retest held';
   if (key === 'renewed') return 'Renewed';
   if (key === 'compression') return 'Compression';
+  if (key === 'cup60') return '60% cup';
   return key || '—';
 }
 
@@ -41,6 +43,7 @@ export function phaseChipColor(phase) {
   if (key === 'retest_hold') return 'info';
   if (key === 'breakout') return 'warning';
   if (key === 'compression') return 'default';
+  if (key === 'cup60') return 'success';
   return 'default';
 }
 
