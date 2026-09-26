@@ -14,6 +14,7 @@ const PAGE_SIZE = 15;
 
 const TF_FILTERS = [
   {id: 'all', label: 'All'},
+  {id: '5m', label: '5 min'},
   {id: '1d', label: 'Daily'},
   {id: '1w', label: 'Weekly'},
 ];
@@ -95,7 +96,7 @@ export function CompressionBreakoutSection() {
 
   const subtitle = useMemo(
     () =>
-      `${timeframe === 'all' ? 'All TFs' : timeframe === '1w' ? 'Weekly' : 'Daily'} · compression → breakout → light retest → renewed · ${rows.length} matches`,
+      `${timeframe === 'all' ? 'All TFs' : timeframe === '5m' ? '5 min' : timeframe === '1w' ? 'Weekly' : 'Daily'} · compression → breakout → light retest → renewed · ${rows.length} matches`,
     [rows.length, timeframe],
   );
 
@@ -181,7 +182,7 @@ export function CompressionBreakoutSection() {
                     {phaseLabel(row.phase)}
                   </Text>
                   <Text style={[styles.td, styles.colNum]}>
-                    {row.evidence_score != null ? `${row.evidence_score}/${row.evidence_max || 6}` : '—'}
+                    {row.evidence_score != null ? `${row.evidence_score}/${row.evidence_max || 7}` : '—'}
                   </Text>
                   <Text style={[styles.td, styles.colPx]}>{row.close != null ? formatINR(row.close) : '—'}</Text>
                   <Text style={[styles.td, styles.colPx]}>

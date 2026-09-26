@@ -295,11 +295,13 @@ export const fetchStageEntryTiming = async ({
   require_weekly_confirm = false,
   require_mtf_confirm = true,
   entry_timing = '',
+  timeframe = '1d',
   refresh = false,
   cache_ttl_sec = 180,
 } = {}) => {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
+  params.set('timeframe', String(timeframe || '1d'));
   params.set('symbol_limit', String(symbol_limit));
   params.set('min_market_cap_cr', String(min_market_cap_cr));
   params.set('stage', String(stage));

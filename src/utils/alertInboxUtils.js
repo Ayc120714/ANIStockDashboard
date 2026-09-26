@@ -128,6 +128,13 @@ export const LIVE_ML_STRUCTURE_TYPES = Object.freeze([
   'compression_retest_hold',
   'compression_renewed',
 ]);
+export const LIVE_STRUCTURE_5M_TYPES = Object.freeze([
+  'stage_analysis_5m_breakout_watch',
+  'stage_analysis_5m_pullback',
+  'compression_5m_breakout',
+  'compression_5m_retest_hold',
+  'compression_5m_renewed',
+]);
 
 /** True for mobile notification test rows — never push or show in live UI. */
 export function isDemoAlert(row) {
@@ -194,8 +201,13 @@ export function isCup60Alert(row) {
   return LIVE_CUP60_TYPES.includes(type);
 }
 
+export function isStructure5mAlert(row) {
+  const type = String(row?.alert_type || '').trim().toLowerCase();
+  return LIVE_STRUCTURE_5M_TYPES.includes(type);
+}
+
 export function isEnabledLiveMlSetup(row) {
-  if (isPdr1CrossAlert(row) || isCup60Alert(row)) return true;
+  if (isPdr1CrossAlert(row) || isCup60Alert(row) || isStructure5mAlert(row)) return true;
   const type = String(row?.alert_type || '').trim();
   if (LIVE_ML_RENKO_TYPES.includes(type) || LIVE_ML_CLOSE_HIGH_TYPES.includes(type) || LIVE_ML_STRUCTURE_TYPES.includes(type)) {
     return true;
@@ -211,7 +223,7 @@ export function isEnabledLiveMlSetup(row) {
 export function isMlHighConvictionAlert(row) {
   if (!row || isDemoAlert(row) || isVwapCrossAlert(row)) return false;
   // EMA-stack R1 breakout is a first-class live setup (no ML score required).
-  if (isPdr1CrossAlert(row) || isCup60Alert(row)) return true;
+  if (isPdr1CrossAlert(row) || isCup60Alert(row) || isStructure5mAlert(row)) return true;
   if (!isEnabledLiveMlSetup(row)) return false;
   const score = mlScoreFromAlert(row);
   return score != null && score >= ML_ALERT_MIN_SCORE;

@@ -245,6 +245,7 @@ export const advisorService = {
     require_weekly_confirm = false,
     require_mtf_confirm = true,
     entry_timing = '',
+    timeframe = '1d',
     refresh = false,
     timeoutMs,
   } = {}) =>
@@ -255,6 +256,7 @@ export const advisorService = {
         min_market_cap_cr,
         stage,
         min_template_score,
+        timeframe,
         require_rs_70: require_rs_70 ? true : undefined,
         rs_cross_above_70: rs_cross_above_70 ? true : undefined,
         require_mtf_confirm: require_mtf_confirm || require_weekly_confirm ? true : undefined,

@@ -309,7 +309,7 @@ function CompressionBreakoutTab() {
                 <td style={{ ...compact, ...symbolCellTdStyle }}>
                   <SymbolWithTradingView symbol={row.symbol} />
                 </td>
-                <td style={compact}>{row.timeframe === '1w' ? 'Weekly' : row.timeframe === '1d' ? 'Daily' : (row.timeframe || '—')}</td>
+                <td style={compact}>{row.timeframe === '5m' ? '5 min' : row.timeframe === '1w' ? 'Weekly' : row.timeframe === '1d' ? 'Daily' : (row.timeframe || '—')}</td>
                 <td style={compact}>
                   <Chip
                     size="small"
@@ -318,7 +318,7 @@ function CompressionBreakoutTab() {
                     sx={{ height: 22, fontSize: 11 }}
                   />
                 </td>
-                <td style={compact}>{formatEvidenceScore(row.evidence_score, row.evidence_max || 6)}</td>
+                <td style={compact}>{formatEvidenceScore(row.evidence_score, row.evidence_max || 7)}</td>
                 <td style={compact}>{fmtPx(row.close)}</td>
                 <td style={compact}>{fmtPx(row.breakout_level)}</td>
                 <td style={compact}>{fmtPx(row.stop_hint)}</td>

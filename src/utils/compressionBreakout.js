@@ -13,7 +13,8 @@ export const COMPRESSION_BREAKOUT_PHASES = [
 ];
 
 export const COMPRESSION_BREAKOUT_TIMEFRAMES = [
-  { id: 'all', label: 'All (D+W)' },
+  { id: 'all', label: 'All (D+W+5m)' },
+  { id: '5m', label: '5 min' },
   { id: '1d', label: 'Daily' },
   { id: '1w', label: 'Weekly' },
 ];
@@ -25,6 +26,7 @@ export const CHECKLIST_LABELS = {
   level_held: 'Level held?',
   retest_volume_lighter: 'Retest volume lighter?',
   renewed_participation: 'Renewed participation?',
+  within_25pct_52w_high: 'Within 25% of 52w high?',
 };
 
 export function formatPhaseLabel(phase) {
@@ -52,7 +54,7 @@ export function checklistPassedCount(checklist) {
   return Object.values(checklist).filter(Boolean).length;
 }
 
-export function formatEvidenceScore(score, max = 6) {
+export function formatEvidenceScore(score, max = 7) {
   if (score == null || Number.isNaN(Number(score))) return '—';
   return `${Number(score)}/${max}`;
 }

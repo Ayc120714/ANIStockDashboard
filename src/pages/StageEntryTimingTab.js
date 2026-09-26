@@ -75,6 +75,7 @@ function StageEntryTimingTab() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [timingFilter, setTimingFilter] = useState('');
+  const [barTimeframe, setBarTimeframe] = useState('1d');
   const [requireRs70, setRequireRs70] = useState(false);
   const [rsCrossAbove70, setRsCrossAbove70] = useState(false);
   const [mtfConfirm, setMtfConfirm] = useState(true);
@@ -83,7 +84,7 @@ function StageEntryTimingTab() {
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async ({ refresh = false } = {}) => {
-    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.stageEntryTiming}_mtf${mtfConfirm ? 1 : 0}_rs${rsCrossAbove70 ? 1 : 0}`;
+    const cacheKey = `${LIVE_PAGE_CACHE_KEYS.stageEntryTiming}_${barTimeframe}_mtf${mtfConfirm ? 1 : 0}_rs${rsCrossAbove70 ? 1 : 0}`;
     if (!refresh) {
       const cached = readPageCache(cacheKey);
       if (Array.isArray(cached?.data) && cached.data.length) {
@@ -98,12 +99,13 @@ function StageEntryTimingTab() {
     setError(null);
     try {
       const res = await fetchStageEntryTiming({
+        timeframe: barTimeframe,
         limit: 300,
         symbol_limit: 800,
         min_template_score: minTemplate,
         require_rs_70: requireRs70,
         rs_cross_above_70: rsCrossAbove70,
-        require_mtf_confirm: mtfConfirm,
+        require_mtf_confirm: barTimeframe === '5m' ? false : mtfConfirm,
         entry_timing: timingFilter || undefined,
         refresh,
         cache_ttl_sec: 180,
@@ -118,7 +120,7 @@ function StageEntryTimingTab() {
     } finally {
       setLoading(false);
     }
-  }, [minTemplate, requireRs70, rsCrossAbove70, mtfConfirm, timingFilter]);
+  }, [minTemplate, requireRs70, rsCrossAbove70, mtfConfirm, timingFilter, barTimeframe]);
 
   useEffect(() => {
     load({ refresh: false });
@@ -195,6 +197,17 @@ function StageEntryTimingTab() {
       </Box>
 
       <Box display="flex" flexWrap="wrap" gap={1.5} alignItems="center" mb={1.5}>
+        <TextField
+          select
+          size="small"
+          label="Timeframe"
+          value={barTimeframe}
+          onChange={(e) => setBarTimeframe(e.target.value)}
+          sx={{ minWidth: 120 }}
+        >
+          <MenuItem value="1d">Daily</MenuItem>
+          <MenuItem value="5m">5 min</MenuItem>
+        </TextField>
         <TextField
           select
           size="small"

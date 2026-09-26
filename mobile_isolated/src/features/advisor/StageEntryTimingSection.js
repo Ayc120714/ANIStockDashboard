@@ -40,6 +40,7 @@ export function StageEntryTimingSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [timing, setTiming] = useState('');
+  const [timeframe, setTimeframe] = useState('1d');
   const [requireRs70, setRequireRs70] = useState(false);
   const [rsCrossAbove70, setRsCrossAbove70] = useState(false);
   const [mtfConfirm, setMtfConfirm] = useState(true);
@@ -51,12 +52,13 @@ export function StageEntryTimingSection() {
       const res = await safeFetch(
         () =>
           advisorService.fetchStageEntryTiming({
+            timeframe,
             limit: 300,
             symbol_limit: 800,
             min_template_score: 6,
             require_rs_70: requireRs70,
             rs_cross_above_70: rsCrossAbove70,
-            require_mtf_confirm: mtfConfirm,
+            require_mtf_confirm: timeframe === '5m' ? false : mtfConfirm,
             entry_timing: timing || undefined,
             timeoutMs: API_TIMEOUT_MS.screenHeavy,
           }),
@@ -68,7 +70,7 @@ export function StageEntryTimingSection() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [requireRs70, rsCrossAbove70, mtfConfirm, timing]);
+  }, [requireRs70, rsCrossAbove70, mtfConfirm, timing, timeframe]);
 
   useEffect(() => {
     load();
@@ -76,7 +78,7 @@ export function StageEntryTimingSection() {
 
   const {page, setPage, totalPages, pagedItems, totalItems} = usePagedList(rows, {
     pageSize: PAGE_SIZE,
-    resetDeps: [timing, requireRs70, rsCrossAbove70, mtfConfirm, rows.length],
+    resetDeps: [timing, timeframe, requireRs70, rsCrossAbove70, mtfConfirm, rows.length],
   });
 
   const subtitle = useMemo(() => {
@@ -95,6 +97,17 @@ export function StageEntryTimingSection() {
         Monthly (same formula). Market Cap &gt; 2000 Cr.
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        {[
+          {id: '1d', label: 'Daily'},
+          {id: '5m', label: '5 min'},
+        ].map(f => (
+          <Pressable
+            key={f.id}
+            onPress={() => setTimeframe(f.id)}
+            style={[styles.chip, timeframe === f.id ? styles.chipOn : null]}>
+            <Text style={[styles.chipText, timeframe === f.id ? styles.chipTextOn : null]}>{f.label}</Text>
+          </Pressable>
+        ))}
         {TIMING_FILTERS.map(f => (
           <Pressable
             key={f.id || 'all'}
